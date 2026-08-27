@@ -43,6 +43,11 @@ class NormalizedRazorpayEvent(RazorpayModel):
     provider_payload: dict[str, Any]
 
 
+class RazorpayOutboxPayload(RazorpayModel):
+    merchant_id: str
+    event: NormalizedRazorpayEvent
+
+
 class ProviderStateCursor(RazorpayModel):
     """Per-axis event clock used to make out-of-order delivery deterministic."""
 

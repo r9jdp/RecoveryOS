@@ -10,7 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.app.integrations.razorpay.models import NormalizedRazorpayEvent
+from services.api.app.integrations.razorpay.models import (
+    NormalizedRazorpayEvent,
+    RazorpayOutboxPayload,
+)
 from services.api.app.models import OutboxMessage, WebhookInboxEntry
 
 
@@ -88,7 +91,10 @@ class InboxOutboxStore:
             aggregate_type="razorpay_webhook",
             aggregate_id=digest,
             event_type="RAZORPAY_WEBHOOK_RECEIVED",
-            payload=event.model_dump(mode="json"),
+            payload=RazorpayOutboxPayload(
+                merchant_id=merchant_id,
+                event=event,
+            ).model_dump(mode="json"),
             deduplication_key=f"razorpay:{digest}",
         )
         self.session.add_all([inbox, outbox])
