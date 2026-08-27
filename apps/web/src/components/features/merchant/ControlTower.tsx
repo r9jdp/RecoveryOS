@@ -25,13 +25,19 @@ import {
 } from "@/components/ui";
 import { useRecoveryResource } from "@/hooks/use-recovery-resource";
 import { getDashboard } from "@/lib/api/recovery-client";
+import { approvalItems } from "@/lib/merchant-demo";
 import {
   formatBasisPoints,
   formatDateTime,
+  formatEvidenceKind,
   formatPaise,
   humanize,
 } from "@/lib/recovery-format";
-import type { DashboardCase, DashboardFixture } from "@/types/recovery";
+import type {
+  DashboardCase,
+  DashboardFixture,
+  PaymentSurfaceType,
+} from "@/types/recovery";
 
 import styles from "./merchant.module.css";
 
@@ -82,18 +88,24 @@ function ControlTowerContent({
   source: "api" | "mock";
 }) {
   const [query, setQuery] = useState("");
+  const [outcome, setOutcome] = useState("ALL");
+  const [surface, setSurface] = useState<"ALL" | PaymentSurfaceType>("ALL");
   const normalizedQuery = query.trim().toLowerCase();
   const filteredCases = useMemo(
     () =>
-      fixture.cases.filter((recoveryCase) =>
-        [
-          recoveryCase.id,
-          recoveryCase.customer_display_name,
-          recoveryCase.plan_name,
-          recoveryCase.diagnosis,
-        ].some((value) => value.toLowerCase().includes(normalizedQuery)),
+      fixture.cases.filter(
+        (recoveryCase) =>
+          (outcome === "ALL" || recoveryCase.case_outcome === outcome) &&
+          (surface === "ALL" ||
+            recoveryCase.payment_surface_type === surface) &&
+          [
+            recoveryCase.id,
+            recoveryCase.customer_display_name,
+            recoveryCase.plan_name,
+            recoveryCase.diagnosis,
+          ].some((value) => value.toLowerCase().includes(normalizedQuery)),
       ),
-    [fixture.cases, normalizedQuery],
+    [fixture.cases, normalizedQuery, outcome, surface],
   );
   const maxDiagnosisCount = Math.max(
     ...fixture.diagnosis_distribution.map((item) => item.case_count),
@@ -140,7 +152,12 @@ function ControlTowerContent({
           />
           <MetricCard
             label="Needs human review"
-            value={String(fixture.metrics.human_review_count)}
+            value={String(
+              Math.max(
+                fixture.metrics.human_review_count,
+                approvalItems.length,
+              ),
+            )}
             delta={`${fixture.metrics.policy_blocked_actions} policy-blocked action${fixture.metrics.policy_blocked_actions === 1 ? "" : "s"}`}
             badge={
               <Badge
@@ -228,6 +245,38 @@ function ControlTowerContent({
         </Card>
       </div>
 
+      <Card>
+        <CardHeader
+          title="Recovery channels"
+          description="Invoice-safe surfaces and assisted channels across active cases."
+          action={
+            <Badge tone="neutral">
+              Evidence: {formatEvidenceKind(fixture.evidence_kind)}
+            </Badge>
+          }
+        />
+        <CardBody>
+          <div className={styles.channelGrid}>
+            {fixture.recovery_by_channel.map((channel) => (
+              <div className={styles.channelCard} key={channel.channel}>
+                <div className={styles.split}>
+                  <p className={styles.reasonTitle}>
+                    {humanize(channel.channel)}
+                  </p>
+                  <Badge tone={channel.case_count ? "info" : "neutral"}>
+                    {channel.case_count} cases
+                  </Badge>
+                </div>
+                <p className={styles.channelValue}>
+                  {formatPaise(channel.recovered_paise)}
+                </p>
+                <p className={styles.quiet}>Authoritatively recovered</p>
+              </div>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
       <section aria-labelledby="active-cases-heading" className={styles.stack}>
         <div className={styles.split}>
           <div>
@@ -238,16 +287,48 @@ function ControlTowerContent({
               Invoice-scoped cases, ordered by their latest activity.
             </p>
           </div>
-          <label>
-            <span className={styles.label}>Filter cases</span>
-            <input
-              className={styles.filterInput}
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Customer, case, plan, diagnosis"
-            />
-          </label>
+          <div className={styles.filterControls}>
+            <label>
+              <span className={styles.label}>Search cases</span>
+              <input
+                className={styles.filterInput}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Customer, case, plan, diagnosis"
+              />
+            </label>
+            <label>
+              <span className={styles.label}>Outcome</span>
+              <select
+                aria-label="Filter by outcome"
+                className={styles.filterSelect}
+                value={outcome}
+                onChange={(event) => setOutcome(event.target.value)}
+              >
+                <option value="ALL">All outcomes</option>
+                <option value="OPEN">Open</option>
+                <option value="ESCALATED">Escalated</option>
+                <option value="RECOVERED">Recovered</option>
+              </select>
+            </label>
+            <label>
+              <span className={styles.label}>Payment surface</span>
+              <select
+                aria-label="Filter by payment surface"
+                className={styles.filterSelect}
+                value={surface}
+                onChange={(event) =>
+                  setSurface(event.target.value as "ALL" | PaymentSurfaceType)
+                }
+              >
+                <option value="ALL">All surfaces</option>
+                <option value="SUBSCRIPTION_CARD_UPDATE">Card update</option>
+                <option value="SUBSCRIPTION_INVOICE_LINK">Invoice link</option>
+                <option value="STANDARD_PAYMENT_LINK">Payment link</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {filteredCases.length > 0 ? (
@@ -319,7 +400,11 @@ function ControlTowerContent({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setQuery("")}
+                onClick={() => {
+                  setQuery("");
+                  setOutcome("ALL");
+                  setSurface("ALL");
+                }}
               >
                 Clear filter
               </Button>

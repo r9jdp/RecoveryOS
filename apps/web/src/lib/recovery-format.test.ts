@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBasisPoints, formatPaise, humanize } from "./recovery-format";
+import {
+  formatBasisPoints,
+  formatEvidenceKind,
+  formatPaise,
+  humanize,
+} from "./recovery-format";
 
 describe("recovery formatting", () => {
   it("formats integer paise without converting stored money to floating point", () => {
@@ -13,6 +18,10 @@ describe("recovery formatting", () => {
     expect(formatBasisPoints(4310)).toBe("43.10%");
     expect(humanize("SUBSCRIPTION_CARD_UPDATE")).toBe(
       "Subscription Card Update",
+    );
+    expect(formatEvidenceKind("SIMULATED")).toBe("SIMULATED");
+    expect(formatEvidenceKind("RAZORPAY_TEST_VERIFIED")).toBe(
+      "RAZORPAY TEST VERIFIED",
     );
   });
 });

@@ -1,3 +1,5 @@
+import type { EvidenceKind } from "@/types/recovery";
+
 const inrWhole = new Intl.NumberFormat("en-IN", {
   currency: "INR",
   maximumFractionDigits: 0,
@@ -57,4 +59,10 @@ export function humanize(value: string): string {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+export function formatEvidenceKind(kind: EvidenceKind): string {
+  return kind === "RAZORPAY_TEST_VERIFIED"
+    ? "RAZORPAY TEST VERIFIED"
+    : "SIMULATED";
 }

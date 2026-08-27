@@ -15,9 +15,14 @@ import {
   Skeleton,
 } from "@/components/ui";
 import { useRecoveryResource } from "@/hooks/use-recovery-resource";
-import { executeCaseCommand, getCaseDetail } from "@/lib/api/recovery-client";
+import {
+  executeCaseCommand,
+  executeSafetyDisposition,
+  getCaseDetail,
+} from "@/lib/api/recovery-client";
 import {
   formatDateTime,
+  formatEvidenceKind,
   formatPaise,
   formatProbability,
   humanize,
@@ -27,8 +32,11 @@ import type {
   CaseDetailFixture,
   CaseOutcome,
   CommandResult,
+  SafetyDisposition,
+  SafetyDispositionResult,
 } from "@/types/recovery";
 
+import { ConfirmDialog } from "./ConfirmDialog";
 import styles from "./merchant.module.css";
 
 function caseOutcomeTone(
@@ -104,10 +112,15 @@ function CaseContent({
     null,
   );
   const [result, setResult] = useState<CommandResult | null>(null);
+  const [safetyResult, setSafetyResult] =
+    useState<SafetyDispositionResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [displayedOutcome, setDisplayedOutcome] = useState(
     fixture.case.case_outcome,
   );
+  const [selectedSafety, setSelectedSafety] =
+    useState<SafetyDisposition | null>(null);
+  const [safetyPending, setSafetyPending] = useState(false);
 
   const execute = useCallback(
     async (command: CaseCommand) => {
@@ -115,6 +128,7 @@ function CaseContent({
       setPendingCommand(command);
       setActionError(null);
       setResult(null);
+      setSafetyResult(null);
       setDisplayedOutcome(optimisticOutcome(command, displayedOutcome));
       try {
         const commandResult = await executeCaseCommand(
@@ -138,7 +152,7 @@ function CaseContent({
 
   const timeline = useMemo(() => {
     const base = fixture.timeline.map((event) => ({
-      description: `Source: ${event.source} · Evidence: ${humanize(event.evidence_kind)}`,
+      description: `Source: ${event.source} · Evidence: ${formatEvidenceKind(event.evidence_kind)}`,
       id: event.id,
       meta: `${formatDateTime(event.occurred_at)} · ${event.correlation_id}`,
       optimistic: false,
@@ -162,13 +176,49 @@ function CaseContent({
         optimistic: false,
         title: `${humanize(result.command)} accepted`,
       });
+    } else if (safetyResult) {
+      base.push({
+        description: safetyResult.message,
+        id: `safety-${safetyResult.disposition}-${safetyResult.occurred_at}`,
+        meta: `${formatDateTime(safetyResult.occurred_at)} · ${humanize(safetyResult.source)}`,
+        optimistic: false,
+        title: `${humanize(safetyResult.disposition)} recorded`,
+      });
     }
     return base;
-  }, [fixture.timeline, pendingCommand, result]);
+  }, [fixture.timeline, pendingCommand, result, safetyResult]);
 
   const canRun = (command: CaseCommand) =>
     fixture.available_commands.includes(command);
   const recoveryCase = fixture.case;
+
+  const applySafetyDisposition = useCallback(async () => {
+    if (!selectedSafety) return;
+    setSafetyPending(true);
+    setActionError(null);
+    setResult(null);
+    try {
+      const commandResult = await executeSafetyDisposition(
+        fixture.case.id,
+        selectedSafety,
+      );
+      setSafetyResult(commandResult);
+      if (selectedSafety === "MARK_DISPUTE") setDisplayedOutcome("DISPUTED");
+      if (selectedSafety === "ESCALATE_TO_HUMAN")
+        setDisplayedOutcome("ESCALATED");
+      if (selectedSafety === "MARK_OPT_OUT") setDisplayedOutcome("STOPPED");
+      setSelectedSafety(null);
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "The safety disposition could not be recorded.",
+      );
+      setSelectedSafety(null);
+    } finally {
+      setSafetyPending(false);
+    }
+  }, [fixture.case.id, selectedSafety]);
 
   return (
     <div className={styles.pageStack}>
@@ -195,7 +245,7 @@ function CaseContent({
             </p>
           </div>
           <Badge tone={source === "api" ? "success" : "neutral"} showDot>
-            {source === "api" ? "API connected" : "Simulated evidence"}
+            {source === "api" ? "API connected" : "SIMULATED evidence"}
           </Badge>
         </div>
       </div>
@@ -290,12 +340,122 @@ function CaseContent({
                 {result.message}
               </Alert>
             )}
+            {safetyResult && (
+              <Alert
+                tone="success"
+                title={`${humanize(safetyResult.disposition)} recorded`}
+              >
+                {safetyResult.message}
+              </Alert>
+            )}
             {actionError && (
               <Alert tone="danger" title="Command was not applied">
                 {actionError}
               </Alert>
             )}
           </div>
+        </CardBody>
+      </Card>
+
+      <Card className={styles.safetyCard}>
+        <CardHeader
+          title="Customer safety dispositions"
+          description="Safety-first outcomes suppress incompatible outreach before another action can run."
+          action={<Badge tone="success">Policy enforced</Badge>}
+        />
+        <CardBody>
+          <div
+            className={styles.safetyActions}
+            aria-label="Customer safety actions"
+          >
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSafety("MARK_DISPUTE")}
+            >
+              Mark dispute
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSafety("MARK_OPT_OUT")}
+            >
+              Record opt-out
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSafety("MARK_ALREADY_PAID")}
+            >
+              Customer says already paid
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSafety("ESCALATE_TO_HUMAN")}
+            >
+              Escalate for review
+            </Button>
+          </div>
+          <p className={styles.quiet}>
+            Dispute and opt-out immediately block payment prompts and assisted
+            outreach. “Already paid” pauses action pending authoritative
+            reconciliation.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card className={styles.surfaceCard}>
+        <CardHeader
+          title="Payment surface"
+          description="The exact invoice-scoped customer experience approved for this recovery case."
+          action={
+            <div className={styles.badgeStack}>
+              <Badge tone="neutral">Mock provider</Badge>
+              <Badge tone="info">SIMULATED</Badge>
+            </div>
+          }
+        />
+        <CardBody>
+          <dl className={styles.surfaceDetails}>
+            <div>
+              <dt>Surface</dt>
+              <dd>{humanize(fixture.payment_surface.type)}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>
+                <Badge tone="warning">
+                  {humanize(fixture.payment_surface.status)}
+                </Badge>
+              </dd>
+            </div>
+            <div>
+              <dt>Failed invoice</dt>
+              <dd className={styles.mono}>
+                {fixture.payment_failure.invoice_id}
+              </dd>
+            </div>
+            <div>
+              <dt>Subscription</dt>
+              <dd className={styles.mono}>{fixture.case.subscription_id}</dd>
+            </div>
+            <div>
+              <dt>Customer action</dt>
+              <dd>
+                Update the subscription card and complete customer-present
+                authentication.
+              </dd>
+            </div>
+            <div>
+              <dt>Payment proof</dt>
+              <dd>
+                {humanize(fixture.payment_surface.authoritative_payment_state)}{" "}
+                · provider fetch/webhook required
+              </dd>
+            </div>
+          </dl>
+          <Alert tone="info" title="Subscription-native recovery">
+            This surface preserves invoice correlation. A standalone Payment
+            Link remains blocked while automatic subscription retries are
+            active.
+          </Alert>
         </CardBody>
       </Card>
 
@@ -396,7 +556,7 @@ function CaseContent({
                       <Badge
                         tone={item.kind === "SIMULATED" ? "neutral" : "success"}
                       >
-                        {humanize(item.kind)}
+                        {formatEvidenceKind(item.kind)}
                       </Badge>
                     </div>
                     <p className={styles.value}>{humanize(item.value)}</p>
@@ -517,8 +677,8 @@ function CaseContent({
 
         <Card>
           <CardHeader
-            title="Case timeline"
-            description="Provider facts and RecoveryOS decisions in causal order."
+            title="Razorpay event timeline"
+            description="Webhook-shaped provider facts and RecoveryOS decisions in causal order."
           />
           <CardBody>
             <ol className={styles.timelineList} aria-live="polite">
@@ -541,6 +701,27 @@ function CaseContent({
           </CardBody>
         </Card>
       </div>
+      <ConfirmDialog
+        open={Boolean(selectedSafety)}
+        danger={
+          selectedSafety === "MARK_DISPUTE" || selectedSafety === "MARK_OPT_OUT"
+        }
+        busy={safetyPending}
+        title={
+          selectedSafety === "MARK_DISPUTE"
+            ? "Record a payment dispute?"
+            : selectedSafety === "MARK_OPT_OUT"
+              ? "Suppress all customer outreach?"
+              : selectedSafety === "MARK_ALREADY_PAID"
+                ? "Pause and reconcile payment?"
+                : "Escalate this case?"
+        }
+        description="RecoveryOS will persist this disposition before cancelling incompatible pending actions."
+        confirmationText="A customer statement is not authoritative proof of payment; already-paid cases remain open until provider reconciliation succeeds."
+        confirmLabel="Confirm safety disposition"
+        onCancel={() => setSelectedSafety(null)}
+        onConfirm={applySafetyDisposition}
+      />
     </div>
   );
 }

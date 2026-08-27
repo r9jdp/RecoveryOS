@@ -62,6 +62,31 @@ export type PaymentSurfaceType =
 
 export type CaseCommand = "APPROVE" | "REJECT" | "STOP" | "ESCALATE_TO_HUMAN";
 
+export type SafetyDisposition =
+  "MARK_DISPUTE" | "MARK_OPT_OUT" | "MARK_ALREADY_PAID" | "ESCALATE_TO_HUMAN";
+
+export interface ApprovalItem {
+  case_id: string;
+  customer_display_name: string;
+  plan_name: string;
+  amount_at_risk_paise: number;
+  recommended_action: RecoveryAction;
+  payment_surface_type: PaymentSurfaceType | null;
+  policy_reason: string;
+  deadline: string;
+  evidence_kind: EvidenceKind;
+  provider: "RAZORPAY_TEST" | "MOCK";
+}
+
+export interface PolicySettings {
+  timezone: string;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  max_contacts_per_7_days: number;
+  require_approval_above_paise: number;
+  recovery_kill_switch: boolean;
+}
+
 export interface DashboardCase {
   id: string;
   merchant_id: string;
@@ -227,6 +252,14 @@ export interface FixtureResult<T> {
 
 export interface CommandResult {
   command: CaseCommand;
+  status: "ACCEPTED";
+  occurred_at: string;
+  source: "api" | "mock";
+  message: string;
+}
+
+export interface SafetyDispositionResult {
+  disposition: SafetyDisposition;
   status: "ACCEPTED";
   occurred_at: string;
   source: "api" | "mock";

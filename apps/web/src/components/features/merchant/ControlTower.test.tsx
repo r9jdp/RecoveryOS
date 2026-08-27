@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { ControlTower } from "./ControlTower";
+
+afterEach(cleanup);
 
 describe("ControlTower", () => {
   it("renders the deterministic dashboard fallback with explicit provenance", async () => {
@@ -15,5 +17,25 @@ describe("ControlTower", () => {
     expect(
       screen.getByRole("link", { name: /REC-FITBOX-AUG-2026/i }),
     ).toHaveAttribute("href", "/cases/case_fitbox_aug_2026");
+  });
+
+  it("filters the case table by outcome and resets an empty result", async () => {
+    render(<ControlTower />);
+    await screen.findByRole("heading", { name: "Control Tower" });
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Filter by outcome" }),
+      {
+        target: { value: "RECOVERED" },
+      },
+    );
+    expect(
+      screen.getByRole("heading", { name: "No matching cases" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(
+      screen.getByRole("link", { name: /REC-FITBOX-AUG-2026/i }),
+    ).toBeInTheDocument();
   });
 });

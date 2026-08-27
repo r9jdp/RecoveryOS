@@ -345,6 +345,185 @@
   box-shadow: var(--ros-shadow-focus);
 }
 
+.filterControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: var(--ros-space-3);
+}
+
+.filterControls label {
+  display: grid;
+  gap: var(--ros-space-2);
+}
+
+.filterSelect {
+  min-height: 2.75rem;
+  padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+  border: 1px solid var(--ros-border-strong);
+  border-radius: var(--ros-radius-sm);
+  color: var(--ros-ink);
+  background: white;
+  font: 500 var(--ros-text-sm) / 1.4 var(--ros-font-body);
+}
+
+.filterSelect:focus-visible {
+  outline: none;
+  border-color: var(--ros-brand);
+  box-shadow: var(--ros-shadow-focus);
+}
+
+.channelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--ros-space-4);
+}
+
+.channelCard {
+  padding: var(--ros-space-4);
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-sm);
+  background: linear-gradient(145deg, white, var(--ros-surface-subtle));
+}
+
+.channelValue {
+  margin: var(--ros-space-6) 0 var(--ros-space-1);
+  color: var(--ros-ink-secondary);
+  font: 760 var(--ros-text-xl) / 1 var(--ros-font-display);
+}
+
+.badgeStack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ros-space-2);
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+  gap: var(--ros-space-5);
+  align-items: start;
+}
+
+.formGrid {
+  display: grid;
+  gap: var(--ros-space-5);
+}
+
+.fieldPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ros-space-4);
+}
+
+.dangerCard {
+  border-color: #f1bbb6;
+  box-shadow: 0 10px 28px rgb(213 43 30 / 8%);
+}
+
+.safetyCard {
+  border-color: #f2d487;
+}
+
+.safetyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ros-space-3);
+  margin-bottom: var(--ros-space-4);
+}
+
+.surfaceCard {
+  border-color: #bfd1ff;
+  box-shadow: 0 10px 28px rgb(48 94 255 / 8%);
+}
+
+.surfaceDetails {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ros-space-5);
+  margin: 0 0 var(--ros-space-5);
+}
+
+.surfaceDetails dt {
+  margin-bottom: var(--ros-space-1);
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-xs);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.surfaceDetails dd {
+  margin: 0;
+  color: var(--ros-ink);
+  font-size: var(--ros-text-sm);
+  font-weight: 650;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.dialogBackdrop {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--ros-space-4);
+  background: rgb(3 42 62 / 58%);
+  backdrop-filter: blur(4px);
+}
+
+.dialog {
+  width: min(100%, 31rem);
+  padding: var(--ros-space-6);
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-md);
+  color: var(--ros-ink);
+  background: white;
+  box-shadow: var(--ros-shadow-md);
+}
+
+.dialogIcon {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--ros-space-4);
+  border-radius: var(--ros-radius-sm);
+  color: white;
+  background: var(--ros-brand);
+  font-weight: 850;
+}
+
+.dialogTitle {
+  margin: 0;
+  color: var(--ros-ink-secondary);
+  font: 760 var(--ros-text-xl) / 1.2 var(--ros-font-display);
+}
+
+.dialogCopy,
+.confirmationText {
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-sm);
+  line-height: 1.6;
+}
+
+.confirmationText {
+  padding: var(--ros-space-3);
+  border: 1px solid #bfd1ff;
+  border-radius: var(--ros-radius-sm);
+  color: #173b9c;
+  background: var(--ros-info-soft);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ros-space-3);
+  margin-top: var(--ros-space-6);
+}
+
 .diagnosisBars {
   display: grid;
   gap: var(--ros-space-4);
@@ -679,6 +858,14 @@
   .twoColumn {
     grid-template-columns: 1fr;
   }
+
+  .settingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .surfaceDetails {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 54rem) {
@@ -737,6 +924,25 @@
   }
 
   .filterInput {
+    width: 100%;
+  }
+
+  .filterControls,
+  .filterControls label,
+  .filterSelect {
+    width: 100%;
+  }
+
+  .fieldPair,
+  .surfaceDetails {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogActions {
+    flex-direction: column-reverse;
+  }
+
+  .dialogActions > * {
     width: 100%;
   }
 

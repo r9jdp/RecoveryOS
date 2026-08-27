@@ -15,12 +15,14 @@ interface MerchantShellProps {
 
 const items = [
   { href: "/dashboard", icon: "chart" as const, label: "Control Tower" },
+  { href: "/approvals", icon: "shield" as const, label: "Approval queue" },
   {
     href: "/cases/case_fitbox_aug_2026",
     icon: "case" as const,
     label: "Active case",
   },
   { href: "/dashboard#audit", icon: "activity" as const, label: "Audit trail" },
+  { href: "/settings", icon: "settings" as const, label: "Policy settings" },
 ];
 
 function MerchantNavigation({
@@ -35,9 +37,10 @@ function MerchantNavigation({
       <p className={styles.workspaceLabel}>Recovery workspace</p>
       <nav className={styles.nav} aria-label="Primary navigation">
         {items.map((item) => {
-          const active = item.href.startsWith("/cases")
+          const route = item.href.split("#")[0];
+          const active = route.startsWith("/cases")
             ? pathname.startsWith("/cases")
-            : item.href === "/dashboard" && pathname === "/dashboard";
+            : pathname === route && !item.href.includes("#");
           return (
             <Link
               key={item.href}
@@ -109,7 +112,11 @@ export function MerchantShell({ children }: MerchantShellProps) {
                 Revenue recovery /{" "}
                 {pathname.startsWith("/cases")
                   ? "Case workspace"
-                  : "Control Tower"}
+                  : pathname === "/approvals"
+                    ? "Approval queue"
+                    : pathname === "/settings"
+                      ? "Policy settings"
+                      : "Control Tower"}
               </p>
             </div>
             <div className={styles.topbarEnd}>

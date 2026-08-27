@@ -7,6 +7,9 @@ import type {
   CommandResult,
   DashboardFixture,
   FixtureResult,
+  PolicySettings,
+  SafetyDisposition,
+  SafetyDispositionResult,
 } from "@/types/recovery";
 
 type DemoFixtureName =
@@ -127,4 +130,62 @@ export async function executeCaseCommand(
     source: "api",
     status: "ACCEPTED",
   };
+}
+
+export async function executeSafetyDisposition(
+  caseId: string,
+  disposition: SafetyDisposition,
+): Promise<SafetyDispositionResult> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) {
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    return {
+      disposition,
+      message: `${disposition.replaceAll("_", " ")} recorded in simulated mode. No provider action was taken.`,
+      occurred_at: new Date().toISOString(),
+      source: "mock",
+      status: "ACCEPTED",
+    };
+  }
+
+  const response = await fetch(
+    `${baseUrl}/v1/recovery-cases/${encodeURIComponent(caseId)}/safety-dispositions`,
+    {
+      body: JSON.stringify({ disposition }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Safety disposition failed with status ${response.status}.`,
+    );
+  }
+  const payload = (await response.json()) as Partial<SafetyDispositionResult>;
+  return {
+    disposition,
+    message: payload.message ?? "Safety disposition recorded.",
+    occurred_at: payload.occurred_at ?? new Date().toISOString(),
+    source: "api",
+    status: "ACCEPTED",
+  };
+}
+
+export async function updatePolicySettings(
+  settings: PolicySettings,
+): Promise<PolicySettings> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) {
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    return structuredClone(settings);
+  }
+  const response = await fetch(`${baseUrl}/v1/policy-settings`, {
+    body: JSON.stringify(settings),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+  });
+  if (!response.ok) {
+    throw new Error(`Policy update failed with status ${response.status}.`);
+  }
+  return (await response.json()) as PolicySettings;
 }
