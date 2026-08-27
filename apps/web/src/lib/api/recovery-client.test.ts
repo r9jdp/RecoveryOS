@@ -215,6 +215,8 @@ describe("Recovery API live composition", () => {
       require_approval_above_paise: 500000,
       require_approval_actions: ["START_VOICE"],
       timezone: "Asia/Kolkata",
+      updated_at: "2026-08-28T00:00:00Z",
+      version: 3,
     } as const;
     const fetchMock = vi
       .fn()
@@ -229,5 +231,10 @@ describe("Recovery API live composition", () => {
     await expect(updatePolicySettings(read.data)).rejects.toThrow(
       "Policy version changed",
     );
+    const sentBody = JSON.parse(
+      String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
+    ) as Record<string, unknown>;
+    expect(sentBody).not.toHaveProperty("version");
+    expect(sentBody).not.toHaveProperty("updated_at");
   });
 });

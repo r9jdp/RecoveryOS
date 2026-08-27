@@ -95,8 +95,13 @@ function isAbortError(error: unknown): boolean {
 
 function normalizePolicySettings(settings: PolicySettings): PolicySettings {
   return {
-    ...settings,
+    timezone: settings.timezone,
+    quiet_hours_start: settings.quiet_hours_start,
+    quiet_hours_end: settings.quiet_hours_end,
+    max_contacts_per_7_days: settings.max_contacts_per_7_days,
+    require_approval_above_paise: settings.require_approval_above_paise,
     require_approval_actions: settings.require_approval_actions ?? [],
+    recovery_kill_switch: settings.recovery_kill_switch,
   };
 }
 
