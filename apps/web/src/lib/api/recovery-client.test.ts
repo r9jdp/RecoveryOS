@@ -208,11 +208,11 @@ describe("Recovery API live composition", () => {
   it("loads action approval settings and preserves structured API errors", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
     const liveSettings = {
-      max_contacts_per_7_days: 2,
-      quiet_hours_end: "09:00",
-      quiet_hours_start: "20:00",
+      max_contacts_per_7_days: null,
+      quiet_hours_end: null,
+      quiet_hours_start: null,
       recovery_kill_switch: false,
-      require_approval_above_paise: 500000,
+      require_approval_above_paise: null,
       require_approval_actions: ["START_VOICE"],
       timezone: "Asia/Kolkata",
       updated_at: "2026-08-28T00:00:00Z",
@@ -228,6 +228,9 @@ describe("Recovery API live composition", () => {
 
     const read = await getPolicySettings();
     expect(read.data.require_approval_actions).toEqual(["START_VOICE"]);
+    expect(read.data.quiet_hours_start).toBeNull();
+    expect(read.data.max_contacts_per_7_days).toBeNull();
+    expect(read.data.require_approval_above_paise).toBeNull();
     await expect(updatePolicySettings(read.data)).rejects.toThrow(
       "Policy version changed",
     );

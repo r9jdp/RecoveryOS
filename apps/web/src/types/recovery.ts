@@ -84,10 +84,10 @@ export interface ApprovalItem {
 
 export interface PolicySettings {
   timezone: string;
-  quiet_hours_start: string;
-  quiet_hours_end: string;
-  max_contacts_per_7_days: number;
-  require_approval_above_paise: number;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  max_contacts_per_7_days: number | null;
+  require_approval_above_paise: number | null;
   require_approval_actions: RecoveryAction[];
   recovery_kill_switch: boolean;
 }
@@ -132,15 +132,7 @@ export interface DashboardFixture {
     recovered_paise: number;
     case_count: number;
   }>;
-  policy_settings: {
-    timezone: string;
-    quiet_hours_start: string;
-    quiet_hours_end: string;
-    max_contacts_per_7_days: number;
-    require_approval_above_paise: number;
-    require_approval_actions: RecoveryAction[];
-    recovery_kill_switch: boolean;
-  };
+  policy_settings: PolicySettings;
   cases: DashboardCase[];
   recent_events: Array<{
     id: string;

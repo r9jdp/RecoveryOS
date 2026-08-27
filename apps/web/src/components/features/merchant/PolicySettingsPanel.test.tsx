@@ -53,4 +53,33 @@ describe("PolicySettingsPanel", () => {
     expect(await screen.findByText(/Version conflict/)).toBeInTheDocument();
     expect(screen.getByText("Recovery active")).toBeInTheDocument();
   });
+
+  it("round-trips disabled nullable policy controls", async () => {
+    const saveSettings = vi.fn(async (settings) => settings);
+    render(<PolicySettingsPanel saveSettings={saveSettings} />);
+
+    fireEvent.change(screen.getByLabelText(/Quiet hours begin/), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText(/Maximum contacts in 7 days/), {
+      target: { value: "" },
+    });
+    fireEvent.change(
+      screen.getByLabelText(/Require approval above \(paise\)/),
+      {
+        target: { value: "" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+
+    await screen.findByText(/safeguards were saved/i);
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quiet_hours_start: null,
+        quiet_hours_end: null,
+        max_contacts_per_7_days: null,
+        require_approval_above_paise: null,
+      }),
+    );
+  });
 });

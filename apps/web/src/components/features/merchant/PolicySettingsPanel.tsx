@@ -150,22 +150,28 @@ export function PolicySettingsPanel({
               <Input
                 label="Quiet hours begin"
                 type="time"
-                value={settings.quiet_hours_start}
+                value={settings.quiet_hours_start ?? ""}
                 onChange={(event) =>
                   setSettings((current) => ({
                     ...current,
-                    quiet_hours_start: event.target.value,
+                    quiet_hours_start: event.target.value || null,
+                    quiet_hours_end: event.target.value
+                      ? (current.quiet_hours_end ?? "09:00")
+                      : null,
                   }))
                 }
               />
               <Input
                 label="Quiet hours end"
                 type="time"
-                value={settings.quiet_hours_end}
+                value={settings.quiet_hours_end ?? ""}
                 onChange={(event) =>
                   setSettings((current) => ({
                     ...current,
-                    quiet_hours_end: event.target.value,
+                    quiet_hours_start: event.target.value
+                      ? (current.quiet_hours_start ?? "20:00")
+                      : null,
+                    quiet_hours_end: event.target.value || null,
                   }))
                 }
               />
@@ -175,11 +181,15 @@ export function PolicySettingsPanel({
               type="number"
               min={1}
               max={7}
-              value={settings.max_contacts_per_7_days}
+              value={settings.max_contacts_per_7_days ?? ""}
+              hint="Leave empty to disable the rolling contact cap."
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  max_contacts_per_7_days: Number(event.target.value),
+                  max_contacts_per_7_days:
+                    event.target.value === ""
+                      ? null
+                      : Number(event.target.value),
                 }))
               }
             />
@@ -188,12 +198,19 @@ export function PolicySettingsPanel({
               type="number"
               min={0}
               step={100}
-              value={settings.require_approval_above_paise}
-              hint={`Currently ${formatPaise(settings.require_approval_above_paise)}`}
+              value={settings.require_approval_above_paise ?? ""}
+              hint={
+                settings.require_approval_above_paise === null
+                  ? "Amount-based approval is disabled."
+                  : `Currently ${formatPaise(settings.require_approval_above_paise)}`
+              }
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  require_approval_above_paise: Number(event.target.value),
+                  require_approval_above_paise:
+                    event.target.value === ""
+                      ? null
+                      : Number(event.target.value),
                 }))
               }
             />
