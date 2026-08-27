@@ -12,6 +12,7 @@ import {
   CardBody,
   CardHeader,
   EmptyState,
+  Skeleton,
   Table,
   TableBody,
   TableCaption,
@@ -21,8 +22,9 @@ import {
   TableRow,
   TableViewport,
 } from "@/components/ui";
-import { executeCaseCommand } from "@/lib/api/recovery-client";
-import { approvalItems } from "@/lib/merchant-demo";
+import { useRecoveryResource } from "@/hooks/use-recovery-resource";
+import { executeCaseCommand, getDashboard } from "@/lib/api/recovery-client";
+import { buildApprovalItems } from "@/lib/merchant-demo";
 import {
   formatDateTime,
   formatEvidenceKind,
@@ -46,6 +48,11 @@ export function ApprovalQueue({
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const resource = useRecoveryResource(getDashboard);
+  const approvalItems = useMemo(
+    () => (resource.data ? buildApprovalItems(resource.data) : []),
+    [resource.data],
+  );
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return approvalItems.filter((item) =>
@@ -53,7 +60,7 @@ export function ApprovalQueue({
         value.toLowerCase().includes(needle),
       ),
     );
-  }, [query]);
+  }, [approvalItems, query]);
 
   async function approve() {
     if (!selected) return;
@@ -63,6 +70,7 @@ export function ApprovalQueue({
       await runApproval(selected.case_id);
       setApproved((current) => [...current, selected.case_id]);
       setSelected(null);
+      if (resource.source === "api") resource.reload();
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -76,6 +84,25 @@ export function ApprovalQueue({
   }
 
   const pending = filtered.filter((item) => !approved.includes(item.case_id));
+  if (resource.loading) {
+    return (
+      <div className={styles.pageStack} aria-busy="true">
+        <Skeleton width="15rem" height="2.5rem" />
+        <Skeleton height="18rem" />
+      </div>
+    );
+  }
+
+  if (resource.error || !resource.data || !resource.source) {
+    return (
+      <EmptyState
+        title="Approval queue could not load"
+        description={resource.error ?? "The approval response was empty."}
+        action={<Button onClick={resource.reload}>Try again</Button>}
+      />
+    );
+  }
+
   return (
     <div className={styles.pageStack}>
       <PageHeader
@@ -87,6 +114,11 @@ export function ApprovalQueue({
       {error && (
         <Alert tone="danger" title="Approval failed">
           {error} The case remains unchanged and can be retried safely.
+        </Alert>
+      )}
+      {resource.warning && (
+        <Alert tone="info" title="Fallback approval data">
+          {resource.warning}
         </Alert>
       )}
       <h2 className={styles.srOnly}>Cases awaiting operator approval</h2>
@@ -164,7 +196,11 @@ export function ApprovalQueue({
                           </Badge>
                         </div>
                       </TableCell>
-                      <TableCell>{formatDateTime(item.deadline)}</TableCell>
+                      <TableCell>
+                        {item.deadline
+                          ? formatDateTime(item.deadline)
+                          : "Open case for deadline"}
+                      </TableCell>
                       <TableCell>
                         <Button size="sm" onClick={() => setSelected(item)}>
                           Review
@@ -200,7 +236,11 @@ export function ApprovalQueue({
         open={Boolean(selected)}
         title="Approve this recovery surface?"
         description={`RecoveryOS will authorize one ${humanize(selected?.payment_surface_type ?? "OPEN_CUSTOMER_PAYMENT_SURFACE")} for ${selected?.customer_display_name ?? "this customer"}.`}
-        confirmationText="This demo remains in mock mode; no charge is attempted and a browser callback never proves payment."
+        confirmationText={
+          resource.source === "mock"
+            ? "This demo remains in mock mode; no charge is attempted and a browser callback never proves payment."
+            : "Only this exact surface is approved. A browser callback never proves payment; provider reconciliation remains authoritative."
+        }
         confirmLabel="Approve exact surface"
         busy={busy}
         onCancel={() => setSelected(null)}

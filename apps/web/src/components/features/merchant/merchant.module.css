@@ -417,6 +417,62 @@
   gap: var(--ros-space-4);
 }
 
+.checkboxGroup {
+  display: grid;
+  gap: var(--ros-space-3);
+  margin: 0;
+  padding: var(--ros-space-4);
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-sm);
+  background: var(--ros-surface-subtle);
+}
+
+.checkboxGroup legend {
+  padding-inline: var(--ros-space-2);
+  color: var(--ros-ink);
+  font-size: var(--ros-text-sm);
+  font-weight: 750;
+}
+
+.checkboxRow {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  gap: var(--ros-space-3);
+  align-items: start;
+  padding: var(--ros-space-3);
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-sm);
+  background: white;
+  cursor: pointer;
+}
+
+.checkboxRow input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.125rem;
+  accent-color: var(--ros-brand);
+}
+
+.checkboxRow input:focus-visible {
+  outline: 2px solid var(--ros-brand);
+  outline-offset: 2px;
+}
+
+.checkboxRow span {
+  display: grid;
+  gap: var(--ros-space-1);
+}
+
+.checkboxRow strong {
+  color: var(--ros-ink);
+  font-size: var(--ros-text-sm);
+}
+
+.checkboxRow small {
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-xs);
+}
+
 .dangerCard {
   border-color: #f1bbb6;
   box-shadow: 0 10px 28px rgb(213 43 30 / 8%);

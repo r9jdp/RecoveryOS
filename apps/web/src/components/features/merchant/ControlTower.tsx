@@ -111,6 +111,10 @@ function ControlTowerContent({
     ...fixture.diagnosis_distribution.map((item) => item.case_count),
     1,
   );
+  const displayedHumanReviewCount = Math.max(
+    fixture.metrics.human_review_count,
+    source === "mock" ? approvalItems.length : 0,
+  );
 
   return (
     <div className={styles.pageStack}>
@@ -152,18 +156,11 @@ function ControlTowerContent({
           />
           <MetricCard
             label="Needs human review"
-            value={String(
-              Math.max(
-                fixture.metrics.human_review_count,
-                approvalItems.length,
-              ),
-            )}
+            value={String(displayedHumanReviewCount)}
             delta={`${fixture.metrics.policy_blocked_actions} policy-blocked action${fixture.metrics.policy_blocked_actions === 1 ? "" : "s"}`}
             badge={
               <Badge
-                tone={
-                  fixture.metrics.human_review_count > 0 ? "warning" : "neutral"
-                }
+                tone={displayedHumanReviewCount > 0 ? "warning" : "neutral"}
               >
                 Review
               </Badge>

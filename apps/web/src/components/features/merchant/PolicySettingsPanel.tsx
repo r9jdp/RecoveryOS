@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout";
 import {
@@ -13,13 +13,28 @@ import {
   Input,
   Select,
 } from "@/components/ui";
-import { updatePolicySettings } from "@/lib/api/recovery-client";
+import {
+  getPolicySettings,
+  updatePolicySettings,
+} from "@/lib/api/recovery-client";
 import { merchantDashboard } from "@/lib/merchant-demo";
-import { formatPaise } from "@/lib/recovery-format";
-import type { PolicySettings } from "@/types/recovery";
+import { formatPaise, humanize } from "@/lib/recovery-format";
+import type { PolicySettings, RecoveryAction } from "@/types/recovery";
 
 import { ConfirmDialog } from "./ConfirmDialog";
 import styles from "./merchant.module.css";
+
+const approvalActions: Array<{ action: RecoveryAction; label: string }> = [
+  {
+    action: "OPEN_CUSTOMER_PAYMENT_SURFACE",
+    label: "Open a customer payment surface",
+  },
+  { action: "START_VOICE", label: "Start voice outreach" },
+  {
+    action: "SEND_TO_CUSTOMER_AGENT",
+    label: "Send to the customer agent",
+  },
+];
 
 export function PolicySettingsPanel({
   saveSettings = updatePolicySettings,
@@ -33,6 +48,24 @@ export function PolicySettingsPanel({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readWarning, setReadWarning] = useState<string | null>(null);
+  const [source, setSource] = useState<"api" | "mock">("mock");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getPolicySettings(controller.signal)
+      .then((result) => {
+        setSettings(result.data);
+        setSource(result.source);
+        setReadWarning(result.warning ?? null);
+      })
+      .catch((caught: unknown) => {
+        if (caught instanceof DOMException && caught.name === "AbortError")
+          return;
+        setReadWarning("Policy settings could not be refreshed.");
+      });
+    return () => controller.abort();
+  }, []);
 
   async function persist(next: PolicySettings, message: string) {
     setBusy(true);
@@ -41,6 +74,8 @@ export function PolicySettingsPanel({
     try {
       const saved = await saveSettings(next);
       setSettings(saved);
+      setSource(process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ? "api" : "mock");
+      setReadWarning(null);
       setNotice(message);
     } catch (caught) {
       setError(
@@ -73,6 +108,11 @@ export function PolicySettingsPanel({
       {notice && (
         <Alert tone="success" title="Policy updated">
           {notice}
+        </Alert>
+      )}
+      {readWarning && (
+        <Alert tone="info" title="Fallback policy data">
+          {readWarning}
         </Alert>
       )}
       {error && (
@@ -157,13 +197,43 @@ export function PolicySettingsPanel({
                 }))
               }
             />
+            <fieldset className={styles.checkboxGroup}>
+              <legend>Always require approval for</legend>
+              <p className={styles.quiet}>
+                These actions enter the approval queue regardless of amount.
+              </p>
+              {approvalActions.map(({ action, label }) => (
+                <label className={styles.checkboxRow} key={action}>
+                  <input
+                    type="checkbox"
+                    checked={settings.require_approval_actions.includes(action)}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        require_approval_actions: event.target.checked
+                          ? [...current.require_approval_actions, action]
+                          : current.require_approval_actions.filter(
+                              (candidate) => candidate !== action,
+                            ),
+                      }))
+                    }
+                  />
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{humanize(action)}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <div>
               <Button
                 loading={busy}
                 onClick={() =>
                   persist(
                     settings,
-                    "Contact and approval safeguards were saved in simulated mode.",
+                    source === "api"
+                      ? "Contact and approval safeguards were saved."
+                      : "Contact and approval safeguards were saved in simulated mode.",
                   )
                 }
               >

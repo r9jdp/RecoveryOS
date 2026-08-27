@@ -55,4 +55,24 @@ describe("CaseWorkspace", () => {
     ).toHaveLength(2);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
   });
+
+  it("records a wrong-person disposition and updates visible contact state", async () => {
+    render(<CaseWorkspace caseId="case_fitbox_aug_2026" />);
+    await screen.findByRole("heading", {
+      name: /Aarav Sharma · FitBox Annual/,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark wrong person" }));
+    expect(
+      screen.getByRole("alertdialog", {
+        name: "Record a wrong-person contact?",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm safety disposition" }),
+    );
+
+    expect(await screen.findByText("Wrong Person")).toBeInTheDocument();
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+  });
 });

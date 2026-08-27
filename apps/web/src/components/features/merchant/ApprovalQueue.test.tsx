@@ -17,7 +17,7 @@ describe("ApprovalQueue", () => {
     render(<ApprovalQueue runApproval={runApproval} />);
 
     fireEvent.change(
-      screen.getByRole("searchbox", { name: "Filter approval queue" }),
+      await screen.findByRole("searchbox", { name: "Filter approval queue" }),
       {
         target: { value: "missing customer" },
       },
@@ -26,7 +26,7 @@ describe("ApprovalQueue", () => {
       screen.getByRole("heading", { name: "No matching approvals" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
 
     expect(
       screen.getByRole("alertdialog", {
@@ -59,7 +59,7 @@ describe("ApprovalQueue", () => {
         runApproval={vi.fn().mockRejectedValue(new Error("Policy changed"))}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Approve exact surface" }),
     );

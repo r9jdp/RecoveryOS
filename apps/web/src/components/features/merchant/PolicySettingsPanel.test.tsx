@@ -6,6 +6,20 @@ import { PolicySettingsPanel } from "./PolicySettingsPanel";
 afterEach(cleanup);
 
 describe("PolicySettingsPanel", () => {
+  it("persists action-based approval requirements", async () => {
+    const saveSettings = vi.fn(async (settings) => settings);
+    render(<PolicySettingsPanel saveSettings={saveSettings} />);
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /Start voice outreach/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    await screen.findByText(/safeguards were saved/i);
+    expect(saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ require_approval_actions: ["START_VOICE"] }),
+    );
+  });
+
   it("requires explicit confirmation before enabling the kill switch", async () => {
     const saveSettings = vi.fn(async (settings) => settings);
     render(<PolicySettingsPanel saveSettings={saveSettings} />);

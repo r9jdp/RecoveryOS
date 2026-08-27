@@ -32,6 +32,8 @@ import type {
   CaseDetailFixture,
   CaseOutcome,
   CommandResult,
+  ContactDisposition,
+  PaymentSurfaceType,
   SafetyDisposition,
   SafetyDispositionResult,
 } from "@/types/recovery";
@@ -56,6 +58,21 @@ function optimisticOutcome(
 ): CaseOutcome {
   if (command === "ESCALATE_TO_HUMAN") return "ESCALATED";
   if (command === "STOP" || command === "REJECT") return "STOPPED";
+  return current;
+}
+
+function paymentSurfaceLabel(type: PaymentSurfaceType | null): string {
+  return type ? humanize(type) : "Not selected";
+}
+
+function safetyContactDisposition(
+  disposition: SafetyDisposition,
+  current: ContactDisposition,
+): ContactDisposition {
+  if (disposition === "MARK_DISPUTE") return "DISPUTE";
+  if (disposition === "MARK_OPT_OUT") return "OPTED_OUT";
+  if (disposition === "MARK_WRONG_PERSON") return "WRONG_PERSON";
+  if (disposition === "MARK_ALREADY_PAID") return "ALREADY_PAID";
   return current;
 }
 
@@ -103,9 +120,11 @@ export function CaseLoading() {
 
 function CaseContent({
   fixture,
+  onRefresh,
   source,
 }: {
   fixture: CaseDetailFixture;
+  onRefresh: () => void;
   source: "api" | "mock";
 }) {
   const [pendingCommand, setPendingCommand] = useState<CaseCommand | null>(
@@ -118,6 +137,8 @@ function CaseContent({
   const [displayedOutcome, setDisplayedOutcome] = useState(
     fixture.case.case_outcome,
   );
+  const [displayedContactDisposition, setDisplayedContactDisposition] =
+    useState(fixture.case.contact_disposition);
   const [selectedSafety, setSelectedSafety] =
     useState<SafetyDisposition | null>(null);
   const [safetyPending, setSafetyPending] = useState(false);
@@ -135,7 +156,8 @@ function CaseContent({
           fixture.case.id,
           command,
         );
-        setResult(commandResult);
+        if (source === "api") onRefresh();
+        else setResult(commandResult);
       } catch (error) {
         setDisplayedOutcome(previousOutcome);
         setActionError(
@@ -147,7 +169,7 @@ function CaseContent({
         setPendingCommand(null);
       }
     },
-    [displayedOutcome, fixture.case.id],
+    [displayedOutcome, fixture.case.id, onRefresh, source],
   );
 
   const timeline = useMemo(() => {
@@ -191,6 +213,13 @@ function CaseContent({
   const canRun = (command: CaseCommand) =>
     fixture.available_commands.includes(command);
   const recoveryCase = fixture.case;
+  const displayedEvidenceKind =
+    fixture.evidence.find((item) => item.kind === "RAZORPAY_TEST_VERIFIED")
+      ?.kind ??
+    fixture.timeline.find(
+      (item) => item.evidence_kind === "RAZORPAY_TEST_VERIFIED",
+    )?.evidence_kind ??
+    "SIMULATED";
 
   const applySafetyDisposition = useCallback(async () => {
     if (!selectedSafety) return;
@@ -203,11 +232,17 @@ function CaseContent({
         selectedSafety,
       );
       setSafetyResult(commandResult);
+      setDisplayedContactDisposition((current) =>
+        safetyContactDisposition(selectedSafety, current),
+      );
       if (selectedSafety === "MARK_DISPUTE") setDisplayedOutcome("DISPUTED");
       if (selectedSafety === "ESCALATE_TO_HUMAN")
         setDisplayedOutcome("ESCALATED");
       if (selectedSafety === "MARK_OPT_OUT") setDisplayedOutcome("STOPPED");
+      if (selectedSafety === "MARK_WRONG_PERSON")
+        setDisplayedOutcome("STOPPED");
       setSelectedSafety(null);
+      if (source === "api") onRefresh();
     } catch (error) {
       setActionError(
         error instanceof Error
@@ -218,7 +253,7 @@ function CaseContent({
     } finally {
       setSafetyPending(false);
     }
-  }, [fixture.case.id, selectedSafety]);
+  }, [fixture.case.id, onRefresh, selectedSafety, source]);
 
   return (
     <div className={styles.pageStack}>
@@ -388,6 +423,12 @@ function CaseContent({
             </Button>
             <Button
               variant="secondary"
+              onClick={() => setSelectedSafety("MARK_WRONG_PERSON")}
+            >
+              Mark wrong person
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => setSelectedSafety("ESCALATE_TO_HUMAN")}
             >
               Escalate for review
@@ -407,8 +448,22 @@ function CaseContent({
           description="The exact invoice-scoped customer experience approved for this recovery case."
           action={
             <div className={styles.badgeStack}>
-              <Badge tone="neutral">Mock provider</Badge>
-              <Badge tone="info">SIMULATED</Badge>
+              <Badge tone="neutral">
+                {source === "api"
+                  ? displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
+                    ? "Razorpay test provider"
+                    : "API provider"
+                  : "Mock provider"}
+              </Badge>
+              <Badge
+                tone={
+                  displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
+                    ? "success"
+                    : "info"
+                }
+              >
+                {formatEvidenceKind(displayedEvidenceKind)}
+              </Badge>
             </div>
           }
         />
@@ -416,7 +471,7 @@ function CaseContent({
           <dl className={styles.surfaceDetails}>
             <div>
               <dt>Surface</dt>
-              <dd>{humanize(fixture.payment_surface.type)}</dd>
+              <dd>{paymentSurfaceLabel(fixture.payment_surface.type)}</dd>
             </div>
             <div>
               <dt>Status</dt>
@@ -639,7 +694,7 @@ function CaseContent({
               </div>
               <div>
                 <dt>Contact disposition</dt>
-                <dd>{humanize(recoveryCase.contact_disposition)}</dd>
+                <dd>{humanize(displayedContactDisposition)}</dd>
               </div>
               <div>
                 <dt>Voice consent</dt>
@@ -657,7 +712,7 @@ function CaseContent({
               </div>
               <div>
                 <dt>Payment surface</dt>
-                <dd>{humanize(fixture.payment_surface.type)}</dd>
+                <dd>{paymentSurfaceLabel(fixture.payment_surface.type)}</dd>
               </div>
               <div>
                 <dt>Surface status</dt>
@@ -704,7 +759,9 @@ function CaseContent({
       <ConfirmDialog
         open={Boolean(selectedSafety)}
         danger={
-          selectedSafety === "MARK_DISPUTE" || selectedSafety === "MARK_OPT_OUT"
+          selectedSafety === "MARK_DISPUTE" ||
+          selectedSafety === "MARK_OPT_OUT" ||
+          selectedSafety === "MARK_WRONG_PERSON"
         }
         busy={safetyPending}
         title={
@@ -712,9 +769,11 @@ function CaseContent({
             ? "Record a payment dispute?"
             : selectedSafety === "MARK_OPT_OUT"
               ? "Suppress all customer outreach?"
-              : selectedSafety === "MARK_ALREADY_PAID"
-                ? "Pause and reconcile payment?"
-                : "Escalate this case?"
+              : selectedSafety === "MARK_WRONG_PERSON"
+                ? "Record a wrong-person contact?"
+                : selectedSafety === "MARK_ALREADY_PAID"
+                  ? "Pause and reconcile payment?"
+                  : "Escalate this case?"
         }
         description="RecoveryOS will persist this disposition before cancelling incompatible pending actions."
         confirmationText="A customer statement is not authoritative proof of payment; already-paid cases remain open until provider reconciliation succeeds."
@@ -752,7 +811,11 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
           {resource.warning}
         </Alert>
       )}
-      <CaseContent fixture={resource.data} source={resource.source} />
+      <CaseContent
+        fixture={resource.data}
+        onRefresh={resource.reload}
+        source={resource.source}
+      />
     </div>
   );
 }

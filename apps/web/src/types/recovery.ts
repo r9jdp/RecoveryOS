@@ -63,7 +63,11 @@ export type PaymentSurfaceType =
 export type CaseCommand = "APPROVE" | "REJECT" | "STOP" | "ESCALATE_TO_HUMAN";
 
 export type SafetyDisposition =
-  "MARK_DISPUTE" | "MARK_OPT_OUT" | "MARK_ALREADY_PAID" | "ESCALATE_TO_HUMAN";
+  | "MARK_DISPUTE"
+  | "MARK_OPT_OUT"
+  | "MARK_WRONG_PERSON"
+  | "MARK_ALREADY_PAID"
+  | "ESCALATE_TO_HUMAN";
 
 export interface ApprovalItem {
   case_id: string;
@@ -73,7 +77,7 @@ export interface ApprovalItem {
   recommended_action: RecoveryAction;
   payment_surface_type: PaymentSurfaceType | null;
   policy_reason: string;
-  deadline: string;
+  deadline: string | null;
   evidence_kind: EvidenceKind;
   provider: "RAZORPAY_TEST" | "MOCK";
 }
@@ -84,6 +88,7 @@ export interface PolicySettings {
   quiet_hours_end: string;
   max_contacts_per_7_days: number;
   require_approval_above_paise: number;
+  require_approval_actions: RecoveryAction[];
   recovery_kill_switch: boolean;
 }
 
@@ -133,6 +138,7 @@ export interface DashboardFixture {
     quiet_hours_end: string;
     max_contacts_per_7_days: number;
     require_approval_above_paise: number;
+    require_approval_actions: RecoveryAction[];
     recovery_kill_switch: boolean;
   };
   cases: DashboardCase[];
@@ -225,7 +231,7 @@ export interface CaseDetailFixture {
     policy_version: string;
   };
   payment_surface: {
-    type: PaymentSurfaceType;
+    type: PaymentSurfaceType | null;
     status: string;
     provider_reference: string | null;
     customer_url: string | null;
