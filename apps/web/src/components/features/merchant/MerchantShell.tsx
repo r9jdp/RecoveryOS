@@ -24,6 +24,11 @@ const items = [
   { href: "/approvals", icon: "shield" as const, label: "Approval queue" },
   { href: "/dashboard#audit", icon: "activity" as const, label: "Audit trail" },
   { href: "/lab", icon: "lab" as const, label: "Recovery Lab" },
+  {
+    href: "/failure-lab",
+    icon: "shield" as const,
+    label: "Failure lab",
+  },
   { href: "/voice", icon: "voice" as const, label: "Voice outreach" },
   { href: "/settings", icon: "settings" as const, label: "Policy settings" },
 ];
@@ -119,11 +124,13 @@ export function MerchantShell({ children }: MerchantShellProps) {
                     ? "Approval queue"
                     : pathname === "/lab"
                       ? "Recovery Lab"
-                      : pathname === "/voice"
-                        ? "Voice outreach"
-                        : pathname === "/settings"
-                          ? "Policy settings"
-                          : "Control Tower"}
+                      : pathname === "/failure-lab"
+                        ? "Failure Injection Lab"
+                        : pathname === "/voice"
+                          ? "Voice outreach"
+                          : pathname === "/settings"
+                            ? "Policy settings"
+                            : "Control Tower"}
               </p>
             </div>
             <div className={styles.topbarEnd}>

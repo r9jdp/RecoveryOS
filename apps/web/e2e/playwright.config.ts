@@ -46,6 +46,7 @@ export default defineConfig({
       name: "mobile-chromium",
       testMatch: [
         "**/accessibility-keyboard.pw.ts",
+        "**/failure-lab.pw.ts",
         "**/visual-regression.pw.ts",
       ],
       use: {
