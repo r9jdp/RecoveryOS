@@ -11,7 +11,7 @@ from services.api.app.domain.enums import (
     PaymentState,
     RevenueAttribution,
 )
-from services.api.app.models import RecoveryEventRecord, RevenueRecognitionRecord
+from services.api.app.models import RecoveryCase, RecoveryEventRecord, RevenueRecognitionRecord
 from services.api.app.repositories import CaseFilters, CaseRepository
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
 from services.api.app.services.cases import RecoveryCaseService
@@ -61,6 +61,10 @@ async def test_mock_vertical_slice_and_duplicate_success_are_idempotent(
     assert first.recovery_case.revenue_attribution == RevenueAttribution.SIMULATED
     recognition_count = await session.scalar(select(func.count(RevenueRecognitionRecord.id)))
     assert recognition_count == 1
+    dashboard = await service.dashboard(merchant_id="merchant_fitbox")
+    assert dashboard.metrics["revenue_at_risk_paise"] == 0
+    assert dashboard.metrics["simulated_incremental_recovery_paise"] == 0
+    assert dashboard.metrics["net_recovered_value_paise"] == 0
 
 
 async def test_out_of_order_failure_is_audited_without_state_regression(
@@ -129,3 +133,15 @@ async def test_list_dashboard_and_recommendation_are_stable(session: AsyncSessio
     assert dashboard.metrics["active_cases"] == 1
     assert first_action.id == repeated_action.id
     assert first_policy.id == repeated_policy.id
+
+
+async def test_dashboard_at_risk_uses_remaining_open_arrears(session: AsyncSession) -> None:
+    await seed_fitbox(session)
+    recovery_case = await session.get(RecoveryCase, FITBOX_CASE_ID)
+    assert recovery_case is not None
+    recovery_case.arrears_collected_paise = 49_900
+    await session.commit()
+
+    dashboard = await service_for(session).dashboard(merchant_id="merchant_fitbox")
+
+    assert dashboard.metrics["revenue_at_risk_paise"] == 100_000

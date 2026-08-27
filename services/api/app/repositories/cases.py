@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import Select, and_, func, or_, select, update
+from sqlalchemy import Select, and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -344,11 +344,18 @@ class CaseRepository:
             invoice.invoice_state = "paid"
 
     async def dashboard_metrics(self, *, merchant_id: str) -> dict[str, int]:
+        remaining_at_risk = case(
+            (
+                RecoveryCase.amount_at_risk_paise > RecoveryCase.arrears_collected_paise,
+                RecoveryCase.amount_at_risk_paise - RecoveryCase.arrears_collected_paise,
+            ),
+            else_=0,
+        )
         row = (
             await self.session.execute(
                 select(
                     func.coalesce(
-                        func.sum(RecoveryCase.amount_at_risk_paise).filter(
+                        func.sum(remaining_at_risk).filter(
                             RecoveryCase.case_outcome == CaseOutcome.OPEN
                         ),
                         0,
@@ -357,12 +364,6 @@ class CaseRepository:
                         func.sum(RecoveryCase.arrears_collected_paise).filter(
                             RecoveryCase.revenue_attribution
                             == RevenueAttribution.RAZORPAY_TEST_VERIFIED
-                        ),
-                        0,
-                    ),
-                    func.coalesce(
-                        func.sum(RecoveryCase.arrears_collected_paise).filter(
-                            RecoveryCase.revenue_attribution == RevenueAttribution.SIMULATED
                         ),
                         0,
                     ),
@@ -376,12 +377,15 @@ class CaseRepository:
                 ).where(RecoveryCase.merchant_id == merchant_id)
             )
         ).one()
-        at_risk, verified, simulated, active, recovered, total = (int(value) for value in row)
+        at_risk, verified, active, recovered, total = (int(value) for value in row)
         return {
             "revenue_at_risk_paise": at_risk,
             "verified_recovered_revenue_paise": verified,
-            "simulated_incremental_recovery_paise": simulated,
-            "net_recovered_value_paise": verified + simulated,
+            # Merchant case recovery does not contain a paired baseline or intervention
+            # cost. Keep incremental recovery exclusive to RecoveryBench instead of
+            # relabelling gross simulated arrears as causal lift.
+            "simulated_incremental_recovery_paise": 0,
+            "net_recovered_value_paise": verified,
             "active_cases": active,
             "recovered_cases": recovered,
             "total_cases": total,
