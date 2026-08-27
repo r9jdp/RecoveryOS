@@ -145,3 +145,121 @@ async def test_dashboard_at_risk_uses_remaining_open_arrears(session: AsyncSessi
     dashboard = await service_for(session).dashboard(merchant_id="merchant_fitbox")
 
     assert dashboard.metrics["revenue_at_risk_paise"] == 100_000
+
+
+async def test_dashboard_at_risk_includes_remaining_partially_recovered_arrears(
+    session: AsyncSession,
+) -> None:
+    await seed_fitbox(session)
+    recovery_case = await session.get(RecoveryCase, FITBOX_CASE_ID)
+    assert recovery_case is not None
+    recovery_case.case_outcome = CaseOutcome.PARTIALLY_RECOVERED
+    recovery_case.arrears_collected_paise = 49_900
+    await session.commit()
+
+    dashboard = await service_for(session).dashboard(merchant_id="merchant_fitbox")
+
+    assert dashboard.metrics["revenue_at_risk_paise"] == 100_000
+    assert dashboard.metrics["active_cases"] == 1
+
+
+async def test_dashboard_verified_gross_uses_immutable_recognition_evidence(
+    session: AsyncSession,
+) -> None:
+    await seed_fitbox(session)
+    recovery_case = await session.get(RecoveryCase, FITBOX_CASE_ID)
+    assert recovery_case is not None
+    recognized_at = datetime(2026, 8, 27, 10, 5, tzinfo=UTC)
+
+    # Mutable case attribution is deliberately opposite to the recognition rows:
+    # dashboard accounting must classify each immutable recognition independently.
+    recovery_case.revenue_attribution = RevenueAttribution.SIMULATED
+    session.add_all(
+        [
+            RevenueRecognitionRecord(
+                id="recognition_test_verified",
+                case_id=FITBOX_CASE_ID,
+                merchant_id="merchant_fitbox",
+                provider="razorpay",
+                provider_event_id="event_test_verified",
+                amount_paise=30_000,
+                attribution=RevenueAttribution.RAZORPAY_TEST_VERIFIED,
+                arrears_collected=True,
+                subscription_reactivated=False,
+                recognized_at=recognized_at,
+            ),
+            RevenueRecognitionRecord(
+                id="recognition_external_verified",
+                case_id=FITBOX_CASE_ID,
+                merchant_id="merchant_fitbox",
+                provider="external",
+                provider_event_id="event_external_verified",
+                amount_paise=20_000,
+                attribution=RevenueAttribution.VERIFIED_EXTERNAL,
+                arrears_collected=True,
+                subscription_reactivated=False,
+                recognized_at=recognized_at,
+            ),
+            RevenueRecognitionRecord(
+                id="recognition_simulated",
+                case_id=FITBOX_CASE_ID,
+                merchant_id="merchant_fitbox",
+                provider="mock",
+                provider_event_id="event_simulated",
+                amount_paise=90_000,
+                attribution=RevenueAttribution.SIMULATED,
+                arrears_collected=True,
+                subscription_reactivated=False,
+                recognized_at=recognized_at,
+            ),
+            RevenueRecognitionRecord(
+                id="recognition_not_arrears",
+                case_id=FITBOX_CASE_ID,
+                merchant_id="merchant_fitbox",
+                provider="external",
+                provider_event_id="event_not_arrears",
+                amount_paise=10_000,
+                attribution=RevenueAttribution.VERIFIED_EXTERNAL,
+                arrears_collected=False,
+                subscription_reactivated=True,
+                recognized_at=recognized_at,
+            ),
+        ]
+    )
+    await session.commit()
+
+    dashboard = await service_for(session).dashboard(merchant_id="merchant_fitbox")
+
+    assert dashboard.metrics["verified_recovered_revenue_paise"] == 50_000
+    assert dashboard.metrics["simulated_incremental_recovery_paise"] == 0
+    # No persisted intervention-cost ledger exists, so recorded cost is zero.
+    assert dashboard.metrics["net_recovered_value_paise"] == 50_000
+
+
+async def test_dashboard_duplicate_recognition_is_counted_once(session: AsyncSession) -> None:
+    await seed_fitbox(session)
+    repository = CaseRepository(session)
+    recognized_at = datetime(2026, 8, 27, 10, 5, tzinfo=UTC)
+
+    def recognition(record_id: str) -> RevenueRecognitionRecord:
+        return RevenueRecognitionRecord(
+            id=record_id,
+            case_id=FITBOX_CASE_ID,
+            merchant_id="merchant_fitbox",
+            provider="razorpay",
+            provider_event_id="event_duplicate",
+            amount_paise=25_000,
+            attribution=RevenueAttribution.RAZORPAY_TEST_VERIFIED,
+            arrears_collected=True,
+            subscription_reactivated=False,
+            recognized_at=recognized_at,
+        )
+
+    assert await repository.recognize_revenue_once(recognition("recognition_first")) is True
+    assert await repository.recognize_revenue_once(recognition("recognition_duplicate")) is False
+    await repository.commit()
+
+    dashboard = await service_for(session).dashboard(merchant_id="merchant_fitbox")
+
+    assert dashboard.metrics["verified_recovered_revenue_paise"] == 25_000
+    assert dashboard.metrics["net_recovered_value_paise"] == 25_000

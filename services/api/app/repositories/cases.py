@@ -344,6 +344,7 @@ class CaseRepository:
             invoice.invoice_state = "paid"
 
     async def dashboard_metrics(self, *, merchant_id: str) -> dict[str, int]:
+        active_outcomes = (CaseOutcome.OPEN, CaseOutcome.PARTIALLY_RECOVERED)
         remaining_at_risk = case(
             (
                 RecoveryCase.amount_at_risk_paise > RecoveryCase.arrears_collected_paise,
@@ -356,19 +357,12 @@ class CaseRepository:
                 select(
                     func.coalesce(
                         func.sum(remaining_at_risk).filter(
-                            RecoveryCase.case_outcome == CaseOutcome.OPEN
-                        ),
-                        0,
-                    ),
-                    func.coalesce(
-                        func.sum(RecoveryCase.arrears_collected_paise).filter(
-                            RecoveryCase.revenue_attribution
-                            == RevenueAttribution.RAZORPAY_TEST_VERIFIED
+                            RecoveryCase.case_outcome.in_(active_outcomes)
                         ),
                         0,
                     ),
                     func.count(RecoveryCase.id).filter(
-                        RecoveryCase.case_outcome == CaseOutcome.OPEN
+                        RecoveryCase.case_outcome.in_(active_outcomes)
                     ),
                     func.count(RecoveryCase.id).filter(
                         RecoveryCase.case_outcome == CaseOutcome.RECOVERED
@@ -377,7 +371,30 @@ class CaseRepository:
                 ).where(RecoveryCase.merchant_id == merchant_id)
             )
         ).one()
-        at_risk, verified, active, recovered, total = (int(value) for value in row)
+        at_risk, active, recovered, total = (int(value) for value in row)
+        verified = int(
+            (
+                await self.session.scalar(
+                    select(func.coalesce(func.sum(RevenueRecognitionRecord.amount_paise), 0)).where(
+                        RevenueRecognitionRecord.merchant_id == merchant_id,
+                        RevenueRecognitionRecord.arrears_collected.is_(True),
+                        RevenueRecognitionRecord.attribution.in_(
+                            (
+                                RevenueAttribution.RAZORPAY_TEST_VERIFIED,
+                                RevenueAttribution.VERIFIED_EXTERNAL,
+                            )
+                        ),
+                    )
+                )
+            )
+            or 0
+        )
+
+        # The current persistence contract has no intervention-cost field. Treating
+        # provider prices or estimated labor as costs here would invent money, so
+        # recorded intervention cost is exactly zero until a versioned cost ledger
+        # exists. The API field therefore equals verified gross after recorded costs.
+        recorded_intervention_cost_paise = 0
         return {
             "revenue_at_risk_paise": at_risk,
             "verified_recovered_revenue_paise": verified,
@@ -385,7 +402,7 @@ class CaseRepository:
             # cost. Keep incremental recovery exclusive to RecoveryBench instead of
             # relabelling gross simulated arrears as causal lift.
             "simulated_incremental_recovery_paise": 0,
-            "net_recovered_value_paise": verified,
+            "net_recovered_value_paise": verified - recorded_intervention_cost_paise,
             "active_cases": active,
             "recovered_cases": recovered,
             "total_cases": total,
