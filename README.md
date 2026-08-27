@@ -2,12 +2,17 @@
 
 > **Interoperable AI revenue recovery for failed Razorpay subscription payments.**
 
-RecoveryOS detects failed subscription payments, diagnoses the likely cause, selects a safe recovery action, and closes the loop through retry, a Razorpay Payment Link, a browser-based voice flow, an external customer payment agent using A2A, or human escalation.
+RecoveryOS detects failed subscription billing cycles, diagnoses the likely cause, selects a safe recovery action, and closes the loop through Razorpay-owned subscription retries, a customer-present payment surface, guarded voice, an external customer payment agent using A2A, or human escalation.
 
 This repository is intended for the Razorpay Buildathon **AI Revenue Recovery** track.
 
 > [!IMPORTANT]
 > RecoveryOS is a **test-mode hackathon project**. It must not process live money or contact real customers until production security, compliance, privacy, and operational reviews are completed.
+
+Current baselines, completed local gates, and credential-dependent hosted gates are tracked in
+[`docs/development/implementation-status.md`](docs/development/implementation-status.md). Parallel
+worktree and single-writer rules live in
+[`docs/development/parallel-agents.md`](docs/development/parallel-agents.md).
 
 ---
 
@@ -26,7 +31,7 @@ Rank safe recovery actions
     ↓
 Apply merchant policies
     ↓
-Execute through retry, Payment Link, voice, A2A, or human review
+Execute through a bounded payment surface, voice, A2A, or human review
     ↓
 Verify the final Razorpay webhook
     ↓
@@ -45,7 +50,7 @@ Example:
 2. RecoveryOS receives the Razorpay webhook.
 3. The system diagnoses an authentication failure.
 4. Automatic retry is rejected because customer action is required.
-5. RecoveryOS recommends a customer-present Payment Link or an A2A handoff.
+5. RecoveryOS recommends a subscription-native card update or an A2A handoff.
 6. The customer approves and pays.
 7. A verified Razorpay webhook closes the case.
 8. All scheduled calls and retries are cancelled.
@@ -64,7 +69,7 @@ Example:
 * Recover failed subscription payments in Razorpay test mode.
 * Explain why a payment failed and why an action was selected.
 * Enforce consent, retry limits, quiet hours, approval requirements, and stopping rules.
-* Support normal Payment Link recovery.
+* Prefer subscription-native card update or invoice-link recovery, with a halted-only standard Payment Link fallback.
 * Support browser-based Hinglish/English voice recovery.
 * Support a separate mock customer payment agent through A2A.
 * Require a short-lived, signed, one-time recovery mandate before agent-initiated payment.
@@ -74,7 +79,7 @@ Example:
 
 ### Non-goals for the first release
 
-* Real telephony.
+* Production or customer-facing telephony; the demo permits only operator-triggered, allowlisted, pre-consented team numbers.
 * Live payments.
 * Loan or debt-collection workflows.
 * Abandoned-cart recovery.
@@ -147,9 +152,9 @@ Examples:
 
 | Diagnosis                  | Meaning                                         | Default safe direction                      |
 | -------------------------- | ----------------------------------------------- | ------------------------------------------- |
-| `TRANSIENT_RETRYABLE`      | Temporary issuer, network, or processor problem | Retry later                                 |
+| `TRANSIENT_RETRYABLE`      | Temporary issuer, network, or processor problem | Wait for Razorpay's gateway retry           |
 | `INSUFFICIENT_FUNDS`       | Customer may need time                          | Pay later, promise-to-pay, or delayed retry |
-| `AUTHENTICATION_REQUIRED`  | OTP, 3DS, or customer-present action needed     | Payment Link or A2A                         |
+| `AUTHENTICATION_REQUIRED`  | OTP, 3DS, or customer-present action needed     | Native card update, invoice link, or A2A    |
 | `INSTRUMENT_INVALID`       | Expired, blocked, or invalid payment method     | Ask for another method                      |
 | `MERCHANT_ERROR`           | Integration or configuration problem            | Alert merchant; do not contact customer     |
 | `RISK_OR_COMPLIANCE_BLOCK` | Payment cannot safely continue                  | Stop or human review                        |
@@ -162,30 +167,42 @@ A classifier may be used only when the structured fields are missing, generic, o
 RecoveryOS can choose only from this fixed action set:
 
 ```text
-RETRY_LATER
-SEND_PAYMENT_LINK
+WAIT_FOR_GATEWAY_RETRY
+OPEN_CUSTOMER_PAYMENT_SURFACE
 START_VOICE
 SEND_TO_CUSTOMER_AGENT
 ESCALATE_TO_HUMAN
 STOP
 ```
 
+`OPEN_CUSTOMER_PAYMENT_SURFACE` binds exactly one subtype:
+
+```text
+SUBSCRIPTION_CARD_UPDATE
+SUBSCRIPTION_INVOICE_LINK
+STANDARD_PAYMENT_LINK
+```
+
+The standard Payment Link subtype is a halted-subscription fallback. It is blocked while a pending
+subscription still has active Razorpay retries.
+
 For every action, the decision service returns:
 
 ```json
 {
-  "action": "SEND_PAYMENT_LINK",
+  "action": "OPEN_CUSTOMER_PAYMENT_SURFACE",
+  "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
   "predicted_recovery_probability": 0.71,
   "expected_value_paise": 104929,
   "confidence": 0.84,
   "reasons": [
     "Customer-present authentication is required",
     "No customer contact in the previous seven days",
-    "A Payment Link resolves the original authentication failure"
+    "A subscription-native card update resolves the original authentication failure"
   ],
   "rejected_alternatives": [
     {
-      "action": "RETRY_LATER",
+      "action": "WAIT_FOR_GATEWAY_RETRY",
       "reason": "The authentication problem would remain unresolved"
     }
   ]
@@ -215,35 +232,36 @@ Policy output:
 
 ```json
 {
-  "allowed": true,
-  "requires_human_approval": false,
+  "disposition": "ALLOW",
   "decision_code": "POLICY_ALLOWED",
   "reasons": [
-    "Customer has voice consent",
-    "Contact count is below the configured limit"
+    {"code": "VOICE_CONSENT_PRESENT", "message": "Customer has voice consent"},
+    {"code": "CONTACT_LIMIT_AVAILABLE", "message": "Contact count is below the limit"}
   ]
 }
 ```
 
 ### 4.6 Channel-specific flows
 
-#### A. Retry later
+#### A. Wait for gateway retry
 
 1. Workflow schedules a durable timer.
-2. Before retrying, RecoveryOS rechecks:
+2. Before the timer advances the case, RecoveryOS rechecks:
 
    * Current payment status.
    * Opt-out status.
-   * Retry count.
+   * Razorpay subscription and invoice state.
    * Recovery-window expiry.
-3. If still permitted, it initiates the configured retry or sends a new payment request.
+3. RecoveryOS does not charge the failed payment ID. Razorpay owns retries while the subscription is
+   pending; RecoveryOS may continue waiting or open a customer-present native surface.
 4. The system waits for the authoritative webhook.
 5. On success, all other pending actions are cancelled.
 
-#### B. Payment Link recovery
+#### B. Customer payment-surface recovery
 
-1. Backend creates a Razorpay test Payment Link.
-2. The link is associated with the recovery case.
+1. Backend chooses a subscription card update, the unpaid invoice `short_url`, or a halted-only
+   standard Payment Link.
+2. The surface is bound to the merchant, failed invoice/billing cycle, amount, and recovery case.
 3. Customer opens the trusted Razorpay payment surface.
 4. Customer completes or rejects payment.
 5. RecoveryOS does not trust frontend success alone.
@@ -252,7 +270,9 @@ Policy output:
 
 #### C. Browser voice recovery
 
-The first release uses a browser-based recovery console, not a real phone call.
+The default demo uses a browser-based recovery console. The optional real-call path is
+operator-only, server-gated, rate-limited, and restricted to allowlisted, pre-consented team-owned
+numbers.
 
 Flow:
 
@@ -277,7 +297,7 @@ UNCLEAR
 ```
 
 5. Policy engine checks the proposed response.
-6. RecoveryOS creates a Payment Link, starts A2A, records a promise date, escalates, or stops.
+6. RecoveryOS opens a bounded payment surface, starts A2A, records a promise date, escalates, or stops.
 7. Sensitive payment details are never requested in the conversation.
 
 Safety-critical intents—`OPT_OUT`, `WRONG_PERSON`, `AMOUNT_DISPUTE`, and `ALREADY_PAID`—must prefer recall and escalation over aggressive automation.
@@ -419,35 +439,34 @@ Do not call external services directly from Temporal workflow code. Put network 
 
 ## 7. Recommended tech stack
 
-| Area                    | Technology                                                             |
-| ----------------------- | ---------------------------------------------------------------------- |
-| Frontend                | Next.js App Router, TypeScript                                         |
-| UI                      | Tailwind CSS, shadcn/ui                                                |
-| Forms and validation    | React Hook Form, Zod                                                   |
-| Server-state management | TanStack Query                                                         |
-| Charts                  | Recharts                                                               |
-| Backend                 | FastAPI, Python, Pydantic                                              |
-| ORM and migrations      | SQLAlchemy 2, Alembic                                                  |
-| Database                | PostgreSQL                                                             |
-| Durable workflows       | Temporal Python SDK (`temporalio`)                                     |
-| Payments                | Razorpay test APIs and Python SDK (`razorpay`)                         |
-| A2A                     | Official Python SDK (`a2a-sdk`)                                        |
-| ML                      | pandas, scikit-learn, CatBoost                                         |
-| Voice ASR               | Adapter interface; AI4Bharat IndicConformer as advanced implementation |
-| Hinglish intent         | Adapter interface; MuRIL fine-tuning as advanced implementation        |
-| Testing                 | pytest, Playwright                                                     |
-| Local infrastructure    | Docker Compose                                                         |
-| Observability           | Structured JSON logs; OpenTelemetry as a stretch goal                  |
+| Area | Technology |
+| --- | --- |
+| Frontend | Next.js 16 App Router, React 19, TypeScript 5.9 |
+| UI | Tailwind CSS 4 plus original RecoveryOS primitives and frozen Razorpay-inspired tokens |
+| Forms and validation | React Hook Form, Zod |
+| Server state | TanStack Query |
+| Charts | Recharts |
+| Backend | FastAPI, Python 3.12, Pydantic 2 |
+| ORM and migrations | SQLAlchemy 2 async, Alembic |
+| Database | PostgreSQL 17 locally; Neon staging/production branches |
+| Durable workflows | Temporal Python SDK; Temporal Cloud Singapore for hosted environments |
+| Payments | Razorpay test REST APIs through an `httpx` adapter; raw-body webhook HMAC verification |
+| A2A | Standard Agent Cards and JSON-RPC message/task lifecycle with signed DataPart artifacts |
+| ML | pandas, scikit-learn, CatBoost |
+| Voice | Browser MediaRecorder/text fallback; guarded Twilio and ElevenLabs adapters |
+| Testing | pytest, Vitest/Testing Library, Playwright, Temporal replay tests |
+| Hosting | Vercel frontend; ARM64 containers on OCI; Caddy; GHCR |
+| Local infrastructure | Docker Compose |
+| Observability | Structured JSON logs and persisted audit events |
 
 ### Important implementation choice
 
 Start with deterministic mocks behind interfaces:
 
 ```text
-ASRProvider
-IntentClassifier
+PaymentProvider
+VoiceProvider
 RecoveryScorer
-RazorpayGateway
 CustomerAgentClient
 ```
 
@@ -492,12 +511,11 @@ Required:
 * Voice transcript and detected intent.
 * A2A task trace.
 * Mandate verification state.
-* Razorpay Payment Link/payment state.
+* Razorpay payment-surface, invoice, and authoritative payment state.
 * Buttons:
 
   * Approve.
   * Reject.
-  * Retry.
   * Stop.
   * Escalate.
   * Mark dispute.
@@ -538,7 +556,7 @@ Required:
 * Confidence.
 * Extracted promise-to-pay date.
 * Available safe actions.
-* Payment Link.
+* Bound customer payment surface.
 * Send-to-agent.
 * Human-support.
 * Stop/opt-out.
@@ -561,21 +579,19 @@ Required:
 
 ---
 
-## 9. Suggested repository structure
+## 9. Repository structure
 
 ```text
 recovery-os/
 ├── apps/
-│   ├── web/                       # Next.js frontend
-│   ├── api/                       # FastAPI application
-│   ├── worker/                    # Temporal worker entry point
-│   └── customer-agent/            # Separate mock A2A customer agent
+│   └── web/                       # Next.js merchant and customer UI
+├── services/
+│   ├── api/                       # FastAPI application and Alembic migrations
+│   ├── worker/                    # Temporal workflows and activities
+│   └── customer_agent/            # Separately hosted A2A customer agent
 ├── packages/
-│   ├── domain/                    # Domain models, enums, policies
-│   ├── payment-adapters/          # Razorpay and mock gateways
-│   ├── a2a-adapters/              # Agent Card, task, and client logic
-│   ├── voice-adapters/            # ASR and intent interfaces
-│   └── shared-schemas/            # JSON Schema/OpenAPI-derived types
+│   ├── contracts/                 # OpenAPI and cross-service fixtures
+│   └── recovery_domain/           # Frozen domain enums, models, and provider ports
 ├── ml/
 │   ├── data/                      # Generated data; large files ignored
 │   ├── recovery_bench/            # Synthetic data generator
@@ -585,24 +601,27 @@ recovery-os/
 │   └── artifacts/                 # Local model artifacts
 ├── infra/
 │   ├── docker-compose.yml
-│   ├── temporal/
-│   └── migrations/
+│   ├── caddy/
+│   ├── compose/
+│   └── terraform/oci/
 ├── tests/
 │   ├── integration/
 │   ├── contract/
 │   └── e2e/
 ├── docs/
-│   ├── architecture.md
-│   ├── api.md
-│   └── demo-script.md
+│   ├── contracts/
+│   ├── deployment/
+│   ├── design/
+│   └── development/
 ├── .env.example
-├── Makefile
+├── package.json
 ├── pyproject.toml
 ├── pnpm-workspace.yaml
+├── uv.lock
 └── README.md
 ```
 
-A simpler structure is acceptable, but keep domain logic separate from frameworks and external adapters.
+Domain logic stays independent of frameworks, provider adapters, and Temporal workflow code.
 
 ---
 
@@ -766,59 +785,58 @@ The exact schemas should be generated through FastAPI/OpenAPI.
 ### Health and setup
 
 ```text
-GET  /health
-GET  /api/v1/config
-POST /api/v1/demo/reset
-POST /api/v1/demo/seed
+GET  /health/live
+GET  /health/ready
+GET  /v1/demo/fixtures/dashboard
+GET  /v1/demo/fixtures/case-detail
 ```
 
 ### Razorpay and simulation
 
 ```text
-POST /api/v1/webhooks/razorpay
-POST /api/v1/simulations/payment-failure
-POST /api/v1/simulations/payment-success
-POST /api/v1/simulations/failure-injection
+POST /v1/webhooks/razorpay
+POST /v1/simulations/payment-failure
+POST /v1/mock/recovery-cases/{case_id}/payment-success
+POST /v1/simulations/failure-injection
 ```
 
 ### Recovery cases
 
 ```text
-GET  /api/v1/recovery-cases
-GET  /api/v1/recovery-cases/{case_id}
-GET  /api/v1/recovery-cases/{case_id}/timeline
-POST /api/v1/recovery-cases/{case_id}/diagnose
-POST /api/v1/recovery-cases/{case_id}/propose-action
-POST /api/v1/recovery-cases/{case_id}/approve
-POST /api/v1/recovery-cases/{case_id}/reject
-POST /api/v1/recovery-cases/{case_id}/retry
-POST /api/v1/recovery-cases/{case_id}/stop
-POST /api/v1/recovery-cases/{case_id}/escalate
+GET  /v1/recovery-cases
+GET  /v1/recovery-cases/{case_id}
+GET  /v1/recovery-cases/{case_id}/timeline
+POST /v1/recovery-cases/{case_id}/actions/recommend
+POST /v1/recovery-cases/{case_id}/actions/{action_id}/approve
+POST /v1/recovery-cases/{case_id}/actions/{action_id}/reject
+POST /v1/recovery-cases/{case_id}/stop
+POST /v1/recovery-cases/{case_id}/escalate
+POST /v1/recovery-cases/{case_id}/commands
 ```
 
 ### Payments
 
 ```text
-POST /api/v1/recovery-cases/{case_id}/payment-links
-GET  /api/v1/recovery-cases/{case_id}/payment-status
+POST /v1/recovery-cases/{case_id}/payment-surfaces
+GET  /v1/recovery-cases/{case_id}/payment-status
 ```
 
 ### Voice
 
 ```text
-POST /api/v1/voice/sessions
-POST /api/v1/voice/sessions/{session_id}/audio
-POST /api/v1/voice/sessions/{session_id}/text
-GET  /api/v1/voice/sessions/{session_id}
+POST /v1/voice/sessions
+POST /v1/voice/sessions/{session_id}/audio
+POST /v1/voice/sessions/{session_id}/text
+GET  /v1/voice/sessions/{session_id}
 ```
 
 ### A2A
 
 ```text
 GET  /.well-known/agent-card.json
-POST /api/v1/a2a/recovery-tasks
-GET  /api/v1/a2a/recovery-tasks/{task_id}
-POST /api/v1/a2a/recovery-tasks/{task_id}/mandates
+POST /v1/a2a/recovery-tasks
+GET  /v1/a2a/recovery-tasks/{task_id}
+POST /v1/a2a/recovery-tasks/{task_id}/mandates
 ```
 
 The customer-agent service must expose its own Agent Card and task endpoint on a separate port or origin.
@@ -826,10 +844,10 @@ The customer-agent service must expose its own Agent Card and task endpoint on a
 ### Metrics and evaluation
 
 ```text
-GET  /api/v1/metrics/overview
-GET  /api/v1/metrics/recovery
-POST /api/v1/experiments/run
-GET  /api/v1/experiments/{experiment_id}
+GET  /v1/dashboard/metrics
+GET  /v1/metrics/recovery
+POST /v1/experiments/run
+GET  /v1/experiments/{experiment_id}
 ```
 
 ---
@@ -1192,24 +1210,27 @@ Never commit real secrets.
 * Python 3.12 or newer.
 * `pnpm`.
 * Docker with Docker Compose.
-* Razorpay test credentials.
+* Razorpay test credentials only for the optional real-adapter smoke path; mock mode is the default.
 
 ### Expected commands
 
-The coding agent should implement these root commands:
+The repository exposes these root commands:
 
-```bash
-make bootstrap      # install JS and Python dependencies
-make infra          # start PostgreSQL, Temporal, and Temporal UI
-make migrate        # apply Alembic migrations
-make seed           # create demo merchant, customers, and subscriptions
-make dev            # run web, API, worker, and customer agent
-make test           # run unit and integration tests
-make e2e            # run Playwright
-make generate-data  # generate RecoveryBench
-make train           # train CatBoost models
-make evaluate       # generate evaluation report
-make reset           # clear and reseed local data
+```powershell
+pnpm bootstrap          # install JS and Python dependencies
+pnpm infra              # start PostgreSQL, Temporal, and Temporal UI
+pnpm migrate            # apply Alembic migrations
+pnpm seed               # create the FitBox demo
+pnpm dev:web            # run the Next.js frontend
+pnpm dev:api            # run the FastAPI service
+pnpm dev:worker         # run the Temporal worker
+pnpm dev:customer-agent # run the customer-agent service
+pnpm test               # run web and Python tests
+pnpm e2e                # run Playwright
+pnpm generate:data      # generate RecoveryBench
+pnpm train              # train the CatBoost artifact
+pnpm evaluate           # generate the versioned evaluation report
+pnpm reset              # clear and reseed local data
 ```
 
 Suggested development URLs:
@@ -1243,7 +1264,7 @@ Temporal UI:         http://localhost:8233
 * Failure webhook creates one case.
 * Duplicate webhook does not create a second case.
 * Case workflow survives API restart.
-* Payment Link adapter stores external reference.
+* Payment-surface adapter stores its provider reference and bound invoice.
 * Success webhook closes the workflow.
 * Success cancels scheduled actions.
 * Expired mandate is rejected.
@@ -1258,7 +1279,7 @@ Temporal UI:         http://localhost:8233
 
 ### End-to-end tests
 
-* Seed failure → view case → approve Payment Link → simulate success → verify dashboard.
+* Seed failure → view case → approve card-update surface → simulate success → verify dashboard.
 * Voice text fallback → `SEND_TO_AGENT` → customer approval → mandate → payment success.
 * Amount dispute → automation blocked → human escalation.
 * Opt-out → all future actions cancelled.
@@ -1318,7 +1339,7 @@ Expected:
 Expected:
 
 * Task records timeout.
-* RecoveryOS offers Payment Link or human fallback.
+* RecoveryOS offers an allowed payment surface or human fallback.
 * Case does not remain stuck.
 
 ### Late payment success
@@ -1333,70 +1354,52 @@ Expected:
 
 ## 21. Development order
 
-Do not start with large ML models or A2A. Complete each phase before moving forward.
+Each phase starts from the previous coordinator-owned tag. The three workstreams inside a phase run
+in parallel from the same frozen baseline. See
+[`docs/development/parallel-agents.md`](docs/development/parallel-agents.md) for ownership and
+handoff rules and [`implementation-status.md`](docs/development/implementation-status.md) for exact
+commits and deferred hosted gates.
 
-### Phase 0 — Scaffolding
+### Phase 0 — Contracts, hosting foundation, and design system
 
-* Create monorepo.
-* Add Next.js, FastAPI, PostgreSQL, Temporal, and Docker Compose.
-* Add shared enums and schemas.
-* Add CI for linting and tests.
+* Freeze domain, provider, fixture, API-error, pagination, and environment contracts.
+* Build the Vercel/OCI/Neon/Temporal deployment foundation and ARM64 images.
+* Freeze the original Razorpay-inspired RecoveryOS design system and responsive shells.
 
-### Phase 1 — Core recovery loop
+### Phase 1 — Core recovery vertical slice
 
-* Seed merchant, customer, subscription, and failed payment.
-* Create recovery case.
-* Implement diagnosis rules.
-* Implement policy engine.
-* Start Temporal workflow.
-* Create mock/Razorpay Payment Link.
-* Process success webhook.
-* Close case and cancel pending work.
-* Implement duplicate webhook protection.
+* Seed the merchant, customer, subscription, invoice, failed payment, and recovery case.
+* Implement deterministic diagnosis and policy rules.
+* Start the Temporal workflow with signals, timers, cancellation, and replay tests.
+* Create and approve a mock customer-present payment surface.
+* Reconcile mock success, close the case, cancel pending work, and deduplicate revenue.
 
-**Phase 1 acceptance:** a failed subscription becomes a verified recovered case end to end.
+**Phase 1 acceptance:** a seeded failed billing cycle becomes one simulated recovered case, with one
+revenue-recognition record even when the success event is delivered twice.
 
-### Phase 2 — Merchant product
+### Phase 2 — Razorpay integration and merchant product
 
-* Build Control Tower.
-* Build Case Workspace.
-* Build timeline.
-* Add policy settings.
-* Add human approval and escalation.
+* Add raw-body webhook verification, inbox/outbox deduplication, and authoritative reconciliation.
+* Add subscription-native card update/invoice link flows and a halted-only Payment Link fallback.
+* Add complete safety policies, failure simulation, approval queue, settings, and kill switch.
 
-### Phase 3 — RecoveryBench and ML
+### Phase 3 — Three independent hero features
 
-* Generate deterministic synthetic data.
-* Implement baseline policy.
-* Train calibrated CatBoost model.
-* Add action ranking and explanations.
-* Build Evaluation Lab.
+* Build deterministic RecoveryBench, the calibrated CatBoost artifact, and `/lab`.
+* Build the separately hosted A2A customer-agent lifecycle and signed one-time mandate.
+* Build browser voice plus guarded Twilio/ElevenLabs adapters.
 
-### Phase 4 — Voice
+### Phase 4 — Failure hardening, QA, and deployment reliability
 
-* Build browser voice screen.
-* Add text fallback.
-* Add intent adapter.
-* Add promise-to-pay and opt-out flows.
-* Integrate ASR/model later without changing domain contracts.
+* Inject provider, workflow, concurrency, replay, callback, and late-success failures.
+* Add full Playwright, responsive visual, keyboard, and accessibility coverage.
+* Add deploy smoke checks, rollback/restore, budget limits, scanning, and public-demo gating.
 
-### Phase 5 — A2A
+### Phase 5 — Submission and final product polish
 
-* Build separate customer-agent service.
-* Publish both Agent Cards.
-* Add task lifecycle.
-* Add customer approval screen.
-* Add signed one-time Recovery Mandate.
-* Complete payment and receipt flow.
-
-### Phase 6 — Hardening and demo
-
-* Add all failure injections.
-* Add E2E tests.
-* Improve loading, empty, error, and recovery states.
-* Add demo seed and reset button.
-* Record benchmark results.
-* Prepare five-minute demo.
+* Polish the five-minute seeded demo and simulated/test-verified evidence labels.
+* Complete architecture, setup, model, security, runbook, and demo documentation.
+* Run a read-only-first acceptance, accounting, determinism, protocol, safety, and setup audit.
 
 ---
 
@@ -1408,7 +1411,7 @@ The MVP is complete when all statements below are true:
 * [ ] The case receives an explainable diagnosis.
 * [ ] RecoveryOS recommends one bounded action.
 * [ ] The policy engine can allow, block, or require approval.
-* [ ] A test Payment Link can be created.
+* [ ] A subscription-native test payment surface can be created, and a standard Payment Link is blocked while gateway retries are active.
 * [ ] A verified success event marks the case recovered.
 * [ ] Pending actions are cancelled after success.
 * [ ] Duplicate webhooks do not duplicate state or revenue.
