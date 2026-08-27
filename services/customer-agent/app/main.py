@@ -68,8 +68,16 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
     @app.post("/rpc", tags=["a2a"])
     async def json_rpc(
         request: JsonRpcRequest,
+        a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
         a2a_extensions: Annotated[str | None, Header(alias="A2A-Extensions")] = None,
     ) -> JSONResponse:
+        if a2a_version != "1.0":
+            return _rpc_error(
+                request.id,
+                -32008,
+                "A2A protocol version is not supported",
+                [{"supportedVersions": ["1.0"]}],
+            )
         declared_extensions = {
             value.strip() for value in (a2a_extensions or "").split(",") if value.strip()
         }

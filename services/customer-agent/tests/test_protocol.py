@@ -24,7 +24,10 @@ async def client(app):  # type: ignore[no-untyped-def]
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://customer-agent.example",
-        headers={"A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1"},
+        headers={
+            "A2A-Version": "1.0",
+            "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+        },
     ) as active_client:
         yield active_client
 
@@ -86,14 +89,20 @@ async def test_agent_card_declares_a2a_1_and_public_signing_key(client: httpx.As
 
 
 @pytest.mark.asyncio
-async def test_required_extension_must_be_declared(app) -> None:  # type: ignore[no-untyped-def]
+async def test_version_and_required_extension_must_be_declared(app) -> None:  # type: ignore[no-untyped-def]
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="https://customer-agent.example",
     ) as client_without_extension:
-        response = await client_without_extension.post("/rpc", json=recovery_request())
-    assert response.status_code == 200
-    assert response.json()["error"]["code"] == -32009
+        missing_version = await client_without_extension.post("/rpc", json=recovery_request())
+        missing_extension = await client_without_extension.post(
+            "/rpc",
+            json=recovery_request(request_id="missing-extension"),
+            headers={"A2A-Version": "1.0"},
+        )
+    assert missing_version.status_code == 200
+    assert missing_version.json()["error"]["code"] == -32008
+    assert missing_extension.json()["error"]["code"] == -32009
 
 
 @pytest.mark.asyncio
