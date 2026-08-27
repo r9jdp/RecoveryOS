@@ -53,11 +53,17 @@ Set server-side values only:
 
 ```text
 PAYMENT_PROVIDER=razorpay
+RECOVERY_ACTIVITY_MODE=production
+RECOVERY_ALLOW_REAL_PAYMENT_ACTIONS=true
 RAZORPAY_KEY_ID=rzp_test_...
 RAZORPAY_KEY_SECRET=...
 RAZORPAY_WEBHOOK_SECRET=...
 RAZORPAY_TEST_MODE_REQUIRED=true
 ```
+
+Consequential non-mock API calls also require the server-configured `OPERATOR_DEMO_TOKEN` in the
+`X-RecoveryOS-Operator-Token` header. Keep the token out of browser environment variables and
+frontend bundles; credentialed smoke tests should send it from a server-side runner.
 
 Configure the provider endpoint as `https://<api-origin>/v1/webhooks/razorpay` for
 `payment.failed`, `subscription.pending`, `subscription.halted`, `subscription.charged`,
