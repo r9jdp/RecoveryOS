@@ -10,10 +10,10 @@ the API and customer-agent containers cannot be addressed from the host or publi
 HAProxy 3.2.22 is pinned to an official image tag and manifest digest and enforces the following per forwarded client
 IP before requests reach Python:
 
-| Surface | All requests | Mutations | Maximum body |
-| --- | ---: | ---: | ---: |
-| Recovery API | 240/minute | 60/minute | 1 MiB |
-| Customer agent | 120/minute | 30/minute | 1 MiB |
+| Surface        | All requests | Mutations | Maximum body |
+| -------------- | -----------: | --------: | -----------: |
+| Recovery API   |   240/minute | 60/minute |        1 MiB |
+| Customer agent |   120/minute | 30/minute |        1 MiB |
 
 These are abuse/load-shedding controls, not user authentication. Production launch remains blocked
 until the application has durable authenticated operator sessions and merchant authorization.
@@ -93,9 +93,10 @@ bash deploy/scripts/smoke.sh \
 Record the immutable tag, migration revision, backup path/checksum, smoke result, and operator. Do
 not paste provider payloads, environment contents, transcripts, or customer identifiers into CI.
 
-## Coordinator-owned CI wiring request
+## CI wiring status
 
-The coordinator should update `.github/workflows/deploy.yml` to build only after the full test gate,
-scan images before deploy, deploy staging, run hosted E2E, and require environment approval before
-production. Give CI only `contents: read` and `packages: write`; use a scoped SSH deploy key and
-environment-specific public origins. Run `RECOVERYOS_PUBLIC_DEMO=true` only for the public mock demo.
+`.github/workflows/deploy.yml` runs the full local validation gate, builds and scans immutable ARM64
+images, deploys/smokes staging, and promotes the same commit only through the production environment.
+Repository operators must configure protected environment approval, a scoped SSH deploy key, and
+environment-specific public origins. A separate hosted Playwright run after staging is not yet wired;
+it remains a manual release gate. Run `RECOVERYOS_PUBLIC_DEMO=true` only for the public mock demo.

@@ -1,11 +1,13 @@
 # Build, deploy, smoke, and rollback
 
-All release images are immutable Git-derived tags. Never deploy `latest`.
+All release images are immutable Git-derived tags. Never deploy `latest`. The hardened operational
+contract is also summarized in [staged deployment](../runbooks/staged-deployment.md); destructive
+database recovery follows [database backup and restore](../runbooks/database-backup-restore.md).
 
 ## 1. Build and publish ARM64 images
 
-The CI workflow owned by the coordinator should grant `contents: read` and
-`packages: write`, authenticate to GHCR, and invoke:
+The coordinator-owned deployment workflow grants `contents: read` and `packages: write`,
+authenticates to GHCR, and invokes the same build script shown here:
 
 ```bash
 echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
@@ -77,10 +79,10 @@ The deploy sequence is:
 6. Probe API liveness/readiness and agent liveness/Agent Card through HTTPS.
 7. Record the successful tag for rollback.
 
-The coordinator must place Alembic configuration at
-`/workspace/services/api/alembic.ini` or update the single migration invocation
-in `deploy.sh`. Migrations must follow expand/contract compatibility: the prior
-image must remain usable after an upgrade or automatic image rollback is unsafe.
+The API image includes Alembic configuration at `/workspace/services/api/alembic.ini`.
+Migrations must follow expand/contract compatibility: the prior image must remain usable after an
+upgrade or automatic image rollback is unsafe. The deploy script creates and validates a backup,
+rejects common destructive upgrade operations, and requires exactly one Alembic head before upgrade.
 
 After staging passes its hosted E2E suite, run the same command for production
 with production origins.
@@ -122,15 +124,17 @@ Inspect logs with explicit service names and short time windows. Never paste ful
 environment output or `docker inspect` into shared logs because it can expose
 runtime secrets.
 
-## GitHub Actions integration request
+## GitHub Actions status
 
-The coordinator owns CI files. The release workflow must:
+`.github/workflows/deploy.yml` currently:
 
-- Trigger only from protected release commits/tags.
-- Run tests before image publication.
-- Build with `deploy/scripts/build-and-push.sh`.
-- Sign or attest images when repository policy supports it.
-- SSH to the VM using a scoped deploy key.
-- Deploy staging, run hosted smoke/E2E, then require approval for production.
-- Serialize deployments per environment.
-- Retain the prior immutable tag for rollback.
+- is manually dispatched and serializes by target environment;
+- reruns lint, types, unit, build, Playwright, repository, dependency, and history gates;
+- builds and pushes immutable ARM64 images with `deploy/scripts/build-and-push.sh`;
+- scans all three images with Trivy before deployment;
+- deploys and smokes staging over a scoped SSH action; and
+- promotes the same commit to a protected production environment only when requested.
+
+The workflow does not currently run a separate hosted Playwright job after staging deployment, and
+image signing/attestation is not configured. Treat both as open release hardening work; do not claim
+the staging-hosted E2E gate from the pre-deploy local Playwright run.

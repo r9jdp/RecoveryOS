@@ -28,9 +28,10 @@ credentials.
 Failures require dependency/image remediation or a time-bounded, owner-approved exception documented
 outside source code. Do not add broad Gitleaks allowlists or Trivy ignore files to make a release pass.
 
-## Coordinator-owned CI wiring request
+## CI wiring status
 
-The coordinator should add the repository scan to pull-request CI and place dependency/image scans
-between tests/build and deployment. Pin scanner versions in the workflow, grant read-only repository
-access, and keep the security job free of deploy/provider secrets. A scheduled weekly run catches newly
-published advisories even when the lockfiles have not changed.
+Pull-request CI runs the repository, migration, dependency, and Gitleaks history gates with no deploy
+or provider secrets. The deployment workflow scans each built service image before staging. Scanner
+versions are pinned in workflow definitions. A scheduled dependency/image advisory rescan is not
+configured; the existing scheduled workflow probes public uptime only, so advisory monitoring remains
+an operational follow-up.

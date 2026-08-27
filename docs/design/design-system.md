@@ -1,6 +1,7 @@
 # RecoveryOS design system
 
-Status: Phase 0 visual foundation  
+Status: Phase 5 submission candidate
+
 Audit baseline: 2026-08-27
 
 ## Intent
@@ -13,20 +14,20 @@ The identity mark is a RecoveryOS-owned abstract recovery glyph. `Razorpay Test 
 
 The canonical variables live in `apps/web/src/styles/tokens.css`. Components consume them through `recovery-ui.module.css`.
 
-| Role | Token | Value |
-| --- | --- | --- |
-| Primary action | `--ros-brand` | `#305EFF` |
-| Link | `--ros-link` | `#2950DA` |
-| Primary text | `--ros-ink` | `#192839` |
-| Heading text | `--ros-ink-secondary` | `#132644` |
-| Muted text | `--ros-text-muted` | `#40566D` |
-| Canvas | `--ros-canvas` | `#FFFFFF` |
-| Soft surfaces | `--ros-surface-subtle/muted/strong` | `#F8FAFC / #F1F5FA / #F0F4F6` |
-| Border | `--ros-border` | `#DFE3E9` |
-| Success | `--ros-success` | `#009E5C` |
-| Danger | `--ros-danger` | `#D52B1E` |
-| Navigation | `--ros-dark` | `#032A3E` |
-| Brand tint | `--ros-brand-soft` | `#D0E0FF` |
+| Role           | Token                               | Value                         |
+| -------------- | ----------------------------------- | ----------------------------- |
+| Primary action | `--ros-brand`                       | `#305EFF`                     |
+| Link           | `--ros-link`                        | `#2950DA`                     |
+| Primary text   | `--ros-ink`                         | `#192839`                     |
+| Heading text   | `--ros-ink-secondary`               | `#132644`                     |
+| Muted text     | `--ros-text-muted`                  | `#40566D`                     |
+| Canvas         | `--ros-canvas`                      | `#FFFFFF`                     |
+| Soft surfaces  | `--ros-surface-subtle/muted/strong` | `#F8FAFC / #F1F5FA / #F0F4F6` |
+| Border         | `--ros-border`                      | `#DFE3E9`                     |
+| Success        | `--ros-success`                     | `#009E5C`                     |
+| Danger         | `--ros-danger`                      | `#D52B1E`                     |
+| Navigation     | `--ros-dark`                        | `#032A3E`                     |
+| Brand tint     | `--ros-brand-soft`                  | `#D0E0FF`                     |
 
 Spacing follows a four-pixel base grid. Standard radii are 4, 8, 12, and 16 pixels. Primary controls are 48 pixels tall, and touch-critical large actions are 56 pixels tall.
 
@@ -59,7 +60,10 @@ import { AppShell, PageHeader } from "@/components/layout";
 import { Badge, Button, Card, CardBody } from "@/components/ui";
 ```
 
-The review surface is `/design-system`. It intentionally uses real merchant-product vocabulary so content density and status color can be assessed in context.
+The review surface is `/design-system`. It intentionally uses real merchant-product vocabulary so
+content density and status color can be assessed in context. Product routes now use the same
+primitives across the Control Tower, case workspace, approvals, settings, RecoveryBench, voice, and
+A2A exact-scope approval.
 
 ## Product usage rules
 
@@ -80,7 +84,8 @@ The review surface is `/design-system`. It intentionally uses real merchant-prod
 - Below 608px, all metric grids and paired form fields collapse to one column, and drawers become full width.
 - Data tables remain semantic tables and scroll inside their own labelled viewport; columns are not silently removed.
 
-The current mobile menu button is a shell prototype. Phase 1 should connect it to the product's navigation drawer and current route state.
+The application shell now provides responsive mobile navigation with current-route state. Tables
+retain their labelled horizontal scroll regions rather than dropping financial or evidence columns.
 
 ## Accessibility
 
@@ -93,10 +98,13 @@ The current mobile menu button is a shell prototype. Phase 1 should connect it t
 - Motion durations collapse when `prefers-reduced-motion: reduce` is active.
 - Forced-colors mode restores explicit system borders.
 
-## Phase 1 integration checklist
+## Verified implementation notes
 
-- Import approved global resets from the root app layout without moving token ownership.
-- Wire the navigation items through Next.js `Link` or a wrapper that preserves `aria-current`.
-- Replace preview data with the frozen generated API types.
-- Keep the public demo in mock mode when payment credentials are absent.
-- Add automated axe, keyboard, desktop snapshot, and mobile snapshot coverage for `/design-system` and product routes.
+- Navigation uses route-aware links and the data layer consumes the frozen OpenAPI declaration where
+  the live API is available, with an explicit labelled fixture fallback.
+- Drawer focus containment/restoration, keyboard-only approval, semantic control labels, landmarks,
+  duplicate-ID checks, and desktop/mobile overflow checks are automated.
+- Six frozen Phase 4 baselines cover Control Tower, case workspace, and voice safety at 1440×960 and
+  390×844. The native scanner is a targeted structural/keyboard check, not a complete WCAG audit.
+- The public demo remains mock-only when provider credentials are absent. Evidence badges must use
+  `SIMULATED` or a genuinely established provider-verification class.
