@@ -16,6 +16,7 @@ from services.worker.app.contracts import (
     CancellationSignal,
     CustomerIntentSignal,
     MandateSignal,
+    OperatorEscalationSignal,
     OptOutSignal,
     PaymentEventSignal,
     ProviderEvent,
@@ -161,6 +162,79 @@ async def test_safety_signals_stop_workflow(
             assert any(
                 event.event_type == "SUPPRESSION_PERSIST_REQUESTED" for event in services.audits
             )
+
+
+@pytest.mark.asyncio
+async def test_operator_escalation_is_terminal_audited_and_replay_safe() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=True)
+        activities = RecoveryActivities(services)
+        task_queue = "recovery-operator-escalation"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            command = workflow_input("operator-escalation")
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            await handle.signal(
+                "operator_escalation",
+                OperatorEscalationSignal(
+                    signal_id="operator:escalate:operator-escalation",
+                    reason="human review requested",
+                    requested_by="merchant-operator",
+                ),
+            )
+            result = await handle.result()
+            history = await handle.fetch_history()
+
+        assert result.outcome == "ESCALATED"
+        assert any(event.event_type == "RECOVERY_ESCALATED" for event in services.audits)
+        replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
+        assert replay_result.replay_failure is None
+
+
+@pytest.mark.asyncio
+async def test_authoritative_success_cancels_cross_service_work_while_awaiting_approval() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=True)
+        activities = RecoveryActivities(services)
+        task_queue = "recovery-payment-before-approval"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            command = workflow_input("payment-before-approval")
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            await handle.signal(
+                "payment_event",
+                PaymentEventSignal(
+                    signal_id="payment-before-approval",
+                    provider_event_id="evt-payment-before-approval",
+                    payment_state="CAPTURED",
+                    amount_paise=149_900,
+                    authoritative=True,
+                ),
+            )
+            result = await handle.result()
+
+        assert result.outcome == "RECOVERED"
+        assert services.cancelled_keys == {
+            "payment-before-approval:cancel:action-1"
+        }
 
 
 @pytest.mark.asyncio

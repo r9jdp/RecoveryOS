@@ -31,6 +31,7 @@ from services.api.app.providers.contracts import (
 )
 from services.api.app.providers.interfaces import PaymentProvider, RecoveryScorer
 from services.api.app.services.mock_payment import MockPaymentProvider
+from services.api.app.voice.factory import create_voice_service_from_env
 
 from .activities import MockRecoveryActivityServices
 from .contracts import (
@@ -372,7 +373,23 @@ class ProductionRecoveryActivityServices:
                 action.status = ActionStatus.CANCELLED
                 action.completed_at = datetime.now(UTC)
             await session.commit()
+
+        voice_reason: str | None = None
+        if command.reason == "AUTHORITATIVE_PAYMENT_SUCCESS":
+            async with get_session_factory()() as voice_session:
+                resources = create_voice_service_from_env(voice_session)
+                try:
+                    voice_result = await resources.service.cancel_for_authoritative_payment(
+                        case_id=command.case_id,
+                        cancellation_key=command.idempotency_key,
+                        now=datetime.now(UTC),
+                    )
+                finally:
+                    await resources.aclose()
+            voice_reason = voice_result.reason_code or f"VOICE_{voice_result.status}"
+            if voice_result.status == "UNCERTAIN":
+                return CancelActionResult(cancelled=False, reason_code=voice_reason)
         return CancelActionResult(
             cancelled=True,
-            reason_code="CANCELLED" if actions else "NO_ACTIVE_ACTION",
+            reason_code=voice_reason or ("CANCELLED" if actions else "NO_ACTIVE_ACTION"),
         )
