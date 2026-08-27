@@ -11,6 +11,7 @@ provider credentials. Dates use Asia/Kolkata time.
 | Phase 1 vertical slice | `17fe5f7` / `phase-1-code-complete` | API, migration, PostgreSQL, Temporal replay, browser flow, duplicate-revenue gate | hosted Playwright run |
 | Phase 2 payment integration | `1e83c04` / `phase-2-code-complete` | Razorpay inbox/outbox, reconciliation, safety policy, merchant UX, live browser flow | hosted Razorpay test-mode webhook/payment smoke |
 | Phase 3 hero features | `04e250a` / `phase-3-code-complete` | RecoveryBench, signed A2A authorization, guarded voice, combined browser and container gate | hosted A2A origin plus one credentialed allowlisted Twilio/ElevenLabs call |
+| Phase 4 hardening | `00191bb` / `phase-4-code-complete` | deterministic failure injection, 24-check browser QA, backup/restore, edge limits, security and staged-deploy gates | credentialed staging/production deploy, public monitoring, and Trivy registry scan |
 
 Phase 3 worktrees started only from `phase-2-code-complete` and were merged through their frozen
 provider interfaces:
@@ -79,6 +80,36 @@ provider interfaces:
   browser console errors without placing a call or payment.
 - Strict Ruff/Mypy/format checks, 175 Python tests, 27 web tests, the production Next.js build,
   PostgreSQL downgrade/upgrade/reset, and Phase 3 API/worker/customer-agent Docker builds pass.
+
+## Verified Phase 4 code gate
+
+- Process-stable Razorpay and Twilio circuit breakers fail closed on uncertain submission while
+  keeping authoritative reads, cancellation, and reconciliation available. Structured reason
+  codes reach the existing provider boundaries, and workflow code is statically guarded from HTTP
+  or provider integration imports.
+- Deterministic failure suites cover duplicate, stale, out-of-order, late-success, and changed-state
+  Razorpay delivery; Temporal timeouts and bounded retries; invalid A2A mandates; Twilio busy,
+  no-answer, callback duplication, and uncertain submission; ElevenLabs reconciliation; and stale
+  database writers through compare-and-swap.
+- The mock-only Playwright suite passes all 24 desktop/mobile checks, including the five-minute judge
+  flow, customer-safety paths, exact A2A scope and replay rejection, voice no-auto-retry behavior,
+  network/loading/error states, keyboard-only operation, focus restoration, semantic control labels,
+  and 1440×960 plus 390×844 visual baselines.
+- A separate in-app browser pass confirmed deterministic API fallback, operator controls, zero
+  horizontal overflow, no unlabelled mobile buttons, and zero console errors. Six frozen visual
+  baselines and six README-ready screenshots are checked in.
+- Deployment preflight now serializes releases, creates a mandatory pre-migration backup, rejects
+  destructive migration upgrades, validates one Alembic head, smokes exact image versions, and
+  performs image-only rollback without attempting an unsafe database downgrade.
+- A real local PostgreSQL dump, checksum, and ephemeral restore verified revision
+  `27b4eb4b36a1` with 18 public tables. HAProxy/Caddy validation, staging/production Compose config,
+  public-demo provider safety, repository secret scanning, Gitleaks history scanning, and Node and
+  Python dependency audits pass.
+- CI now runs E2E and security gates; the deployment workflow builds immutable ARM64 images, scans
+  service images, deploys staging first, and only then permits a protected production promotion.
+  Scheduled public health probes are ready once repository URL variables exist.
+- Strict lint/format/type checks, 205 Python tests, 27 web tests, 24 Playwright checks, OpenAPI drift,
+  the production Next.js build, and API/worker/customer-agent Docker builds pass.
 
 ## External prerequisites
 
