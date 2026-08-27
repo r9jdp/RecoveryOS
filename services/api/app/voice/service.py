@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from zoneinfo import ZoneInfo
 
 from services.api.app.integrations.voice.safety import (
@@ -86,6 +86,26 @@ class VoiceAttempt:
     uncertain_submission: bool = False
 
 
+@dataclass(frozen=True)
+class VoiceCancellationClaim:
+    """Durable ownership of a single provider cancellation submission."""
+
+    attempt: VoiceAttempt | None
+    claimed: bool
+    cancellation_key: str
+
+
+@dataclass(frozen=True)
+class VoiceCancellationResult:
+    """Outcome of cancellation or its read-only reconciliation."""
+
+    status: Literal["NO_ACTIVE_CALL", "CANCELLED", "UNCERTAIN", "ALREADY_REQUESTED"]
+    cancellation_key: str
+    attempt_id: str | None = None
+    provider_submission_performed: bool = False
+    reason_code: str | None = None
+
+
 class VoiceRepository(Protocol):
     async def load_subject(self, case_id: str) -> VoiceSubject | None: ...
 
@@ -107,6 +127,22 @@ class VoiceRepository(Protocol):
 
     async def suppress(self, *, attempt: VoiceAttempt, reason_code: str) -> bool: ...
 
+    async def claim_payment_cancellation(
+        self, *, case_id: str, cancellation_key: str, now: datetime
+    ) -> VoiceCancellationClaim: ...
+
+    async def finalize_payment_cancellation(
+        self,
+        *,
+        attempt_id: str,
+        cancellation_key: str,
+        confirmed: bool,
+        now: datetime,
+        error_code: str | None = None,
+    ) -> VoiceAttempt: ...
+
+    async def get_payment_cancellation(self, cancellation_key: str) -> VoiceAttempt | None: ...
+
 
 class InMemoryVoiceRepository:
     """Deterministic adapter for mock mode and unit tests."""
@@ -116,6 +152,7 @@ class InMemoryVoiceRepository:
         self.attempts: dict[str, VoiceAttempt] = {}
         self.receipts: set[tuple[str, str]] = set()
         self.suppressions: set[tuple[str, str]] = set()
+        self.payment_cancellations: dict[str, str] = {}
 
     async def load_subject(self, case_id: str) -> VoiceSubject | None:
         return self.subjects.get(case_id)
@@ -172,6 +209,71 @@ class InMemoryVoiceRepository:
         if subject:
             self.subjects[attempt.case_id] = replace(subject, opted_out_at=datetime.now(UTC))
         return was_new
+
+    async def claim_payment_cancellation(
+        self, *, case_id: str, cancellation_key: str, now: datetime
+    ) -> VoiceCancellationClaim:
+        del now
+        claimed_attempt_id = self.payment_cancellations.get(cancellation_key)
+        if claimed_attempt_id is not None:
+            return VoiceCancellationClaim(
+                attempt=self.attempts.get(claimed_attempt_id),
+                claimed=False,
+                cancellation_key=cancellation_key,
+            )
+        attempt = next(
+            (
+                item
+                for item in sorted(
+                    self.attempts.values(), key=lambda value: value.created_at, reverse=True
+                )
+                if item.case_id == case_id
+                and item.status in {"RESERVED", "SUBMITTED", "RINGING", "IN_PROGRESS"}
+            ),
+            None,
+        )
+        if attempt is None:
+            return VoiceCancellationClaim(
+                attempt=None, claimed=False, cancellation_key=cancellation_key
+            )
+        pending = replace(
+            attempt,
+            status="CANCEL_PENDING",
+            disposition="PAYMENT_RECOVERED",
+        )
+        self.attempts[attempt.id] = pending
+        self.payment_cancellations[cancellation_key] = attempt.id
+        return VoiceCancellationClaim(
+            attempt=pending,
+            claimed=True,
+            cancellation_key=cancellation_key,
+        )
+
+    async def finalize_payment_cancellation(
+        self,
+        *,
+        attempt_id: str,
+        cancellation_key: str,
+        confirmed: bool,
+        now: datetime,
+        error_code: str | None = None,
+    ) -> VoiceAttempt:
+        del now, error_code
+        if self.payment_cancellations.get(cancellation_key) != attempt_id:
+            raise ValueError("voice cancellation claim does not match the attempt")
+        attempt = self.attempts[attempt_id]
+        updated = replace(
+            attempt,
+            status="CANCELED" if confirmed else "CANCEL_UNCERTAIN",
+            disposition="PAYMENT_RECOVERED",
+            uncertain_submission=not confirmed,
+        )
+        self.attempts[attempt_id] = updated
+        return updated
+
+    async def get_payment_cancellation(self, cancellation_key: str) -> VoiceAttempt | None:
+        attempt_id = self.payment_cancellations.get(cancellation_key)
+        return self.attempts.get(attempt_id) if attempt_id else None
 
 
 class VoiceContactService:
@@ -279,6 +381,130 @@ class VoiceContactService:
             )
         )
         return provider_result
+
+    async def cancel_for_authoritative_payment(
+        self,
+        *,
+        case_id: str,
+        cancellation_key: str,
+        now: datetime,
+    ) -> VoiceCancellationResult:
+        """Stop one active call after authoritative recovery, with no blind retry.
+
+        The repository persists the claim before the provider boundary is crossed.
+        Any exception is therefore an uncertain submission that can only be resolved
+        with ``reconcile_payment_cancellation``; replay never submits another cancel.
+        """
+
+        claim = await self.repository.claim_payment_cancellation(
+            case_id=case_id,
+            cancellation_key=cancellation_key,
+            now=now,
+        )
+        if claim.attempt is None:
+            return VoiceCancellationResult(
+                status="NO_ACTIVE_CALL",
+                cancellation_key=cancellation_key,
+                reason_code="VOICE_NO_ACTIVE_CALL",
+            )
+        if not claim.claimed:
+            return VoiceCancellationResult(
+                status="ALREADY_REQUESTED",
+                cancellation_key=cancellation_key,
+                attempt_id=claim.attempt.id,
+                reason_code="VOICE_CANCELLATION_ALREADY_REQUESTED",
+            )
+        try:
+            await self.provider.cancel_contact(
+                contact_attempt_id=claim.attempt.id,
+                reason="AUTHORITATIVE_PAYMENT_SUCCESS",
+            )
+        except Exception as error:
+            await self.repository.finalize_payment_cancellation(
+                attempt_id=claim.attempt.id,
+                cancellation_key=cancellation_key,
+                confirmed=False,
+                now=now,
+                error_code=type(error).__name__,
+            )
+            return VoiceCancellationResult(
+                status="UNCERTAIN",
+                cancellation_key=cancellation_key,
+                attempt_id=claim.attempt.id,
+                provider_submission_performed=True,
+                reason_code="VOICE_CANCELLATION_UNCERTAIN_RECONCILE_REQUIRED",
+            )
+        await self.repository.finalize_payment_cancellation(
+            attempt_id=claim.attempt.id,
+            cancellation_key=cancellation_key,
+            confirmed=True,
+            now=now,
+        )
+        return VoiceCancellationResult(
+            status="CANCELLED",
+            cancellation_key=cancellation_key,
+            attempt_id=claim.attempt.id,
+            provider_submission_performed=True,
+        )
+
+    async def reconcile_payment_cancellation(
+        self,
+        *,
+        cancellation_key: str,
+        now: datetime,
+    ) -> VoiceCancellationResult:
+        """Resolve an uncertain cancellation by observation, never resubmission."""
+
+        attempt = await self.repository.get_payment_cancellation(cancellation_key)
+        if attempt is None:
+            return VoiceCancellationResult(
+                status="NO_ACTIVE_CALL",
+                cancellation_key=cancellation_key,
+                reason_code="VOICE_CANCELLATION_NOT_FOUND",
+            )
+        if attempt.status == "CANCELED":
+            return VoiceCancellationResult(
+                status="CANCELLED",
+                cancellation_key=cancellation_key,
+                attempt_id=attempt.id,
+                reason_code="VOICE_CANCELLATION_ALREADY_CONFIRMED",
+            )
+        try:
+            snapshot = await self.provider.fetch_contact(contact_attempt_id=attempt.id)
+        except Exception:
+            return VoiceCancellationResult(
+                status="UNCERTAIN",
+                cancellation_key=cancellation_key,
+                attempt_id=attempt.id,
+                reason_code="VOICE_CANCELLATION_RECONCILIATION_FAILED",
+            )
+        terminal = snapshot.status.upper() in {
+            "BUSY",
+            "CANCELED",
+            "CANCELLED",
+            "COMPLETED",
+            "FAILED",
+            "NO-ANSWER",
+        }
+        if not terminal:
+            return VoiceCancellationResult(
+                status="UNCERTAIN",
+                cancellation_key=cancellation_key,
+                attempt_id=attempt.id,
+                reason_code="VOICE_CANCELLATION_NOT_YET_CONFIRMED",
+            )
+        await self.repository.finalize_payment_cancellation(
+            attempt_id=attempt.id,
+            cancellation_key=cancellation_key,
+            confirmed=True,
+            now=now,
+        )
+        return VoiceCancellationResult(
+            status="CANCELLED",
+            cancellation_key=cancellation_key,
+            attempt_id=attempt.id,
+            reason_code="VOICE_CANCELLATION_RECONCILED",
+        )
 
     async def apply_transcript(
         self, *, attempt_id: str, transcript: str, confidence_basis_points: int, event_id: str

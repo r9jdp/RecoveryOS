@@ -21,10 +21,8 @@ from services.api.app.integrations.voice.signatures import (
     verify_elevenlabs_signature,
     verify_twilio_signature,
 )
-from services.api.app.integrations.voice.twilio import TwilioConfig, TwilioVoiceProvider
-from services.api.app.providers.interfaces import VoiceProvider
 
-from .repository import SqlVoiceRepository
+from .factory import create_voice_service_from_env, voice_provider_ready
 from .schemas import (
     BrowserTranscriptRequest,
     BrowserTranscriptResponse,
@@ -34,27 +32,9 @@ from .schemas import (
     VoiceTimelineResponse,
     WebhookAcceptedResponse,
 )
-from .service import DisabledVoiceProvider, VoiceContactService
+from .service import VoiceContactService
 
 router = APIRouter(prefix="/v1/voice", tags=["voice"])
-
-
-def _truthy(value: str | None) -> bool:
-    return value is not None and value.casefold() in {"1", "true", "yes", "on"}
-
-
-def _voice_provider_ready() -> bool:
-    required = (
-        "TWILIO_ACCOUNT_SID",
-        "TWILIO_AUTH_TOKEN",
-        "TWILIO_FROM_NUMBER",
-        "VOICE_PUBLIC_ORIGIN",
-    )
-    return (
-        os.getenv("VOICE_PROVIDER", "mock").strip().casefold() == "twilio"
-        and _truthy(os.getenv("VOICE_REAL_CALLS_ENABLED"))
-        and all(os.getenv(name, "").strip() for name in required)
-    )
 
 
 async def get_voice_service(
@@ -62,59 +42,20 @@ async def get_voice_service(
 ) -> AsyncIterator[VoiceContactService]:
     """Create a transactional SQL service while keeping real calls opt-in."""
 
-    repository = SqlVoiceRepository(session)
-    client: httpx.AsyncClient | None = None
-    provider: VoiceProvider = DisabledVoiceProvider()
-    real_calls_enabled = _voice_provider_ready()
-    if real_calls_enabled:
-        client = httpx.AsyncClient(timeout=10.0)
-
-        async def resolve_call_sid(contact_attempt_id: str) -> str | None:
-            attempt = await repository.get_attempt(contact_attempt_id)
-            return attempt.provider_call_id if attempt else None
-
-        try:
-            provider = TwilioVoiceProvider(
-                TwilioConfig(
-                    account_sid=os.environ["TWILIO_ACCOUNT_SID"],
-                    auth_token=os.environ["TWILIO_AUTH_TOKEN"],
-                    from_number=os.environ["TWILIO_FROM_NUMBER"],
-                    public_voice_origin=os.environ["VOICE_PUBLIC_ORIGIN"].rstrip("/"),
-                ),
-                client,
-                call_sid_resolver=resolve_call_sid,
-            )
-        except ValueError:
-            await client.aclose()
-            client = None
-            provider = DisabledVoiceProvider("VOICE_PROVIDER_CONFIGURATION_INVALID")
-            real_calls_enabled = False
-
-    service = VoiceContactService(
-        repository=repository,
-        provider=provider,
-        real_calls_enabled=real_calls_enabled,
-        operator_token=os.getenv("VOICE_OPERATOR_TOKEN", ""),
-        allowlisted_destinations=frozenset(
-            item.strip()
-            for item in os.getenv("VOICE_ALLOWLIST_DESTINATIONS", "").split(",")
-            if item.strip()
-        ),
-    )
+    resources = create_voice_service_from_env(session)
     try:
-        yield service
+        yield resources.service
         await session.commit()
     except Exception:
         await session.rollback()
         raise
     finally:
-        if client is not None:
-            await client.aclose()
+        await resources.aclose()
 
 
 async def get_call_registrar() -> AsyncIterator[ElevenLabsCallRegistrar]:
     required = ("ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID")
-    if not _voice_provider_ready() or not all(os.getenv(name, "").strip() for name in required):
+    if not voice_provider_ready() or not all(os.getenv(name, "").strip() for name in required):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={

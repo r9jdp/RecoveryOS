@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +18,15 @@ from services.api.app.models.entities import (
 )
 
 from .models import VoiceContactAttemptRecord, VoiceSuppressionRecord, VoiceWebhookReceiptRecord
-from .service import AI_DISCLOSURE, VoiceAttempt, VoiceSubject
+from .service import (
+    AI_DISCLOSURE,
+    VoiceAttempt,
+    VoiceCancellationClaim,
+    VoiceSubject,
+)
+
+_ACTIVE_VOICE_STATUSES = {"RESERVED", "SUBMITTED", "RINGING", "IN_PROGRESS"}
+_PAYMENT_CANCELLATION_RECEIPT_PROVIDER = "recoveryos-payment"
 
 
 def _to_attempt(record: VoiceContactAttemptRecord) -> VoiceAttempt:
@@ -223,6 +231,147 @@ class SqlVoiceRepository:
                 recovery_case.contact_disposition = ContactDisposition.OPTED_OUT
             await self.session.flush()
         return created
+
+    async def claim_payment_cancellation(
+        self, *, case_id: str, cancellation_key: str, now: datetime
+    ) -> VoiceCancellationClaim:
+        """Persist cancellation ownership before any provider submission."""
+
+        existing = await self._payment_cancellation_receipt(cancellation_key)
+        if existing is not None:
+            attempt = await self.get_attempt(existing.attempt_id) if existing.attempt_id else None
+            return VoiceCancellationClaim(
+                attempt=attempt,
+                claimed=False,
+                cancellation_key=cancellation_key,
+            )
+        record = await self.session.scalar(
+            select(VoiceContactAttemptRecord)
+            .where(
+                VoiceContactAttemptRecord.case_id == case_id,
+                VoiceContactAttemptRecord.status.in_(_ACTIVE_VOICE_STATUSES),
+            )
+            .order_by(
+                VoiceContactAttemptRecord.created_at.desc(),
+                VoiceContactAttemptRecord.id.desc(),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        if record is None:
+            return VoiceCancellationClaim(
+                attempt=None,
+                claimed=False,
+                cancellation_key=cancellation_key,
+            )
+        try:
+            async with self.session.begin_nested():
+                self.session.add(
+                    VoiceWebhookReceiptRecord(
+                        provider=_PAYMENT_CANCELLATION_RECEIPT_PROVIDER,
+                        provider_event_id=cancellation_key,
+                        attempt_id=record.id,
+                        payload={
+                            "kind": "AUTHORITATIVE_PAYMENT_CANCELLATION",
+                            "case_id": case_id,
+                            "requested_at": now.isoformat(),
+                        },
+                    )
+                )
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self._payment_cancellation_receipt(cancellation_key)
+            attempt = (
+                await self.get_attempt(existing.attempt_id)
+                if existing is not None and existing.attempt_id
+                else None
+            )
+            return VoiceCancellationClaim(
+                attempt=attempt,
+                claimed=False,
+                cancellation_key=cancellation_key,
+            )
+        provider_payload = dict(record.provider_payload or {})
+        provider_payload["payment_cancellation"] = {
+            "cancellation_key": cancellation_key,
+            "reason": "AUTHORITATIVE_PAYMENT_SUCCESS",
+            "state": "PENDING",
+            "requested_at": now.isoformat(),
+        }
+        record.provider_payload = provider_payload
+        record.status = "CANCEL_PENDING"
+        record.disposition = "PAYMENT_RECOVERED"
+        record.updated_at = now
+        await self.session.flush()
+        # The claim must survive a worker crash after the provider receives the
+        # request. A later activity may observe/reconcile it, but never resubmit.
+        await self.session.commit()
+        return VoiceCancellationClaim(
+            attempt=_to_attempt(record),
+            claimed=True,
+            cancellation_key=cancellation_key,
+        )
+
+    async def finalize_payment_cancellation(
+        self,
+        *,
+        attempt_id: str,
+        cancellation_key: str,
+        confirmed: bool,
+        now: datetime,
+        error_code: str | None = None,
+    ) -> VoiceAttempt:
+        record = await self.session.scalar(
+            select(VoiceContactAttemptRecord)
+            .where(VoiceContactAttemptRecord.id == attempt_id)
+            .with_for_update()
+        )
+        receipt = await self._payment_cancellation_receipt(cancellation_key)
+        if record is None or receipt is None or receipt.attempt_id != attempt_id:
+            raise ValueError("voice cancellation claim does not match the attempt")
+        provider_payload = dict(record.provider_payload or {})
+        cancellation = dict(provider_payload.get("payment_cancellation") or {})
+        cancellation.update(
+            {
+                "cancellation_key": cancellation_key,
+                "reason": "AUTHORITATIVE_PAYMENT_SUCCESS",
+                "state": "CONFIRMED" if confirmed else "UNCERTAIN",
+                "observed_at": now.isoformat(),
+            }
+        )
+        if error_code:
+            cancellation["error_code"] = error_code[:128]
+        else:
+            cancellation.pop("error_code", None)
+        provider_payload["payment_cancellation"] = cancellation
+        record.provider_payload = provider_payload
+        record.status = "CANCELED" if confirmed else "CANCEL_UNCERTAIN"
+        record.disposition = "PAYMENT_RECOVERED"
+        record.uncertain_submission = not confirmed
+        record.completed_at = now if confirmed else None
+        record.updated_at = now
+        await self.session.flush()
+        await self.session.commit()
+        return _to_attempt(record)
+
+    async def get_payment_cancellation(self, cancellation_key: str) -> VoiceAttempt | None:
+        receipt = await self._payment_cancellation_receipt(cancellation_key)
+        if receipt is None or receipt.attempt_id is None:
+            return None
+        return await self.get_attempt(receipt.attempt_id)
+
+    async def _payment_cancellation_receipt(
+        self, cancellation_key: str
+    ) -> VoiceWebhookReceiptRecord | None:
+        return cast(
+            VoiceWebhookReceiptRecord | None,
+            await self.session.scalar(
+                select(VoiceWebhookReceiptRecord).where(
+                    VoiceWebhookReceiptRecord.provider == _PAYMENT_CANCELLATION_RECEIPT_PROVIDER,
+                    VoiceWebhookReceiptRecord.provider_event_id == cancellation_key,
+                )
+            ),
+        )
 
 
 def _parse_time(value: str | None) -> time | None:
