@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic token is assembled and exercised only by the secret-scanner unit test"
+paths = ['''tests/deployment/test_deployment_hardening\.py''']

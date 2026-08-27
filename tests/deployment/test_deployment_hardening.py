@@ -100,7 +100,8 @@ def test_public_demo_gate_is_fail_closed() -> None:
 def test_secret_scanner_rejects_live_token_and_browser_server_name(tmp_path: Path) -> None:
     scanner = _load("scan_repository", ROOT / "scripts" / "security" / "scan_repository.py")
     source = tmp_path / "bad.env"
-    source.write_text("RAZORPAY_KEY_SECRET=rzp_live_1234567890123456\n", encoding="utf-8")
+    fake_live_token = "rzp_" + "live_" + "1234567890123456"
+    source.write_text(f"RAZORPAY_KEY_SECRET={fake_live_token}\n", encoding="utf-8")
     findings = scanner.scan_file(source)
     assert "Razorpay live key" in findings
     assert "non-empty sensitive environment assignment" in findings

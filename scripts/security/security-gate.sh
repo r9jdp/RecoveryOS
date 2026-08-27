@@ -10,13 +10,13 @@ fi
 python3 scripts/security/scan_repository.py --browser-dir apps/web/.next/static
 
 if [[ "$dry_run" == "--dry-run" ]]; then
-  echo "DRY-RUN gitleaks git --redact --no-banner"
+  echo "DRY-RUN gitleaks git --config .gitleaks.toml --redact --no-banner"
   bash scripts/security/scan-dependencies.sh --dry-run
 else
   command -v gitleaks >/dev/null || {
     echo "Missing security scanner: gitleaks" >&2
     exit 1
   }
-  gitleaks git --redact --no-banner
+  gitleaks git --config .gitleaks.toml --redact --no-banner
   bash scripts/security/scan-dependencies.sh
 fi
