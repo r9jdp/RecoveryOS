@@ -9,6 +9,7 @@ from services.api.app.api import install_core_api
 from services.api.app.demo import router as demo_router
 from services.api.app.health.router import router as health_router
 from services.api.app.lab import install_lab_api
+from services.api.app.voice import router as voice_router
 
 app = FastAPI(
     title="RecoveryOS API",
@@ -28,6 +29,7 @@ app.include_router(health_router)
 app.include_router(demo_router)
 install_core_api(app)
 install_lab_api(app)
+app.include_router(voice_router)
 
 
 @app.get("/", tags=["meta"])

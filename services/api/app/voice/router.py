@@ -3,19 +3,28 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from functools import lru_cache
 from typing import Annotated, Any
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.app.integrations.voice.elevenlabs import ElevenLabsCallRegistrar
-from services.api.app.integrations.voice.safety import VoiceIntent
+from services.api.app.db.session import get_async_session
+from services.api.app.integrations.voice.elevenlabs import (
+    ElevenLabsAgentConfig,
+    ElevenLabsCallRegistrar,
+)
+from services.api.app.integrations.voice.safety import VoiceIntent, detect_voice_intent
 from services.api.app.integrations.voice.signatures import (
     verify_elevenlabs_signature,
     verify_twilio_signature,
 )
+from services.api.app.integrations.voice.twilio import TwilioConfig, TwilioVoiceProvider
+from services.api.app.providers.interfaces import VoiceProvider
 
+from .repository import SqlVoiceRepository
 from .schemas import (
     BrowserTranscriptRequest,
     BrowserTranscriptResponse,
@@ -25,7 +34,7 @@ from .schemas import (
     VoiceTimelineResponse,
     WebhookAcceptedResponse,
 )
-from .service import DisabledVoiceProvider, InMemoryVoiceRepository, VoiceContactService
+from .service import DisabledVoiceProvider, VoiceContactService
 
 router = APIRouter(prefix="/v1/voice", tags=["voice"])
 
@@ -34,14 +43,57 @@ def _truthy(value: str | None) -> bool:
     return value is not None and value.casefold() in {"1", "true", "yes", "on"}
 
 
-@lru_cache(maxsize=1)
-def get_voice_service() -> VoiceContactService:
-    """Safe default dependency; coordinator replaces this with SQL + Twilio wiring."""
+def _voice_provider_ready() -> bool:
+    required = (
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_FROM_NUMBER",
+        "VOICE_PUBLIC_ORIGIN",
+    )
+    return (
+        os.getenv("VOICE_PROVIDER", "mock").strip().casefold() == "twilio"
+        and _truthy(os.getenv("VOICE_REAL_CALLS_ENABLED"))
+        and all(os.getenv(name, "").strip() for name in required)
+    )
 
-    return VoiceContactService(
-        repository=InMemoryVoiceRepository(),
-        provider=DisabledVoiceProvider(),
-        real_calls_enabled=_truthy(os.getenv("VOICE_REAL_CALLS_ENABLED")),
+
+async def get_voice_service(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> AsyncIterator[VoiceContactService]:
+    """Create a transactional SQL service while keeping real calls opt-in."""
+
+    repository = SqlVoiceRepository(session)
+    client: httpx.AsyncClient | None = None
+    provider: VoiceProvider = DisabledVoiceProvider()
+    real_calls_enabled = _voice_provider_ready()
+    if real_calls_enabled:
+        client = httpx.AsyncClient(timeout=10.0)
+
+        async def resolve_call_sid(contact_attempt_id: str) -> str | None:
+            attempt = await repository.get_attempt(contact_attempt_id)
+            return attempt.provider_call_id if attempt else None
+
+        try:
+            provider = TwilioVoiceProvider(
+                TwilioConfig(
+                    account_sid=os.environ["TWILIO_ACCOUNT_SID"],
+                    auth_token=os.environ["TWILIO_AUTH_TOKEN"],
+                    from_number=os.environ["TWILIO_FROM_NUMBER"],
+                    public_voice_origin=os.environ["VOICE_PUBLIC_ORIGIN"].rstrip("/"),
+                ),
+                client,
+                call_sid_resolver=resolve_call_sid,
+            )
+        except ValueError:
+            await client.aclose()
+            client = None
+            provider = DisabledVoiceProvider("VOICE_PROVIDER_CONFIGURATION_INVALID")
+            real_calls_enabled = False
+
+    service = VoiceContactService(
+        repository=repository,
+        provider=provider,
+        real_calls_enabled=real_calls_enabled,
         operator_token=os.getenv("VOICE_OPERATOR_TOKEN", ""),
         allowlisted_destinations=frozenset(
             item.strip()
@@ -49,13 +101,38 @@ def get_voice_service() -> VoiceContactService:
             if item.strip()
         ),
     )
+    try:
+        yield service
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        if client is not None:
+            await client.aclose()
 
 
-def get_call_registrar() -> ElevenLabsCallRegistrar:
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={"code": "ELEVENLABS_NOT_CONFIGURED", "message": "Call registration unavailable"},
-    )
+async def get_call_registrar() -> AsyncIterator[ElevenLabsCallRegistrar]:
+    required = ("ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID")
+    if not _voice_provider_ready() or not all(os.getenv(name, "").strip() for name in required):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "ELEVENLABS_NOT_CONFIGURED",
+                "message": "Call registration unavailable",
+            },
+        )
+    client = httpx.AsyncClient(timeout=10.0)
+    try:
+        yield ElevenLabsCallRegistrar(
+            ElevenLabsAgentConfig(
+                agent_id=os.environ["ELEVENLABS_AGENT_ID"],
+                api_key=os.environ["ELEVENLABS_API_KEY"],
+            ),
+            client,
+        )
+    finally:
+        await client.aclose()
 
 
 VoiceServiceDependency = Annotated[VoiceContactService, Depends(get_voice_service)]
@@ -115,6 +192,20 @@ async def browser_transcript(
     x_voice_event_id: Annotated[str, Header(min_length=1)],
 ) -> BrowserTranscriptResponse:
     if await service.repository.get_attempt(attempt_id) is None:
+        if attempt_id.startswith("browser-rehearsal-"):
+            intent = detect_voice_intent(payload.transcript)
+            return BrowserTranscriptResponse(
+                detected_intent=intent.value,
+                disposition=intent.value,
+                contact_must_end=intent
+                in {
+                    VoiceIntent.OPT_OUT,
+                    VoiceIntent.DISPUTE,
+                    VoiceIntent.WRONG_PERSON,
+                    VoiceIntent.ALREADY_PAID,
+                },
+                suppression_persisted=False,
+            )
         raise HTTPException(status_code=404, detail={"code": "VOICE_ATTEMPT_NOT_FOUND"})
     intent, must_end, suppression_persisted = await service.apply_transcript(
         attempt_id=attempt_id,

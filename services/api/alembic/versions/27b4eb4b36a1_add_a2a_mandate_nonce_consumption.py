@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("consumed_at", UTCDateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "consumed_at <= expires_at",
-            name=op.f("ck_a2a_mandate_nonce_consumptions_a2a_mandate_consumed_before_expiry"),
+            name=op.f("ck_a2a_mandate_nonce_consumptions_consumed_before_expiry"),
         ),
         sa.ForeignKeyConstraint(
             ["case_id"],

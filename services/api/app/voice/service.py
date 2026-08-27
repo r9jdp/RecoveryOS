@@ -29,12 +29,15 @@ AI_DISCLOSURE = (
 class DisabledVoiceProvider:
     """Safe default: browser rehearsal works but no external call can leave the API."""
 
+    def __init__(self, reason_code: str = "REAL_VOICE_PROVIDER_NOT_CONFIGURED") -> None:
+        self.reason_code = reason_code
+
     async def start_contact(self, request: VoiceContactRequest) -> VoiceContactResult:
         return VoiceContactResult(
             provider="mock",
             contact_attempt_id=request.idempotency_key,
             status="REJECTED",
-            reason_code="REAL_VOICE_PROVIDER_NOT_CONFIGURED",
+            reason_code=self.reason_code,
         )
 
     async def cancel_contact(self, *, contact_attempt_id: str, reason: str) -> None:

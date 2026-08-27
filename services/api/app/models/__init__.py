@@ -1,5 +1,11 @@
 """SQLAlchemy persistence models."""
 
+from services.api.app.voice.models import (
+    VoiceContactAttemptRecord,
+    VoiceSuppressionRecord,
+    VoiceWebhookReceiptRecord,
+)
+
 from .a2a import A2AMandateNonceConsumption
 from .entities import (
     Customer,
@@ -32,4 +38,7 @@ __all__ = [
     "RevenueRecognitionRecord",
     "Subscription",
     "WebhookInboxEntry",
+    "VoiceContactAttemptRecord",
+    "VoiceSuppressionRecord",
+    "VoiceWebhookReceiptRecord",
 ]

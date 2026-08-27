@@ -23,6 +23,7 @@ const items = [
   },
   { href: "/dashboard#audit", icon: "activity" as const, label: "Audit trail" },
   { href: "/lab", icon: "lab" as const, label: "Recovery Lab" },
+  { href: "/voice", icon: "voice" as const, label: "Voice outreach" },
   { href: "/settings", icon: "settings" as const, label: "Policy settings" },
 ];
 
@@ -117,9 +118,11 @@ export function MerchantShell({ children }: MerchantShellProps) {
                     ? "Approval queue"
                     : pathname === "/lab"
                       ? "Recovery Lab"
-                      : pathname === "/settings"
-                        ? "Policy settings"
-                        : "Control Tower"}
+                      : pathname === "/voice"
+                        ? "Voice outreach"
+                        : pathname === "/settings"
+                          ? "Policy settings"
+                          : "Control Tower"}
               </p>
             </div>
             <div className={styles.topbarEnd}>

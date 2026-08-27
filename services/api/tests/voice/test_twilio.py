@@ -65,6 +65,33 @@ async def test_twilio_timeout_is_uncertain_and_never_retried_inside_adapter() ->
     assert calls == 1
 
 
+@pytest.mark.asyncio
+async def test_twilio_cancel_resolves_persisted_call_sid_after_process_restart() -> None:
+    cancellations: list[httpx.Request] = []
+
+    def handler(incoming: httpx.Request) -> httpx.Response:
+        cancellations.append(incoming)
+        return httpx.Response(200, json={"sid": "CA-persisted", "status": "completed"})
+
+    async def resolve_call_sid(contact_attempt_id: str) -> str | None:
+        assert contact_attempt_id == "attempt-persisted"
+        return "CA-persisted"
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = TwilioVoiceProvider(
+            TwilioConfig("AC123", "secret", "+12025550100", "https://voice.example"),
+            client,
+            call_sid_resolver=resolve_call_sid,
+        )
+        await provider.cancel_contact(
+            contact_attempt_id="attempt-persisted", reason="VOICE_OPT_OUT"
+        )
+
+    assert len(cancellations) == 1
+    assert cancellations[0].url.path.endswith("/Calls/CA-persisted.json")
+    assert b"Status=completed" in cancellations[0].content
+
+
 def test_twiml_escapes_attempt_and_requires_secure_stream() -> None:
     xml = render_elevenlabs_twiml(
         stream_url="wss://eleven.example/stream?a=1&b=2", attempt_id='a"b'

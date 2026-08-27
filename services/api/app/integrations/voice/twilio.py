@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
@@ -43,6 +44,9 @@ def render_elevenlabs_twiml(*, stream_url: str, attempt_id: str) -> str:
     )
 
 
+CallSidResolver = Callable[[str], Awaitable[str | None]]
+
+
 class TwilioVoiceProvider:
     """Submit at most once and return UNCERTAIN on transport ambiguity.
 
@@ -50,10 +54,26 @@ class TwilioVoiceProvider:
     identifier before an operator decides whether any further submission is safe.
     """
 
-    def __init__(self, config: TwilioConfig, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        config: TwilioConfig,
+        client: httpx.AsyncClient,
+        *,
+        call_sid_resolver: CallSidResolver | None = None,
+    ) -> None:
         self._config = config
         self._client = client
+        self._call_sid_resolver = call_sid_resolver
         self._attempt_calls: dict[str, str] = {}
+
+    async def _resolve_call_sid(self, contact_attempt_id: str) -> str | None:
+        known_sid = self._attempt_calls.get(contact_attempt_id)
+        if known_sid or self._call_sid_resolver is None:
+            return known_sid
+        resolved = await self._call_sid_resolver(contact_attempt_id)
+        if resolved:
+            self._attempt_calls[contact_attempt_id] = resolved
+        return resolved
 
     @property
     def _calls_url(self) -> str:
@@ -121,7 +141,7 @@ class TwilioVoiceProvider:
 
     async def cancel_contact(self, *, contact_attempt_id: str, reason: str) -> None:
         del reason
-        sid = self._attempt_calls.get(contact_attempt_id)
+        sid = await self._resolve_call_sid(contact_attempt_id)
         if not sid:
             return
         await self._client.post(
@@ -131,7 +151,7 @@ class TwilioVoiceProvider:
         )
 
     async def fetch_contact(self, *, contact_attempt_id: str) -> VoiceContactSnapshot:
-        sid = self._attempt_calls.get(contact_attempt_id)
+        sid = await self._resolve_call_sid(contact_attempt_id)
         if not sid:
             return VoiceContactSnapshot(
                 contact_attempt_id=contact_attempt_id,

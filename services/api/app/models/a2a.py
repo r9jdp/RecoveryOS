@@ -31,6 +31,6 @@ class A2AMandateNonceConsumption(Base):
 
     __table_args__ = (
         UniqueConstraint("mandate_id", name="a2a_mandate_consumption_mandate"),
-        CheckConstraint("consumed_at <= expires_at", name="a2a_mandate_consumed_before_expiry"),
+        CheckConstraint("consumed_at <= expires_at", name="consumed_before_expiry"),
         Index("ix_a2a_mandate_consumption_expires_at", "expires_at"),
     )
