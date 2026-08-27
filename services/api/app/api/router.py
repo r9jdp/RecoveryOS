@@ -21,7 +21,7 @@ from services.api.app.domain.enums import (
     Diagnosis,
     SubscriptionState,
 )
-from services.api.app.integrations.razorpay import RazorpayClient, RazorpayConfig
+from services.api.app.integrations.razorpay import create_razorpay_client_from_env
 from services.api.app.integrations.razorpay.errors import RazorpayIntegrationError
 from services.api.app.models import Merchant, MerchantPolicySetting
 from services.api.app.providers.interfaces import PaymentProvider
@@ -87,32 +87,7 @@ async def get_payment_provider() -> AsyncIterator[PaymentProvider]:
             "PAYMENT_PROVIDER must be mock or razorpay.",
             status_code=503,
         )
-    key_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
-    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
-    if not key_id or not key_secret:
-        raise RazorpayIntegrationError(
-            "RAZORPAY_CREDENTIALS_NOT_CONFIGURED",
-            "Razorpay test credentials are not configured.",
-            status_code=503,
-        )
-    if os.getenv("RAZORPAY_TEST_MODE_REQUIRED", "true").lower() == "true" and not key_id.startswith(
-        "rzp_test_"
-    ):
-        raise RazorpayIntegrationError(
-            "RAZORPAY_TEST_MODE_REQUIRED",
-            "Only Razorpay test-mode credentials are accepted.",
-            status_code=503,
-        )
-    client = RazorpayClient(
-        RazorpayConfig(
-            key_id=key_id,
-            key_secret=key_secret,
-            checkout_origin=os.getenv(
-                "RAZORPAY_CHECKOUT_ORIGIN", os.getenv("WEB_ORIGIN", "http://localhost:3000")
-            ),
-            base_url=os.getenv("RAZORPAY_API_BASE_URL", "https://api.razorpay.com"),
-        )
-    )
+    client = create_razorpay_client_from_env()
     try:
         yield client
     finally:
