@@ -1,0 +1,49 @@
+name: Public uptime monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recoveryos-public-monitor
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: staging
+            api: STAGING_API_BASE_URL
+            agent: STAGING_AGENT_BASE_URL
+          - label: production
+            api: PRODUCTION_API_BASE_URL
+            agent: PRODUCTION_AGENT_BASE_URL
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve configured origins
+        id: origins
+        env:
+          STAGING_API_BASE_URL: ${{ vars.STAGING_API_BASE_URL }}
+          STAGING_AGENT_BASE_URL: ${{ vars.STAGING_AGENT_BASE_URL }}
+          PRODUCTION_API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          PRODUCTION_AGENT_BASE_URL: ${{ vars.PRODUCTION_AGENT_BASE_URL }}
+          API_VARIABLE: ${{ matrix.api }}
+          AGENT_VARIABLE: ${{ matrix.agent }}
+        run: |
+          api_base_url="${!API_VARIABLE:-}"
+          agent_base_url="${!AGENT_VARIABLE:-}"
+          echo "api_base_url=$api_base_url" >> "$GITHUB_OUTPUT"
+          echo "agent_base_url=$agent_base_url" >> "$GITHUB_OUTPUT"
+      - name: Probe ${{ matrix.label }}
+        if: steps.origins.outputs.api_base_url != ''
+        run: bash deploy/scripts/monitor.sh "${{ steps.origins.outputs.api_base_url }}" "${{ steps.origins.outputs.agent_base_url }}"
+      - name: Report unconfigured monitor
+        if: steps.origins.outputs.api_base_url == ''
+        run: echo "${{ matrix.label }} monitoring is not configured; set the repository URL variables."
