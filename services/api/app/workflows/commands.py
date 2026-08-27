@@ -20,6 +20,7 @@ from services.worker.app.contracts import (
     ApprovalSignal,
     CancellationSignal,
     OperatorEscalationSignal,
+    PaymentEventSignal,
 )
 from services.worker.app.workflow import recovery_workflow_id
 
@@ -51,6 +52,14 @@ class RecoveryWorkflowCommander(Protocol):
     async def stop(self, *, case_id: str, reason: str) -> WorkflowCommandDelivery: ...
 
     async def escalate(self, *, case_id: str, reason: str) -> WorkflowCommandDelivery: ...
+
+    async def payment_captured(
+        self,
+        *,
+        case_id: str,
+        provider_event_id: str,
+        amount_paise: int,
+    ) -> WorkflowCommandDelivery: ...
 
 
 class TemporalRecoveryWorkflowCommander:
@@ -103,6 +112,27 @@ class TemporalRecoveryWorkflowCommander:
                 signal_id=signal_id,
                 reason=reason,
                 requested_by="merchant-operator",
+            ),
+        )
+
+    async def payment_captured(
+        self,
+        *,
+        case_id: str,
+        provider_event_id: str,
+        amount_paise: int,
+    ) -> WorkflowCommandDelivery:
+        signal_id = f"mock-payment:{provider_event_id}"
+        return await self._deliver(
+            case_id=case_id,
+            signal_name="payment_event",
+            signal_id=signal_id,
+            payload=PaymentEventSignal(
+                signal_id=signal_id,
+                provider_event_id=provider_event_id,
+                payment_state="CAPTURED",
+                amount_paise=amount_paise,
+                authoritative=True,
             ),
         )
 

@@ -35,6 +35,13 @@ class FakeWorkflowCommander:
             f"recovery-case:{kwargs['case_id']}", "test:escalate", "DELIVERED"
         )
 
+    async def payment_captured(self, **kwargs: object) -> WorkflowCommandDelivery:
+        return WorkflowCommandDelivery(
+            f"recovery-case:{kwargs['case_id']}",
+            f"test:payment:{kwargs['provider_event_id']}",
+            "DELIVERED",
+        )
+
 
 class FlakyWorkflowCommander(FakeWorkflowCommander):
     def __init__(self) -> None:
@@ -65,6 +72,10 @@ class RecordingWorkflowCommander(FakeWorkflowCommander):
     async def escalate(self, **kwargs: object) -> WorkflowCommandDelivery:
         self.commands.append("ESCALATE_TO_HUMAN")
         return await super().escalate(**kwargs)
+
+    async def payment_captured(self, **kwargs: object) -> WorkflowCommandDelivery:
+        self.commands.append("PAYMENT_CAPTURED")
+        return await super().payment_captured(**kwargs)
 
 
 async def test_exported_router_serves_dashboard_case_and_timeline(

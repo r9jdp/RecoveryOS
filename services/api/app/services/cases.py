@@ -77,6 +77,7 @@ class DashboardSnapshot:
 class PaymentSuccessResult:
     recovery_case: RecoveryCase
     newly_recognized: bool
+    recognized_amount_paise: int
 
 
 class RecoveryCaseService:
@@ -565,6 +566,7 @@ class RecoveryCaseService:
             return PaymentSuccessResult(
                 recovery_case=recovery_case,
                 newly_recognized=False,
+                recognized_amount_paise=existing.amount_paise,
             )
         remaining_paise = recovery_case.amount_at_risk_paise - recovery_case.arrears_collected_paise
         if remaining_paise <= 0:
@@ -645,7 +647,11 @@ class RecoveryCaseService:
                 )
             )
         await self.repository.commit()
-        return PaymentSuccessResult(recovery_case=recovery_case, newly_recognized=newly_recognized)
+        return PaymentSuccessResult(
+            recovery_case=recovery_case,
+            newly_recognized=newly_recognized,
+            recognized_amount_paise=amount,
+        )
 
     async def apply_late_failure_event(
         self,

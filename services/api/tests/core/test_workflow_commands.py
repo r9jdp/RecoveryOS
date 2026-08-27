@@ -69,17 +69,22 @@ async def test_each_operator_command_uses_stable_signal_ids() -> None:
     )
     stopped = await commander.stop(case_id="case-1", reason="operator stop")
     escalated = await commander.escalate(case_id="case-1", reason="human review")
+    paid = await commander.payment_captured(
+        case_id="case-1", provider_event_id="evt-success", amount_paise=149_900
+    )
 
     assert first.signal_id == duplicate.signal_id == "operator:approve:action-1"
     assert rejected.signal_id == "operator:reject:action-1"
     assert stopped.signal_id == "operator:stop:case-1"
     assert escalated.signal_id == "operator:escalate:case-1"
+    assert paid.signal_id == "mock-payment:evt-success"
     assert [name for name, _ in handle.signals] == [
         "approval",
         "approval",
         "approval",
         "cancel",
         "operator_escalation",
+        "payment_event",
     ]
 
 

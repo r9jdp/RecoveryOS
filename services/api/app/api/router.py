@@ -714,6 +714,7 @@ async def apply_mock_payment_success(
     request: MockPaymentSuccessRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> MockPaymentSuccessResponse:
     result = await service.apply_mock_payment_success(
         merchant_id=merchant_id,
@@ -722,6 +723,11 @@ async def apply_mock_payment_success(
         amount_paise=request.amount_paise,
         occurred_at=request.occurred_at,
         subscription_reactivated=request.subscription_reactivated,
+    )
+    await workflow_commander.payment_captured(
+        case_id=case_id,
+        provider_event_id=request.provider_event_id,
+        amount_paise=result.recognized_amount_paise,
     )
     return MockPaymentSuccessResponse(
         case=RecoveryCaseResponse.model_validate(result.recovery_case),
