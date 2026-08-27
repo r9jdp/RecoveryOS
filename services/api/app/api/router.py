@@ -40,6 +40,7 @@ from services.api.app.workflows import (
     get_recovery_workflow_commander,
 )
 
+from .operator_auth import require_operator_for_non_mock_payment
 from .schemas import (
     ActionDecisionResponse,
     ActionResponse,
@@ -276,7 +277,12 @@ async def get_policy_settings(
     return _policy_settings_response(merchant, settings)
 
 
-@router.put("/policy-settings", response_model=PolicySettingsResponse, tags=["policy"])
+@router.put(
+    "/policy-settings",
+    response_model=PolicySettingsResponse,
+    tags=["policy"],
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
+)
 async def update_policy_settings(
     request: PolicySettingsUpdate,
     session: Session,
@@ -429,6 +435,7 @@ async def get_recovery_case_timeline(
 @router.post(
     "/recovery-cases/{case_id}/commands",
     response_model=OperatorCommandResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def execute_operator_command(
     case_id: str,
@@ -511,6 +518,7 @@ async def execute_operator_command(
     "/recovery-cases/{case_id}/safety-dispositions",
     response_model=SafetyDispositionResponse,
     tags=["policy"],
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def record_safety_disposition(
     case_id: str,
@@ -569,6 +577,7 @@ async def record_safety_disposition(
     "/recovery-cases/{case_id}/actions/recommend",
     response_model=ActionDecisionResponse,
     status_code=201,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def recommend_recovery_action(
     case_id: str,
@@ -588,6 +597,7 @@ async def recommend_recovery_action(
 @router.post(
     "/recovery-cases/{case_id}/actions/{action_id}/approve",
     response_model=ActionResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def approve_recovery_action(
     case_id: str,
@@ -614,6 +624,7 @@ async def approve_recovery_action(
 @router.post(
     "/recovery-cases/{case_id}/actions/{action_id}/reject",
     response_model=ActionResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def reject_recovery_action(
     case_id: str,
@@ -641,7 +652,11 @@ async def reject_recovery_action(
     return ActionResponse.model_validate(action)
 
 
-@router.post("/recovery-cases/{case_id}/stop", response_model=RecoveryCaseResponse)
+@router.post(
+    "/recovery-cases/{case_id}/stop",
+    response_model=RecoveryCaseResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
+)
 async def stop_recovery_case(
     case_id: str,
     request: CaseCommandRequest,
@@ -657,7 +672,11 @@ async def stop_recovery_case(
     return RecoveryCaseResponse.model_validate(recovery_case)
 
 
-@router.post("/recovery-cases/{case_id}/escalate", response_model=RecoveryCaseResponse)
+@router.post(
+    "/recovery-cases/{case_id}/escalate",
+    response_model=RecoveryCaseResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
+)
 async def escalate_recovery_case(
     case_id: str,
     request: CaseCommandRequest,
@@ -676,6 +695,7 @@ async def escalate_recovery_case(
 @router.post(
     "/mock/recovery-cases/{case_id}/payment-surfaces",
     response_model=ActionResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def open_mock_payment_surface(
     case_id: str,
@@ -708,6 +728,7 @@ async def open_mock_payment_surface(
 @router.post(
     "/mock/recovery-cases/{case_id}/payment-success",
     response_model=MockPaymentSuccessResponse,
+    dependencies=[Depends(require_operator_for_non_mock_payment)],
 )
 async def apply_mock_payment_success(
     case_id: str,

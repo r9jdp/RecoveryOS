@@ -141,15 +141,33 @@
         ],
         "summary": "Update Policy Settings",
         "operationId": "update_policy_settings_v1_policy_settings_put",
+        "parameters": [
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PolicySettingsUpdate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -491,6 +509,22 @@
               "type": "string",
               "title": "Case Id"
             }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
           }
         ],
         "requestBody": {
@@ -544,6 +578,22 @@
               "type": "string",
               "title": "Case Id"
             }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
           }
         ],
         "requestBody": {
@@ -595,6 +645,22 @@
             "schema": {
               "type": "string",
               "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
             }
           }
         ],
@@ -657,6 +723,22 @@
               "type": "string",
               "title": "Action Id"
             }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
           }
         ],
         "responses": {
@@ -707,6 +789,22 @@
             "schema": {
               "type": "string",
               "title": "Action Id"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
             }
           }
         ],
@@ -760,6 +858,22 @@
               "type": "string",
               "title": "Case Id"
             }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
           }
         ],
         "requestBody": {
@@ -811,6 +925,22 @@
             "schema": {
               "type": "string",
               "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
             }
           }
         ],
@@ -865,6 +995,22 @@
               "type": "string",
               "title": "Case Id"
             }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
           }
         ],
         "requestBody": {
@@ -916,6 +1062,22 @@
             "schema": {
               "type": "string",
               "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
             }
           }
         ],

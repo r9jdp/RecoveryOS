@@ -1468,7 +1468,9 @@ export interface operations {
   update_policy_settings_v1_policy_settings_put: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -1654,7 +1656,9 @@ export interface operations {
   execute_operator_command_v1_recovery_cases__case_id__commands_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1689,7 +1693,9 @@ export interface operations {
   record_safety_disposition_v1_recovery_cases__case_id__safety_dispositions_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1724,7 +1730,9 @@ export interface operations {
   recommend_recovery_action_v1_recovery_cases__case_id__actions_recommend_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1759,7 +1767,9 @@ export interface operations {
   approve_recovery_action_v1_recovery_cases__case_id__actions__action_id__approve_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
         action_id: string;
@@ -1791,7 +1801,9 @@ export interface operations {
   reject_recovery_action_v1_recovery_cases__case_id__actions__action_id__reject_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
         action_id: string;
@@ -1827,7 +1839,9 @@ export interface operations {
   stop_recovery_case_v1_recovery_cases__case_id__stop_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1862,7 +1876,9 @@ export interface operations {
   escalate_recovery_case_v1_recovery_cases__case_id__escalate_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1897,7 +1913,9 @@ export interface operations {
   open_mock_payment_surface_v1_mock_recovery_cases__case_id__payment_surfaces_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
@@ -1932,7 +1950,9 @@ export interface operations {
   apply_mock_payment_success_v1_mock_recovery_cases__case_id__payment_success_post: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
