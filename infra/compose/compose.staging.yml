@@ -6,6 +6,8 @@ services:
       resources:
         limits:
           memory: 768m
+          cpus: "0.75"
+          pids: 256
   worker:
     environment:
       APP_ENV: staging
@@ -13,6 +15,8 @@ services:
       resources:
         limits:
           memory: 1g
+          cpus: "1.00"
+          pids: 256
   customer-agent:
     environment:
       APP_ENV: staging
@@ -20,3 +24,12 @@ services:
       resources:
         limits:
           memory: 512m
+          cpus: "0.50"
+          pids: 192
+  edge-gateway:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
+          pids: 64

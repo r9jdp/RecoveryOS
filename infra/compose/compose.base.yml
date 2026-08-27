@@ -12,7 +12,6 @@ x-python-service: &python-service
     - /tmp:size=64m,mode=1777
   networks:
     - backend
-    - edge
   logging:
     driver: json-file
     options:
@@ -42,11 +41,6 @@ services:
       start_period: 20s
       retries: 3
     stop_grace_period: 30s
-    networks:
-      backend: {}
-      edge:
-        aliases:
-          - ${STACK_SLUG}-api
 
   worker:
     <<: *python-service
@@ -89,11 +83,42 @@ services:
       start_period: 20s
       retries: 3
     stop_grace_period: 30s
+
+  edge-gateway:
+    image: haproxy:3.2.22-alpine@sha256:79799e8b2977e60802774fa53d29e6b54e045402cdd8a8b9fe43923e7095a047
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - ../haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      customer-agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "haproxy", "-c", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
     networks:
       backend: {}
       edge:
         aliases:
+          - ${STACK_SLUG}-api
           - ${STACK_SLUG}-customer-agent
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
 
 networks:
   backend:

@@ -1,0 +1,15 @@
+[Unit]
+Description=Probe RecoveryOS public health surfaces
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=recoveryos
+Group=recoveryos
+EnvironmentFile=/etc/recoveryos/monitoring.env
+ExecStart=/bin/bash /opt/recoveryos/current/deploy/scripts/monitor.sh ${API_BASE_URL} ${CUSTOMER_AGENT_BASE_URL}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict

@@ -49,18 +49,33 @@ variable "instance_ocpus" {
   description = "Ampere A1 OCPUs. Keep total tenancy usage within Always Free limits."
   type        = number
   default     = 2
+
+  validation {
+    condition     = var.instance_ocpus >= 1 && var.instance_ocpus <= 4
+    error_message = "instance_ocpus must remain between 1 and the Always Free A1 tenancy limit of 4."
+  }
 }
 
 variable "instance_memory_gb" {
   description = "Ampere A1 memory in GiB. Twelve GiB supports staging and production on one VM."
   type        = number
   default     = 12
+
+  validation {
+    condition     = var.instance_memory_gb >= 6 && var.instance_memory_gb <= 24
+    error_message = "instance_memory_gb must remain between 6 and the Always Free A1 tenancy limit of 24 GiB."
+  }
 }
 
 variable "boot_volume_size_gb" {
   description = "Boot volume size in GiB. Confirm aggregate block-volume use remains free eligible."
   type        = number
   default     = 50
+
+  validation {
+    condition     = var.boot_volume_size_gb >= 50 && var.boot_volume_size_gb <= 200
+    error_message = "boot_volume_size_gb must remain within the OCI 50-200 GiB boot-volume range and free-tier aggregate budget."
+  }
 }
 
 variable "vcn_cidr" {
