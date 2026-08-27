@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType
+from services.api.app.domain.enums import (
+    ActionStatus,
+    PaymentSurfaceType,
+    PolicyDisposition,
+)
+from services.api.app.models import PolicyDecisionRecord, RecoveryActionRecord
 from services.api.app.providers.contracts import (
     OpenPaymentSurfaceRequest,
     PaymentSnapshot,
@@ -14,9 +20,14 @@ from services.api.app.providers.contracts import (
     RecoveryScoreRequest,
     RecoveryScoreResult,
 )
+from services.api.app.repositories import CaseRepository
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
-from services.worker.app.contracts import CancelActionInput, ExecuteActionInput
+from services.api.app.services.cases import RecoveryCaseService
+from services.api.app.services.mock_payment import MockPaymentProvider
+from services.worker.app.contracts import CancelActionInput, ExecuteActionInput, PolicyInput
 from services.worker.app.runtime import ProductionRecoveryActivityServices
+
+TEST_NOW = datetime(2026, 8, 27, 11, 0, tzinfo=UTC)
 
 
 class RecordingPaymentProvider:
@@ -38,6 +49,26 @@ class RecordingPaymentProvider:
         self, *, merchant_id: str, payment_id: str | None, invoice_id: str
     ) -> PaymentSnapshot:
         raise AssertionError("not used")
+
+
+class BlockingPaymentProvider(RecordingPaymentProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def open_customer_payment_surface(
+        self, request: OpenPaymentSurfaceRequest
+    ) -> PaymentSurfaceResult:
+        self.requests.append(request)
+        self.started.set()
+        await self.release.wait()
+        return PaymentSurfaceResult(
+            provider="mock-recording",
+            provider_reference="surface-authorized",
+            surface_type=request.surface_type,
+            customer_url="https://mock.invalid/surface-authorized",
+        )
 
 
 class FixedScorer:
@@ -93,7 +124,39 @@ def payment_command() -> ExecuteActionInput:
     )
 
 
-async def test_provider_submission_requires_durable_operator_authorization(
+def policy_command() -> PolicyInput:
+    return PolicyInput(
+        case_id=FITBOX_CASE_ID,
+        merchant_id="merchant_fitbox",
+        amount_at_risk_paise=149_900,
+        diagnosis="AUTHENTICATION_REQUIRED",
+        candidate_action="OPEN_CUSTOMER_PAYMENT_SURFACE",
+        payment_surface_type="SUBSCRIPTION_CARD_UPDATE",
+        recovery_deadline=(TEST_NOW + timedelta(hours=1)).isoformat(),
+    )
+
+
+async def action_and_policy(
+    session: AsyncSession,
+) -> tuple[RecoveryActionRecord, PolicyDecisionRecord]:
+    from sqlalchemy import select
+
+    action = await session.scalar(
+        select(RecoveryActionRecord).where(
+            RecoveryActionRecord.case_id == FITBOX_CASE_ID,
+            RecoveryActionRecord.payment_surface_type
+            == PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
+        )
+    )
+    assert action is not None
+    policy = await session.scalar(
+        select(PolicyDecisionRecord).where(PolicyDecisionRecord.action_id == action.id)
+    )
+    assert policy is not None
+    return action, policy
+
+
+async def test_persisted_allow_policy_authorizes_once_without_synthetic_manual_policy(
     session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async with session_factory() as session:
@@ -103,34 +166,150 @@ async def test_provider_submission_requires_durable_operator_authorization(
     services = ProductionRecoveryActivityServices(
         payment_provider=provider,
         scorer=FixedScorer(),
+        clock=lambda: TEST_NOW,
     )
 
-    unauthorized = await services.execute_recovery_action(payment_command())
-    assert unauthorized.status == "REJECTED"
-    assert unauthorized.reason_code == "ACTION_NOT_AUTHORIZED"
-    assert provider.requests == []
-
-    async with session_factory() as session:
-        from sqlalchemy import select
-
-        from services.api.app.models import RecoveryActionRecord
-
-        action = await session.scalar(
-            select(RecoveryActionRecord).where(
-                RecoveryActionRecord.case_id == FITBOX_CASE_ID,
-                RecoveryActionRecord.payment_surface_type
-                == PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
-            )
-        )
-        assert action is not None
-        action.status = ActionStatus.SCHEDULED
-        await session.commit()
-
+    policy = await services.evaluate_policy(policy_command())
     submitted = await services.execute_recovery_action(payment_command())
     duplicate = await services.execute_recovery_action(payment_command())
 
+    assert policy.disposition == "ALLOW"
+    assert policy.decision_code == "POLICY_ALLOWED"
     assert submitted.status == duplicate.status == "SUCCEEDED"
     assert submitted.provider_reference == duplicate.provider_reference == "surface-authorized"
+    assert len(provider.requests) == 1
+
+
+async def test_future_delay_is_rejected_until_both_policy_and_action_are_due(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    due_at = TEST_NOW + timedelta(minutes=15)
+    async with session_factory() as session:
+        await seed_fitbox(session)
+        action, policy = await action_and_policy(session)
+        action.status = ActionStatus.SCHEDULED
+        action.scheduled_for = due_at
+        policy.disposition = PolicyDisposition.DELAY
+        policy.decision_code = "QUIET_HOURS"
+        policy.delay_until = due_at
+        await session.commit()
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    instants = [TEST_NOW]
+    provider = RecordingPaymentProvider()
+    services = ProductionRecoveryActivityServices(
+        payment_provider=provider,
+        scorer=FixedScorer(),
+        clock=lambda: instants[0],
+    )
+
+    durable_policy = await services.evaluate_policy(policy_command())
+    early = await services.execute_recovery_action(payment_command())
+    instants[0] = due_at
+    due = await services.execute_recovery_action(payment_command())
+
+    assert durable_policy.disposition == "DELAY"
+    assert durable_policy.delay_until == due_at.isoformat()
+    assert early.status == "REJECTED"
+    assert early.reason_code == "ACTION_NOT_DUE"
+    assert due.status == "SUCCEEDED"
+    assert len(provider.requests) == 1
+
+
+async def test_explicit_approval_does_not_bypass_a_future_schedule(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    due_at = TEST_NOW + timedelta(minutes=10)
+    async with session_factory() as session:
+        await seed_fitbox(session)
+        action, policy = await action_and_policy(session)
+        action.status = ActionStatus.AWAITING_APPROVAL
+        action.scheduled_for = due_at
+        policy.disposition = PolicyDisposition.REQUIRE_MANUAL_APPROVAL
+        policy.decision_code = "AMOUNT_REQUIRES_APPROVAL"
+        await session.commit()
+
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    instants = [TEST_NOW]
+    provider = RecordingPaymentProvider()
+    services = ProductionRecoveryActivityServices(
+        payment_provider=provider,
+        scorer=FixedScorer(),
+        clock=lambda: instants[0],
+    )
+    before_approval = await services.execute_recovery_action(payment_command())
+
+    async with session_factory() as session:
+        service = RecoveryCaseService(CaseRepository(session), MockPaymentProvider())
+        approved = await service.approve_action(
+            merchant_id="merchant_fitbox",
+            case_id=FITBOX_CASE_ID,
+            action_id=action.id,
+            now=TEST_NOW,
+        )
+        assert approved.status == ActionStatus.SCHEDULED
+        assert approved.scheduled_for == due_at
+
+    early = await services.execute_recovery_action(payment_command())
+    instants[0] = due_at
+    due = await services.execute_recovery_action(payment_command())
+
+    assert before_approval.reason_code == "ACTION_NOT_AUTHORIZED"
+    assert early.reason_code == "ACTION_NOT_DUE"
+    assert due.status == "SUCCEEDED"
+    assert len(provider.requests) == 1
+
+
+async def test_persisted_block_cannot_be_overridden_by_scheduled_status(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with session_factory() as session:
+        await seed_fitbox(session)
+        action, policy = await action_and_policy(session)
+        action.status = ActionStatus.SCHEDULED
+        policy.disposition = PolicyDisposition.BLOCK
+        policy.decision_code = "MERCHANT_KILL_SWITCH"
+        await session.commit()
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    provider = RecordingPaymentProvider()
+    services = ProductionRecoveryActivityServices(
+        payment_provider=provider,
+        scorer=FixedScorer(),
+        clock=lambda: TEST_NOW,
+    )
+
+    durable_policy = await services.evaluate_policy(policy_command())
+    result = await services.execute_recovery_action(payment_command())
+
+    assert durable_policy.disposition == "BLOCK"
+    assert durable_policy.decision_code == "MERCHANT_KILL_SWITCH"
+    assert result.status == "REJECTED"
+    assert result.reason_code == "POLICY_BLOCKED"
+    assert provider.requests == []
+
+
+async def test_concurrent_claims_submit_provider_work_exactly_once(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with session_factory() as session:
+        await seed_fitbox(session)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    provider = BlockingPaymentProvider()
+    services = ProductionRecoveryActivityServices(
+        payment_provider=provider,
+        scorer=FixedScorer(),
+        clock=lambda: TEST_NOW,
+    )
+
+    first_task = asyncio.create_task(services.execute_recovery_action(payment_command()))
+    await provider.started.wait()
+    competing = await services.execute_recovery_action(payment_command())
+    provider.release.set()
+    first = await first_task
+    duplicate = await services.execute_recovery_action(payment_command())
+
+    assert first.status == duplicate.status == "SUCCEEDED"
+    assert competing.status == "UNCERTAIN"
+    assert competing.reason_code == "SUBMISSION_RECONCILIATION_REQUIRED"
     assert len(provider.requests) == 1
 
 

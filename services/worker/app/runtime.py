@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from services.api.app.db import get_session_factory
@@ -16,11 +17,13 @@ from services.api.app.domain.enums import (
     EvidenceKind,
     PaymentState,
     PaymentSurfaceType,
+    PolicyDisposition,
     RecoveryActionType,
 )
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
 from services.api.app.lab.scorer import create_recovery_scorer
 from services.api.app.models import (
+    PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
     RecoveryEventRecord,
@@ -104,9 +107,16 @@ def create_activity_services_from_env() -> RecoveryActivityServices:
 class ProductionRecoveryActivityServices:
     """Persistence-backed activity services; every provider call happens here."""
 
-    def __init__(self, *, payment_provider: PaymentProvider, scorer: RecoveryScorer) -> None:
+    def __init__(
+        self,
+        *,
+        payment_provider: PaymentProvider,
+        scorer: RecoveryScorer,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._payment_provider = payment_provider
         self._scorer = scorer
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._fallback = MockRecoveryActivityServices(require_manual_approval=True)
 
     async def normalize_failure(self, command: NormalizeFailureInput) -> NormalizedFailure:
@@ -138,9 +148,78 @@ class ProductionRecoveryActivityServices:
         )
 
     async def evaluate_policy(self, command: PolicyInput) -> PolicyResult:
-        # Manual approval remains the fail-closed production default. Merchant
-        # policy decisions are persisted before this workflow is dispatched.
-        return await self._fallback.evaluate_policy(command)
+        """Return only the action's durable merchant-policy decision.
+
+        The Temporal history carries a convenient policy result, but the database
+        remains the authorization boundary.  Missing or mismatched durable state
+        therefore fails closed instead of manufacturing a manual-approval policy.
+        """
+
+        try:
+            action_type = RecoveryActionType(command.candidate_action)
+            surface_type = (
+                PaymentSurfaceType(command.payment_surface_type)
+                if command.payment_surface_type is not None
+                else None
+            )
+        except ValueError:
+            return self._blocked_policy(command, "PERSISTED_ACTION_SCOPE_INVALID")
+
+        async with get_session_factory()() as session:
+            statement = (
+                select(RecoveryActionRecord, PolicyDecisionRecord, RecoveryCase)
+                .join(RecoveryCase, RecoveryCase.id == RecoveryActionRecord.case_id)
+                .join(
+                    PolicyDecisionRecord,
+                    PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
+                )
+                .where(
+                    RecoveryActionRecord.case_id == command.case_id,
+                    RecoveryCase.merchant_id == command.merchant_id,
+                    RecoveryActionRecord.action_type == action_type,
+                    RecoveryActionRecord.payment_surface_type == surface_type,
+                )
+                .order_by(
+                    RecoveryActionRecord.created_at.desc(),
+                    PolicyDecisionRecord.created_at.desc(),
+                )
+                .limit(1)
+            )
+            row = (await session.execute(statement)).first()
+            if row is None:
+                return self._blocked_policy(command, "PERSISTED_POLICY_NOT_FOUND")
+            action, policy, recovery_case = row._tuple()
+
+        if recovery_case.amount_at_risk_paise != command.amount_at_risk_paise:
+            return self._blocked_policy(command, "PERSISTED_CASE_SCOPE_MISMATCH")
+        delay_until = self._effective_delay(action, policy)
+        return PolicyResult(
+            disposition=policy.disposition.value,
+            decision_code=policy.decision_code,
+            action=action.action_type.value,
+            payment_surface_type=(
+                action.payment_surface_type.value if action.payment_surface_type else None
+            ),
+            reason_codes=tuple(policy.reason_codes),
+            delay_until=delay_until.isoformat() if delay_until is not None else None,
+        )
+
+    @staticmethod
+    def _blocked_policy(command: PolicyInput, decision_code: str) -> PolicyResult:
+        return PolicyResult(
+            disposition=PolicyDisposition.BLOCK.value,
+            decision_code=decision_code,
+            action=command.candidate_action,
+            payment_surface_type=command.payment_surface_type,
+            reason_codes=(decision_code,),
+        )
+
+    @staticmethod
+    def _effective_delay(
+        action: RecoveryActionRecord, policy: PolicyDecisionRecord
+    ) -> datetime | None:
+        instants = [instant for instant in (action.scheduled_for, policy.delay_until) if instant]
+        return max(instants) if instants else None
 
     async def execute_recovery_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
         if command.action in {"WAIT_FOR_GATEWAY_RETRY", "STOP", "ESCALATE_TO_HUMAN"}:
@@ -228,9 +307,15 @@ class ProductionRecoveryActivityServices:
         surface_type = PaymentSurfaceType(command.payment_surface_type)
         async with get_session_factory()() as session:
             statement = (
-                select(RecoveryActionRecord)
+                select(RecoveryActionRecord, PolicyDecisionRecord)
+                .join(RecoveryCase, RecoveryCase.id == RecoveryActionRecord.case_id)
+                .join(
+                    PolicyDecisionRecord,
+                    PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
+                )
                 .where(
                     RecoveryActionRecord.case_id == command.case_id,
+                    RecoveryCase.merchant_id == command.merchant_id,
                     RecoveryActionRecord.action_type
                     == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
                     RecoveryActionRecord.payment_surface_type == surface_type,
@@ -238,13 +323,14 @@ class ProductionRecoveryActivityServices:
                 .order_by(RecoveryActionRecord.created_at.desc())
                 .with_for_update()
             )
-            action = (await session.execute(statement)).scalars().first()
-            if action is None:
+            row = (await session.execute(statement)).first()
+            if row is None:
                 return ActionExecutionResult(
                     status="REJECTED",
                     provider="none",
-                    reason_code="ACTION_RECORD_NOT_FOUND",
+                    reason_code="PERSISTED_POLICY_NOT_FOUND",
                 )
+            action, policy = row._tuple()
             if action.status == ActionStatus.SUCCEEDED:
                 return ActionExecutionResult(
                     status="SUCCEEDED",
@@ -260,20 +346,76 @@ class ProductionRecoveryActivityServices:
                     provider_reference=action.external_reference,
                     reason_code="SUBMISSION_RECONCILIATION_REQUIRED",
                 )
+            if policy.disposition == PolicyDisposition.BLOCK:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="POLICY_BLOCKED",
+                )
             if action.status == ActionStatus.CANCELLED:
                 return ActionExecutionResult(
                     status="REJECTED",
                     provider="none",
                     reason_code="ACTION_CANCELLED",
                 )
-            if action.status != ActionStatus.SCHEDULED:
+
+            claimable_statuses = {
+                PolicyDisposition.ALLOW: {ActionStatus.PROPOSED, ActionStatus.SCHEDULED},
+                PolicyDisposition.DELAY: {ActionStatus.SCHEDULED},
+                PolicyDisposition.REQUIRE_MANUAL_APPROVAL: {ActionStatus.SCHEDULED},
+            }.get(policy.disposition, set())
+            if action.status not in claimable_statuses:
                 return ActionExecutionResult(
                     status="REJECTED",
                     provider="none",
                     reason_code="ACTION_NOT_AUTHORIZED",
                 )
-            action.status = ActionStatus.EXECUTING
+
+            claimed_at = self._clock()
+            if claimed_at.tzinfo is None or claimed_at.utcoffset() is None:
+                raise ValueError("activity clock must return an offset-aware instant")
+            due_at = self._effective_delay(action, policy)
+            if due_at is not None and claimed_at < due_at:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_NOT_DUE",
+                )
+
+            original_status = action.status
+            claimed_action_id = await session.scalar(
+                update(RecoveryActionRecord)
+                .where(
+                    RecoveryActionRecord.id == action.id,
+                    RecoveryActionRecord.status == original_status,
+                    or_(
+                        RecoveryActionRecord.scheduled_for.is_(None),
+                        RecoveryActionRecord.scheduled_for <= claimed_at,
+                    ),
+                )
+                .values(status=ActionStatus.EXECUTING, updated_at=claimed_at)
+                .returning(RecoveryActionRecord.id)
+                .execution_options(synchronize_session=False)
+            )
+            if claimed_action_id != action.id:
+                await session.rollback()
+                current = await session.get(RecoveryActionRecord, action.id)
+                if current is not None and current.status == ActionStatus.SUCCEEDED:
+                    return ActionExecutionResult(
+                        status="SUCCEEDED",
+                        provider="persisted",
+                        provider_reference=current.external_reference,
+                        customer_url=current.customer_url,
+                        reason_code="ALREADY_EXECUTED",
+                    )
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="unknown",
+                    provider_reference=current.external_reference if current else None,
+                    reason_code="SUBMISSION_RECONCILIATION_REQUIRED",
+                )
             await session.commit()
+            action.status = ActionStatus.EXECUTING
             return action
 
     async def reconcile_case(self, command: ReconciliationInput) -> ReconciliationResult:
