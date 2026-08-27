@@ -1,0 +1,305 @@
+@import "../../../styles/tokens.css";
+
+.canvas {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  color: var(--ros-ink);
+  background:
+    radial-gradient(
+      circle at 10% 10%,
+      rgb(208 224 255 / 62%),
+      transparent 30rem
+    ),
+    linear-gradient(180deg, #f8faff 0%, var(--ros-canvas) 44%);
+}
+
+.header {
+  width: min(74rem, calc(100% - 3rem));
+  min-height: 5rem;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ros-space-4);
+  border-bottom: 1px solid rgb(223 227 233 / 75%);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ros-space-3);
+  color: var(--ros-ink);
+  font: 750 var(--ros-text-lg) / 1 var(--ros-font-display);
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand:focus-visible,
+.confirmation:has(input:focus-visible) {
+  outline: none;
+  box-shadow: var(--ros-shadow-focus);
+}
+
+.brandMark {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.7rem 0.2rem 0.7rem 0.2rem;
+  color: white;
+  background: var(--ros-brand);
+  box-shadow: 0 8px 20px rgb(48 94 255 / 25%);
+}
+
+.stage {
+  width: min(42rem, calc(100% - 2rem));
+  margin: clamp(2rem, 6vw, 5rem) auto;
+  align-self: center;
+}
+
+.approvalCard,
+.stateCard,
+.loadingCard {
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-lg);
+  background: rgb(255 255 255 / 96%);
+  box-shadow: var(--ros-shadow-md);
+}
+
+.approvalCard {
+  padding: clamp(1.5rem, 5vw, 3rem);
+}
+
+.eyebrow {
+  margin-bottom: var(--ros-space-3);
+  color: var(--ros-brand);
+  font-size: var(--ros-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.approvalCard h1,
+.stateCard h1 {
+  margin: 0;
+  color: var(--ros-ink-secondary);
+  font: 750 var(--ros-text-2xl) / 1.1 var(--ros-font-display);
+  letter-spacing: -0.035em;
+}
+
+.intro {
+  margin: var(--ros-space-4) 0 var(--ros-space-6);
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-md);
+  line-height: 1.65;
+}
+
+.summary {
+  margin: var(--ros-space-6) 0;
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-md);
+  overflow: hidden;
+}
+
+.summary > div {
+  min-height: 3.5rem;
+  padding: var(--ros-space-3) var(--ros-space-4);
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.7fr) 1fr;
+  align-items: center;
+  gap: var(--ros-space-4);
+  border-bottom: 1px solid var(--ros-border);
+}
+
+.summary > div:last-child {
+  border-bottom: 0;
+}
+
+.summary dt {
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-sm);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--ros-ink-secondary);
+  font-size: var(--ros-text-sm);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.summary .amountRow {
+  background: var(--ros-info-soft);
+}
+
+.amountRow dd {
+  color: var(--ros-ink-secondary);
+  font: 750 var(--ros-text-xl) / 1 var(--ros-font-display);
+}
+
+.mono {
+  font-family: var(--ros-font-mono);
+}
+
+.safetyPanel {
+  padding: var(--ros-space-5);
+  border-left: 3px solid var(--ros-brand);
+  border-radius: 0 var(--ros-radius-sm) var(--ros-radius-sm) 0;
+  background: var(--ros-surface-subtle);
+}
+
+.safetyPanel h2 {
+  margin: 0 0 var(--ros-space-3);
+  font: 750 var(--ros-text-md) / 1.3 var(--ros-font-display);
+}
+
+.safetyPanel ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-sm);
+  line-height: 1.6;
+}
+
+.safetyPanel li + li {
+  margin-top: var(--ros-space-2);
+}
+
+.confirmation {
+  margin: var(--ros-space-6) 0;
+  padding: var(--ros-space-4);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ros-space-3);
+  border: 1px solid var(--ros-border-strong);
+  border-radius: var(--ros-radius-sm);
+  color: var(--ros-ink-secondary);
+  font-size: var(--ros-text-sm);
+  font-weight: 700;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.confirmation input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.15rem 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--ros-brand);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: var(--ros-space-3);
+}
+
+.footnote {
+  margin: var(--ros-space-4) 0 0;
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-xs);
+  text-align: center;
+}
+
+.stateCard,
+.loadingCard {
+  padding: clamp(2rem, 7vw, 4rem);
+  display: grid;
+  justify-items: center;
+  gap: var(--ros-space-5);
+  text-align: center;
+}
+
+.stateCard p,
+.loadingCard p {
+  max-width: 31rem;
+  margin: 0;
+  color: var(--ros-text-muted);
+  line-height: 1.65;
+}
+
+.stateIcon,
+.successIcon {
+  width: 4rem;
+  height: 4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.stateIcon {
+  color: var(--ros-danger);
+  background: var(--ros-danger-soft);
+}
+
+.successIcon {
+  color: var(--ros-success);
+  background: var(--ros-success-soft);
+}
+
+.spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid var(--ros-brand-soft);
+  border-top-color: var(--ros-brand);
+  border-radius: 50%;
+  animation: spin 700ms linear infinite;
+}
+
+.footer {
+  padding: var(--ros-space-6);
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-xs);
+  text-align: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 40rem) {
+  .header {
+    width: calc(100% - 2rem);
+  }
+
+  .header :global(.badge) {
+    display: none;
+  }
+
+  .stage {
+    margin-block: 1.5rem;
+  }
+
+  .approvalCard {
+    border-radius: var(--ros-radius-md);
+  }
+
+  .summary > div {
+    grid-template-columns: 1fr;
+    gap: var(--ros-space-1);
+  }
+
+  .summary dd {
+    text-align: left;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .actions button:last-child {
+    grid-row: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.5s;
+  }
+}

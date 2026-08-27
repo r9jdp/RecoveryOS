@@ -28,7 +28,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     SERVICE_NAME=recoveryos-customer-agent \
     API_HOST=0.0.0.0 \
     API_PORT=8010
-WORKDIR /workspace/services/customer_agent
+WORKDIR /workspace/services/customer-agent
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder --chown=recoveryos:recoveryos /workspace/packages /workspace/packages
