@@ -168,16 +168,14 @@ class ProductionRecoveryActivityServices:
         expires_at: datetime | None = None
         notes: dict[str, str] = {}
         if surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
-            reference_id = (
-                "rec_" + hashlib.sha256(command.idempotency_key.encode()).hexdigest()[:32]
-            )
+            reference_id = "rec_" + hashlib.sha256(action.idempotency_key.encode()).hexdigest()[:32]
             expires_at = deadline
             notes = {"case_id": command.case_id, "invoice_id": command.failed_invoice_id}
 
         try:
             result = await self._payment_provider.open_customer_payment_surface(
                 OpenPaymentSurfaceRequest(
-                    idempotency_key=command.idempotency_key,
+                    idempotency_key=action.idempotency_key,
                     case_id=command.case_id,
                     merchant_id=command.merchant_id,
                     customer_id=command.customer_id,
@@ -250,7 +248,7 @@ class ProductionRecoveryActivityServices:
             if action.status == ActionStatus.SUCCEEDED:
                 return ActionExecutionResult(
                     status="SUCCEEDED",
-                    provider=("razorpay" if action.external_reference else "workflow"),
+                    provider="persisted",
                     provider_reference=action.external_reference,
                     customer_url=action.customer_url,
                     reason_code="ALREADY_EXECUTED",
