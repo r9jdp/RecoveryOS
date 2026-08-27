@@ -1,4 +1,3 @@
-"""RecoveryOS evaluation and model tooling."""
 """Offline model-development packages for RecoveryOS.
 
 Nothing in this package is required by the production recovery loop.  Provider

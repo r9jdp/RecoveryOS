@@ -3,10 +3,63 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC
+from typing import Annotated, Any
 
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, Depends, Header
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
+from services.api.app.integrations.a2a.client import (
+    RECOVERY_MANDATE_EXTENSION_URI,
+    A2ACustomerAgentClient,
+    CustomerAgentProtocolError,
+)
+from services.api.app.providers.contracts import (
+    CustomerAgentRecoveryRequest,
+    CustomerAgentTask,
+)
 
 router = APIRouter(tags=["a2a"])
+
+
+def _truthy(value: str | None) -> bool:
+    return value is not None and value.casefold() in {"1", "true", "yes", "on"}
+
+
+def get_customer_agent_client() -> A2ACustomerAgentClient:
+    return A2ACustomerAgentClient(
+        origin=os.getenv("CUSTOMER_AGENT_ORIGIN", "http://localhost:8010")
+    )
+
+
+CustomerAgentDependency = Annotated[A2ACustomerAgentClient, Depends(get_customer_agent_client)]
+
+
+def _rpc_error(request_id: str | int | None, code: int, message: str) -> JSONResponse:
+    return JSONResponse(
+        {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    )
+
+
+def _task_result(task: CustomerAgentTask) -> dict[str, object]:
+    state = f"TASK_STATE_{task.state}"
+    artifacts: list[dict[str, object]] = []
+    if task.artifact is not None:
+        artifacts.append(
+            {
+                "artifactId": str(task.artifact.get("mandate_id", task.remote_task_id)),
+                "name": "Customer authorization artifact",
+                "parts": [{"data": task.artifact}],
+            }
+        )
+    return {
+        "id": task.remote_task_id,
+        "status": {"state": state, "timestamp": task.updated_at.astimezone(UTC).isoformat()},
+        "artifacts": artifacts,
+        "metadata": {"delegatedBy": "RecoveryOS", "updatedAt": task.updated_at.isoformat()},
+    }
 
 
 @router.get("/.well-known/agent-card.json", include_in_schema=False)
@@ -51,3 +104,63 @@ async def recovery_agent_card() -> dict[str, object]:
         "securitySchemes": {},
         "security": [],
     }
+
+
+@router.post("/a2a/rpc", include_in_schema=False)
+async def recovery_agent_rpc(
+    payload: dict[str, Any],
+    client: CustomerAgentDependency,
+    a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
+    a2a_extensions: Annotated[str | None, Header(alias="A2A-Extensions")] = None,
+) -> JSONResponse:
+    """Delegate bounded authorization tasks without executing a payment."""
+
+    request_id = payload.get("id")
+    safe_request_id = request_id if isinstance(request_id, (str, int)) else None
+    if a2a_version != "1.0":
+        return _rpc_error(safe_request_id, -32008, "A2A protocol version is not supported")
+    extensions = {value.strip() for value in (a2a_extensions or "").split(",") if value.strip()}
+    if RECOVERY_MANDATE_EXTENSION_URI not in extensions:
+        return _rpc_error(safe_request_id, -32009, "Recovery mandate extension support is required")
+    if not _truthy(os.getenv("A2A_ENABLED")):
+        return _rpc_error(safe_request_id, -32004, "A2A delegation is disabled")
+    if payload.get("jsonrpc") != "2.0":
+        return _rpc_error(safe_request_id, -32600, "Invalid JSON-RPC request")
+
+    method = payload.get("method")
+    params = payload.get("params")
+    if not isinstance(params, dict):
+        return _rpc_error(safe_request_id, -32602, "Invalid params")
+    try:
+        if method == "SendMessage":
+            message = params.get("message")
+            if not isinstance(message, dict):
+                raise ValueError("SendMessage params.message is required")
+            parts = message.get("parts")
+            if not isinstance(parts, list) or not parts or not isinstance(parts[0], dict):
+                raise ValueError("SendMessage requires a DataPart")
+            data = parts[0].get("data")
+            request = CustomerAgentRecoveryRequest.model_validate(data)
+            task = await client.send_recovery_request(request)
+            result: dict[str, object] = {"task": _task_result(task)}
+        elif method == "GetTask":
+            task_id = params.get("id")
+            if not isinstance(task_id, str) or not task_id:
+                raise ValueError("GetTask params.id is required")
+            task = await client.get_task(remote_task_id=task_id)
+            result = _task_result(task)
+        elif method == "CancelTask":
+            task_id = params.get("id")
+            reason = params.get("reason")
+            if not isinstance(task_id, str) or not task_id or not isinstance(reason, str):
+                raise ValueError("CancelTask requires params.id and params.reason")
+            task = await client.cancel_task(remote_task_id=task_id, reason=reason)
+            result = _task_result(task)
+        else:
+            return _rpc_error(safe_request_id, -32601, "Method not found")
+    except (ValidationError, ValueError) as exc:
+        return _rpc_error(safe_request_id, -32602, str(exc))
+    except (CustomerAgentProtocolError, httpx.HTTPError):
+        return _rpc_error(safe_request_id, -32003, "Customer agent delegation failed")
+
+    return JSONResponse({"jsonrpc": "2.0", "id": safe_request_id, "result": result})

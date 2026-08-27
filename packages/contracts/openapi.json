@@ -953,6 +953,432 @@
         }
       }
     },
+    "/v1/lab/reports/latest": {
+      "get": {
+        "tags": [
+          "lab"
+        ],
+        "summary": "Get Latest Report",
+        "operationId": "get_latest_report_v1_lab_reports_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/lab/reports/{version}": {
+      "get": {
+        "tags": [
+          "lab"
+        ],
+        "summary": "Get Versioned Report",
+        "operationId": "get_versioned_report_v1_lab_reports__version__get",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/contacts": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Start Voice Contact",
+        "operationId": "start_voice_contact_v1_voice_contacts_post",
+        "parameters": [
+          {
+            "name": "x-recovery-operator-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recovery-Operator-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartVoiceContactRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartVoiceContactResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/cases/{case_id}/timeline": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Voice Timeline",
+        "operationId": "voice_timeline_v1_voice_cases__case_id__timeline_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceTimelineResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/contacts/{attempt_id}/browser-transcript": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Browser Transcript",
+        "operationId": "browser_transcript_v1_voice_contacts__attempt_id__browser_transcript_post",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "x-voice-event-id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "X-Voice-Event-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserTranscriptRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserTranscriptResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/twiml/{attempt_id}": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Twiml For Elevenlabs",
+        "operationId": "twiml_for_elevenlabs_v1_voice_twiml__attempt_id__post",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "x-twilio-signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Twilio-Signature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/webhooks/twilio/status": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Twilio Status Webhook",
+        "operationId": "twilio_status_webhook_v1_voice_webhooks_twilio_status_post",
+        "parameters": [
+          {
+            "name": "attempt_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "name": "x-twilio-signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Twilio-Signature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcceptedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/webhooks/elevenlabs/post-call": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Elevenlabs Post Call Webhook",
+        "operationId": "elevenlabs_post_call_webhook_v1_voice_webhooks_elevenlabs_post_call_post",
+        "parameters": [
+          {
+            "name": "ElevenLabs-Signature",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Elevenlabs-Signature"
+            }
+          },
+          {
+            "name": "ElevenLabs-Timestamp",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Elevenlabs-Timestamp"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcceptedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/intents": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Supported Voice Intents",
+        "operationId": "supported_voice_intents_v1_voice_intents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response Supported Voice Intents V1 Voice Intents Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -997,6 +1423,58 @@
           "policy"
         ],
         "title": "ActionDecisionResponse"
+      },
+      "ActionRecovery": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "case_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Case Count"
+          },
+          "treatment_recovered_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Treatment Recovered Count"
+          },
+          "baseline_recovered_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Baseline Recovered Count"
+          },
+          "mean_predicted_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Mean Predicted Probability"
+          },
+          "observed_treatment_recovery_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Observed Treatment Recovery Rate"
+          },
+          "simulated_incremental_recovery_paise": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Simulated Incremental Recovery Paise"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "case_count",
+          "treatment_recovered_count",
+          "baseline_recovered_count",
+          "mean_predicted_probability",
+          "observed_treatment_recovery_rate",
+          "simulated_incremental_recovery_paise"
+        ],
+        "title": "ActionRecovery"
       },
       "ActionResponse": {
         "properties": {
@@ -1104,6 +1582,152 @@
           "CANCELLED"
         ],
         "title": "ActionStatus"
+      },
+      "ArtifactMetadata": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "artifact_version": {
+            "type": "string",
+            "title": "Artifact Version"
+          },
+          "artifact_checksum": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Artifact Checksum"
+          },
+          "model_type": {
+            "type": "string",
+            "title": "Model Type"
+          },
+          "feature_columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Feature Columns"
+          },
+          "categorical_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categorical Features"
+          },
+          "training_seed": {
+            "type": "integer",
+            "title": "Training Seed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "artifact_version",
+          "artifact_checksum",
+          "model_type",
+          "feature_columns",
+          "categorical_features",
+          "training_seed"
+        ],
+        "title": "ArtifactMetadata"
+      },
+      "BrowserTranscriptRequest": {
+        "properties": {
+          "transcript": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Transcript"
+          },
+          "confidence_basis_points": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Confidence Basis Points",
+            "default": 10000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "transcript"
+        ],
+        "title": "BrowserTranscriptRequest"
+      },
+      "BrowserTranscriptResponse": {
+        "properties": {
+          "detected_intent": {
+            "type": "string",
+            "title": "Detected Intent"
+          },
+          "disposition": {
+            "type": "string",
+            "title": "Disposition"
+          },
+          "contact_must_end": {
+            "type": "boolean",
+            "title": "Contact Must End"
+          },
+          "suppression_persisted": {
+            "type": "boolean",
+            "title": "Suppression Persisted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "detected_intent",
+          "disposition",
+          "contact_must_end",
+          "suppression_persisted"
+        ],
+        "title": "BrowserTranscriptResponse"
+      },
+      "CalibrationBucket": {
+        "properties": {
+          "lower_bound": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Lower Bound"
+          },
+          "upper_bound": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Upper Bound"
+          },
+          "case_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Case Count"
+          },
+          "mean_predicted_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Mean Predicted Probability"
+          },
+          "observed_recovery_rate": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Observed Recovery Rate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lower_bound",
+          "upper_bound",
+          "case_count",
+          "mean_predicted_probability",
+          "observed_recovery_rate"
+        ],
+        "title": "CalibrationBucket"
       },
       "CaseCommandRequest": {
         "properties": {
@@ -1516,6 +2140,54 @@
         ],
         "title": "DashboardResponse"
       },
+      "DatasetSummary": {
+        "properties": {
+          "generator_version": {
+            "type": "string",
+            "title": "Generator Version"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "total_case_count": {
+            "type": "integer",
+            "minimum": 100.0,
+            "title": "Total Case Count"
+          },
+          "training_case_count": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Training Case Count"
+          },
+          "calibration_case_count": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Calibration Case Count"
+          },
+          "evaluation_case_count": {
+            "type": "integer",
+            "minimum": 100.0,
+            "title": "Evaluation Case Count"
+          },
+          "cohort_design": {
+            "type": "string",
+            "title": "Cohort Design"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generator_version",
+          "seed",
+          "total_case_count",
+          "training_case_count",
+          "calibration_case_count",
+          "evaluation_case_count",
+          "cohort_design"
+        ],
+        "title": "DatasetSummary"
+      },
       "Diagnosis": {
         "type": "string",
         "enum": [
@@ -1698,6 +2370,137 @@
           "invoice_state"
         ],
         "title": "InvoiceResponse"
+      },
+      "LabGuardrails": {
+        "properties": {
+          "merchant_revenue_mutated": {
+            "type": "boolean",
+            "title": "Merchant Revenue Mutated"
+          },
+          "production_artifact_required": {
+            "type": "boolean",
+            "title": "Production Artifact Required"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "merchant_revenue_mutated",
+          "production_artifact_required",
+          "label"
+        ],
+        "title": "LabGuardrails"
+      },
+      "LabReport": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "report_version": {
+            "type": "string",
+            "title": "Report Version"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "evidence_kind": {
+            "type": "string",
+            "title": "Evidence Kind"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactMetadata"
+          },
+          "dataset": {
+            "$ref": "#/components/schemas/DatasetSummary"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/MetricSummary"
+          },
+          "guardrails": {
+            "$ref": "#/components/schemas/LabGuardrails"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "report_version",
+          "generated_at",
+          "title",
+          "evidence_kind",
+          "artifact",
+          "dataset",
+          "metrics",
+          "guardrails"
+        ],
+        "title": "LabReport"
+      },
+      "MetricSummary": {
+        "properties": {
+          "pr_auc": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Pr Auc"
+          },
+          "brier_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Brier Score"
+          },
+          "top_decile_lift": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Top Decile Lift"
+          },
+          "amount_weighted_lift": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Amount Weighted Lift"
+          },
+          "calibration": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationBucket"
+            },
+            "type": "array",
+            "title": "Calibration"
+          },
+          "recovery_by_action": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRecovery"
+            },
+            "type": "array",
+            "title": "Recovery By Action"
+          },
+          "simulated_incremental_recovery_paise": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Simulated Incremental Recovery Paise"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pr_auc",
+          "brier_score",
+          "top_decile_lift",
+          "amount_weighted_lift",
+          "calibration",
+          "recovery_by_action",
+          "simulated_incremental_recovery_paise"
+        ],
+        "title": "MetricSummary"
       },
       "MockPaymentSuccessRequest": {
         "properties": {
@@ -2636,6 +3439,85 @@
         ],
         "title": "SimulatedDeliveryResponse"
       },
+      "StartVoiceContactRequest": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Idempotency Key"
+          },
+          "max_duration_seconds": {
+            "type": "integer",
+            "maximum": 180.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Duration Seconds",
+            "default": 180
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "idempotency_key"
+        ],
+        "title": "StartVoiceContactRequest"
+      },
+      "StartVoiceContactResponse": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "title": "Attempt Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "REJECTED",
+              "UNCERTAIN"
+            ],
+            "title": "Status"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "provider_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Call Id"
+          },
+          "retry_permitted": {
+            "type": "boolean",
+            "const": false,
+            "title": "Retry Permitted",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "provider",
+          "status",
+          "reason_code"
+        ],
+        "title": "StartVoiceContactResponse"
+      },
       "SubscriptionResponse": {
         "properties": {
           "id": {
@@ -2801,6 +3683,148 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VoiceAttemptResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposition"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "detected_intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Intent"
+          },
+          "confidence_basis_points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Basis Points"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 180.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "disclosure_delivered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclosure Delivered At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "status",
+          "disposition",
+          "transcript",
+          "detected_intent",
+          "disclosure_delivered_at",
+          "created_at"
+        ],
+        "title": "VoiceAttemptResponse"
+      },
+      "VoiceTimelineResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VoiceAttemptResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "VoiceTimelineResponse"
+      },
+      "WebhookAcceptedResponse": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true,
+            "title": "Accepted",
+            "default": true
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "duplicate"
+        ],
+        "title": "WebhookAcceptedResponse"
       }
     }
   }

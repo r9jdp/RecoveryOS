@@ -27,7 +27,7 @@ class FakeProvider:
             provider="twilio",
             contact_attempt_id=request.idempotency_key,
             provider_call_id=None if self.status == "UNCERTAIN" else "CA123",
-            status=self.status,  # type: ignore[arg-type]
+            status=self.status,
             reason_code="UNCERTAIN" if self.status == "UNCERTAIN" else None,
         )
 

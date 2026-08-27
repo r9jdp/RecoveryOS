@@ -306,6 +306,159 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/lab/reports/latest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Latest Report */
+    get: operations["get_latest_report_v1_lab_reports_latest_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/lab/reports/{version}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Versioned Report */
+    get: operations["get_versioned_report_v1_lab_reports__version__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/contacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Start Voice Contact */
+    post: operations["start_voice_contact_v1_voice_contacts_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/cases/{case_id}/timeline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Voice Timeline */
+    get: operations["voice_timeline_v1_voice_cases__case_id__timeline_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/contacts/{attempt_id}/browser-transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Browser Transcript */
+    post: operations["browser_transcript_v1_voice_contacts__attempt_id__browser_transcript_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/twiml/{attempt_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Twiml For Elevenlabs */
+    post: operations["twiml_for_elevenlabs_v1_voice_twiml__attempt_id__post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/webhooks/twilio/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Twilio Status Webhook */
+    post: operations["twilio_status_webhook_v1_voice_webhooks_twilio_status_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/webhooks/elevenlabs/post-call": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Elevenlabs Post Call Webhook */
+    post: operations["elevenlabs_post_call_webhook_v1_voice_webhooks_elevenlabs_post_call_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/intents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Supported Voice Intents */
+    get: operations["supported_voice_intents_v1_voice_intents_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/": {
     parameters: {
       query?: never;
@@ -331,6 +484,23 @@ export interface components {
     ActionDecisionResponse: {
       action: components["schemas"]["ActionResponse"];
       policy: components["schemas"]["PolicyResponse"];
+    };
+    /** ActionRecovery */
+    ActionRecovery: {
+      /** Action */
+      action: string;
+      /** Case Count */
+      case_count: number;
+      /** Treatment Recovered Count */
+      treatment_recovered_count: number;
+      /** Baseline Recovered Count */
+      baseline_recovered_count: number;
+      /** Mean Predicted Probability */
+      mean_predicted_probability: number;
+      /** Observed Treatment Recovery Rate */
+      observed_treatment_recovery_rate: number;
+      /** Simulated Incremental Recovery Paise */
+      simulated_incremental_recovery_paise: number;
     };
     /** ActionResponse */
     ActionResponse: {
@@ -367,6 +537,57 @@ export interface components {
       | "SUCCEEDED"
       | "FAILED"
       | "CANCELLED";
+    /** ArtifactMetadata */
+    ArtifactMetadata: {
+      /** Schema Version */
+      schema_version: string;
+      /** Artifact Version */
+      artifact_version: string;
+      /** Artifact Checksum */
+      artifact_checksum: string;
+      /** Model Type */
+      model_type: string;
+      /** Feature Columns */
+      feature_columns: string[];
+      /** Categorical Features */
+      categorical_features: string[];
+      /** Training Seed */
+      training_seed: number;
+    };
+    /** BrowserTranscriptRequest */
+    BrowserTranscriptRequest: {
+      /** Transcript */
+      transcript: string;
+      /**
+       * Confidence Basis Points
+       * @default 10000
+       */
+      confidence_basis_points: number;
+    };
+    /** BrowserTranscriptResponse */
+    BrowserTranscriptResponse: {
+      /** Detected Intent */
+      detected_intent: string;
+      /** Disposition */
+      disposition: string;
+      /** Contact Must End */
+      contact_must_end: boolean;
+      /** Suppression Persisted */
+      suppression_persisted: boolean;
+    };
+    /** CalibrationBucket */
+    CalibrationBucket: {
+      /** Lower Bound */
+      lower_bound: number;
+      /** Upper Bound */
+      upper_bound: number;
+      /** Case Count */
+      case_count: number;
+      /** Mean Predicted Probability */
+      mean_predicted_probability: number;
+      /** Observed Recovery Rate */
+      observed_recovery_rate: number;
+    };
     /** CaseCommandRequest */
     CaseCommandRequest: {
       /** Reason */
@@ -500,6 +721,23 @@ export interface components {
       /** Recent Events */
       recent_events: components["schemas"]["RecentEventResponse"][];
     };
+    /** DatasetSummary */
+    DatasetSummary: {
+      /** Generator Version */
+      generator_version: string;
+      /** Seed */
+      seed: number;
+      /** Total Case Count */
+      total_case_count: number;
+      /** Training Case Count */
+      training_case_count: number;
+      /** Calibration Case Count */
+      calibration_case_count: number;
+      /** Evaluation Case Count */
+      evaluation_case_count: number;
+      /** Cohort Design */
+      cohort_design: string;
+    };
     /**
      * Diagnosis
      * @enum {string}
@@ -586,6 +824,49 @@ export interface components {
       currency: string;
       /** Invoice State */
       invoice_state: string;
+    };
+    /** LabGuardrails */
+    LabGuardrails: {
+      /** Merchant Revenue Mutated */
+      merchant_revenue_mutated: boolean;
+      /** Production Artifact Required */
+      production_artifact_required: boolean;
+      /** Label */
+      label: string;
+    };
+    /** LabReport */
+    LabReport: {
+      /** Schema Version */
+      schema_version: string;
+      /** Report Version */
+      report_version: string;
+      /** Generated At */
+      generated_at: string;
+      /** Title */
+      title: string;
+      /** Evidence Kind */
+      evidence_kind: string;
+      artifact: components["schemas"]["ArtifactMetadata"];
+      dataset: components["schemas"]["DatasetSummary"];
+      metrics: components["schemas"]["MetricSummary"];
+      guardrails: components["schemas"]["LabGuardrails"];
+    };
+    /** MetricSummary */
+    MetricSummary: {
+      /** Pr Auc */
+      pr_auc: number;
+      /** Brier Score */
+      brier_score: number;
+      /** Top Decile Lift */
+      top_decile_lift: number;
+      /** Amount Weighted Lift */
+      amount_weighted_lift: number;
+      /** Calibration */
+      calibration: components["schemas"]["CalibrationBucket"][];
+      /** Recovery By Action */
+      recovery_by_action: components["schemas"]["ActionRecovery"][];
+      /** Simulated Incremental Recovery Paise */
+      simulated_incremental_recovery_paise: number;
     };
     /** MockPaymentSuccessRequest */
     MockPaymentSuccessRequest: {
@@ -935,6 +1216,40 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** StartVoiceContactRequest */
+    StartVoiceContactRequest: {
+      /** Case Id */
+      case_id: string;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /**
+       * Max Duration Seconds
+       * @default 180
+       */
+      max_duration_seconds: number;
+    };
+    /** StartVoiceContactResponse */
+    StartVoiceContactResponse: {
+      /** Attempt Id */
+      attempt_id: string;
+      /** Provider */
+      provider: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "SUBMITTED" | "REJECTED" | "UNCERTAIN";
+      /** Reason Code */
+      reason_code: string;
+      /** Provider Call Id */
+      provider_call_id?: string | null;
+      /**
+       * Retry Permitted
+       * @default false
+       * @constant
+       */
+      retry_permitted: false;
+    };
     /** SubscriptionResponse */
     SubscriptionResponse: {
       /** Id */
@@ -1008,6 +1323,48 @@ export interface components {
       input?: unknown;
       /** Context */
       ctx?: Record<string, never>;
+    };
+    /** VoiceAttemptResponse */
+    VoiceAttemptResponse: {
+      /** Id */
+      id: string;
+      /** Case Id */
+      case_id: string;
+      /** Status */
+      status: string;
+      /** Disposition */
+      disposition: string | null;
+      /** Transcript */
+      transcript: string | null;
+      /** Detected Intent */
+      detected_intent: string | null;
+      /** Confidence Basis Points */
+      confidence_basis_points?: number | null;
+      /** Duration Seconds */
+      duration_seconds?: number | null;
+      /** Disclosure Delivered At */
+      disclosure_delivered_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** VoiceTimelineResponse */
+    VoiceTimelineResponse: {
+      /** Items */
+      items: components["schemas"]["VoiceAttemptResponse"][];
+    };
+    /** WebhookAcceptedResponse */
+    WebhookAcceptedResponse: {
+      /**
+       * Accepted
+       * @default true
+       * @constant
+       */
+      accepted: true;
+      /** Duplicate */
+      duplicate: boolean;
     };
   };
   responses: never;
@@ -1603,6 +1960,276 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_latest_report_v1_lab_reports_latest_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LabReport"];
+        };
+      };
+    };
+  };
+  get_versioned_report_v1_lab_reports__version__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        version: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LabReport"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  start_voice_contact_v1_voice_contacts_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "x-recovery-operator-token"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartVoiceContactRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartVoiceContactResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  voice_timeline_v1_voice_cases__case_id__timeline_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VoiceTimelineResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  browser_transcript_v1_voice_contacts__attempt_id__browser_transcript_post: {
+    parameters: {
+      query?: never;
+      header: {
+        "x-voice-event-id": string;
+      };
+      path: {
+        attempt_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BrowserTranscriptRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BrowserTranscriptResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  twiml_for_elevenlabs_v1_voice_twiml__attempt_id__post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "x-twilio-signature"?: string | null;
+      };
+      path: {
+        attempt_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  twilio_status_webhook_v1_voice_webhooks_twilio_status_post: {
+    parameters: {
+      query: {
+        attempt_id: string;
+      };
+      header?: {
+        "x-twilio-signature"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WebhookAcceptedResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  elevenlabs_post_call_webhook_v1_voice_webhooks_elevenlabs_post_call_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "ElevenLabs-Signature"?: string | null;
+        "ElevenLabs-Timestamp"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WebhookAcceptedResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  supported_voice_intents_v1_voice_intents_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": string[];
         };
       };
     };
