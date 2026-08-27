@@ -56,7 +56,6 @@ _TRANSIENT = frozenset(
 )
 _MERCHANT_ERROR = frozenset(
     {
-        "BAD_REQUEST_ERROR",
         "MERCHANT_CONFIGURATION_ERROR",
         "INVALID_MERCHANT_CONFIGURATION",
     }
@@ -98,6 +97,10 @@ def diagnose_failure(evidence: DiagnosisEvidence) -> Diagnosis:
     }
     if tokens & _RISK_BLOCK:
         return Diagnosis.RISK_OR_COMPLIANCE_BLOCK
+    # Razorpay's BAD_REQUEST_ERROR is a generic envelope code. It must not
+    # override specific customer/authentication evidence carried by the other
+    # fields. Only an explicit merchant token or merchant-specific code is
+    # sufficient for MERCHANT_ERROR.
     if tokens & _MERCHANT_ERROR or "MERCHANT" in tokens:
         return Diagnosis.MERCHANT_ERROR
     if tokens & _INSUFFICIENT_FUNDS:

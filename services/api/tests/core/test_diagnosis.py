@@ -1,5 +1,8 @@
 """Evidence correlation and deterministic diagnosis tests."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from services.api.app.domain.enums import Diagnosis, PaymentState
@@ -69,4 +72,61 @@ def test_correlated_payment_failure_is_classified(
 def test_missing_or_contradictory_correlation_is_unknown(
     evidence: DiagnosisEvidence,
 ) -> None:
+    assert diagnose_failure(evidence) == Diagnosis.UNKNOWN
+
+
+def test_payment_failed_fixture_prefers_specific_authentication_evidence() -> None:
+    fixture_path = Path(__file__).parents[1] / "fixtures" / "razorpay" / "payment.failed.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    payment = fixture["payload"]["payment"]["entity"]
+
+    evidence = DiagnosisEvidence(
+        payment_state=PaymentState.FAILED,
+        event_type=fixture["event"],
+        invoice_correlated=payment["invoice_id"] is not None,
+        subscription_correlated=payment["notes"]["subscription_id"] is not None,
+        error_code=payment["error_code"],
+        error_source=payment["error_source"],
+        error_step=payment["error_step"],
+        error_reason=payment["error_reason"],
+    )
+
+    assert {
+        evidence.error_code,
+        evidence.error_source,
+        evidence.error_step,
+        evidence.error_reason,
+    } == {
+        "BAD_REQUEST_ERROR",
+        "customer",
+        "payment_authentication",
+        "incorrect_otp",
+    }
+    assert diagnose_failure(evidence) == Diagnosis.AUTHENTICATION_REQUIRED
+
+
+def test_explicit_merchant_evidence_remains_merchant_error() -> None:
+    evidence = DiagnosisEvidence(
+        payment_state=PaymentState.FAILED,
+        event_type="payment.failed",
+        invoice_correlated=True,
+        subscription_correlated=True,
+        error_code="BAD_REQUEST_ERROR",
+        error_source="merchant",
+        error_step="payment_initialization",
+        error_reason="invalid_merchant_configuration",
+    )
+
+    assert diagnose_failure(evidence) == Diagnosis.MERCHANT_ERROR
+
+
+def test_generic_bad_request_without_specific_evidence_is_unknown() -> None:
+    evidence = DiagnosisEvidence(
+        payment_state=PaymentState.FAILED,
+        event_type="payment.failed",
+        invoice_correlated=True,
+        subscription_correlated=True,
+        error_code="BAD_REQUEST_ERROR",
+    )
+
     assert diagnose_failure(evidence) == Diagnosis.UNKNOWN
