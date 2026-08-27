@@ -15,7 +15,7 @@
     "dev:customer-agent": "uv run uvicorn app.main:app --app-dir services/customer-agent --reload --host 0.0.0.0 --port 8010",
     "infra": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
-    "migrate": "uv run alembic upgrade head",
+    "migrate": "uv run alembic -c services/api/alembic.ini upgrade head",
     "seed": "uv run python -m services.api.app.seed",
     "reset": "uv run python -m services.api.app.seed --reset",
     "lint": "pnpm lint:web && uv run ruff check .",
@@ -29,8 +29,8 @@
     "build": "pnpm --filter @recovery-os/web build",
     "generate:openapi": "uv run python scripts/export_openapi.py",
     "generate:client": "pnpm --filter @recovery-os/web generate:client",
-    "generate:data": "uv run python -m ml.recovery_bench.generate",
-    "train": "uv run python -m ml.training.train",
-    "evaluate": "uv run python -m ml.evaluation.evaluate"
+    "generate:data": "uv run python -m ml.recoverybench.build",
+    "train": "uv run python -m ml.recoverybench.build",
+    "evaluate": "uv run python -m ml.recoverybench.build"
   }
 }
