@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -122,7 +123,7 @@ def _verify_session(token: str, secret: bytes) -> dict[str, Any] | None:
         if not isinstance(payload.get("exp"), int) or payload["exp"] <= int(time.time()):
             return None
         return payload
-    except (ValueError, TypeError, json.JSONDecodeError):
+    except (ValueError, TypeError, UnicodeError, binascii.Error, json.JSONDecodeError):
         return None
 
 
