@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType
@@ -13,7 +15,7 @@ from services.api.app.providers.contracts import (
     RecoveryScoreResult,
 )
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
-from services.worker.app.contracts import ExecuteActionInput
+from services.worker.app.contracts import CancelActionInput, ExecuteActionInput
 from services.worker.app.runtime import ProductionRecoveryActivityServices
 
 
@@ -49,6 +51,32 @@ class FixedScorer:
         )
 
 
+class RecordingVoiceService:
+    def __init__(self, status: str) -> None:
+        self.status = status
+        self.calls: list[dict[str, object]] = []
+
+    async def cancel_for_authoritative_payment(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            status=self.status,
+            reason_code=(
+                "VOICE_CANCELLATION_UNCERTAIN_RECONCILE_REQUIRED"
+                if self.status == "UNCERTAIN"
+                else None
+            ),
+        )
+
+
+class RecordingVoiceResources:
+    def __init__(self, service: RecordingVoiceService) -> None:
+        self.service = service
+        self.closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
 def payment_command() -> ExecuteActionInput:
     return ExecuteActionInput(
         case_id=FITBOX_CASE_ID,
@@ -66,13 +94,11 @@ def payment_command() -> ExecuteActionInput:
 
 
 async def test_provider_submission_requires_durable_operator_authorization(
-    session_factory: async_sessionmaker[AsyncSession], monkeypatch
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async with session_factory() as session:
         await seed_fitbox(session)
-    monkeypatch.setattr(
-        "services.worker.app.runtime.get_session_factory", lambda: session_factory
-    )
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
     provider = RecordingPaymentProvider()
     services = ProductionRecoveryActivityServices(
         payment_provider=provider,
@@ -106,3 +132,36 @@ async def test_provider_submission_requires_durable_operator_authorization(
     assert submitted.status == duplicate.status == "SUCCEEDED"
     assert submitted.provider_reference == duplicate.provider_reference == "surface-authorized"
     assert len(provider.requests) == 1
+
+
+async def test_authoritative_payment_cancellation_invokes_voice_once_and_surfaces_uncertainty(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with session_factory() as session:
+        await seed_fitbox(session)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    voice_service = RecordingVoiceService("UNCERTAIN")
+    resources = RecordingVoiceResources(voice_service)
+    monkeypatch.setattr(
+        "services.worker.app.runtime.create_voice_service_from_env",
+        lambda session: resources,
+    )
+    services = ProductionRecoveryActivityServices(
+        payment_provider=RecordingPaymentProvider(), scorer=FixedScorer()
+    )
+
+    result = await services.cancel_recovery_action(
+        CancelActionInput(
+            case_id=FITBOX_CASE_ID,
+            provider_reference=None,
+            reason="AUTHORITATIVE_PAYMENT_SUCCESS",
+            idempotency_key=f"{FITBOX_CASE_ID}:cancel:action-1",
+        )
+    )
+
+    assert result.cancelled is False
+    assert result.reason_code == "VOICE_CANCELLATION_UNCERTAIN_RECONCILE_REQUIRED"
+    assert voice_service.calls[0]["cancellation_key"] == (
+        f"voice:{FITBOX_CASE_ID}:cancel:action-1:authoritative_payment_success"
+    )
+    assert resources.closed is True

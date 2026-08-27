@@ -142,9 +142,7 @@ class ProductionRecoveryActivityServices:
         # policy decisions are persisted before this workflow is dispatched.
         return await self._fallback.evaluate_policy(command)
 
-    async def execute_recovery_action(
-        self, command: ExecuteActionInput
-    ) -> ActionExecutionResult:
+    async def execute_recovery_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
         if command.action in {"WAIT_FOR_GATEWAY_RETRY", "STOP", "ESCALATE_TO_HUMAN"}:
             return ActionExecutionResult(status="SUCCEEDED", provider="workflow")
         if command.action != "OPEN_CUSTOMER_PAYMENT_SURFACE":
@@ -318,12 +316,17 @@ class ProductionRecoveryActivityServices:
 
     async def record_audit_event(self, command: AuditInput) -> AuditResult:
         source_event_id = f"temporal:{command.event_type}:{command.correlation_id}"
+        evidence_kind = (
+            EvidenceKind.RAZORPAY_TEST_VERIFIED
+            if command.details.get("provider") == "razorpay"
+            else EvidenceKind.SIMULATED
+        )
         async with get_session_factory()() as session:
             event = RecoveryEventRecord(
                 case_id=command.case_id,
                 event_type=command.event_type,
                 source="temporal-workflow",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=evidence_kind,
                 payload=command.details,
                 occurred_at=datetime.now(UTC),
                 correlation_id=command.correlation_id,
@@ -376,12 +379,13 @@ class ProductionRecoveryActivityServices:
 
         voice_reason: str | None = None
         if command.reason == "AUTHORITATIVE_PAYMENT_SUCCESS":
+            voice_cancellation_key = f"voice:{command.idempotency_key}:{command.reason.casefold()}"
             async with get_session_factory()() as voice_session:
                 resources = create_voice_service_from_env(voice_session)
                 try:
                     voice_result = await resources.service.cancel_for_authoritative_payment(
                         case_id=command.case_id,
-                        cancellation_key=command.idempotency_key,
+                        cancellation_key=voice_cancellation_key,
                         now=datetime.now(UTC),
                     )
                 finally:

@@ -326,9 +326,8 @@ class RecoveryCaseService:
                 metadata={"action_id": action_id, "status": action.status.value},
             )
         completed_at = now or datetime.now(UTC)
-        if (
-            action.action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
-            and (action.payment_surface_type is None or aggregate.invoice is None)
+        if action.action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE and (
+            action.payment_surface_type is None or aggregate.invoice is None
         ):
             raise CaseConflictError("The recovery case has no payable failed invoice.")
         # Provider execution belongs to the owning Temporal workflow activity.

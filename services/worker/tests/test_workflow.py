@@ -232,9 +232,7 @@ async def test_authoritative_success_cancels_cross_service_work_while_awaiting_a
             result = await handle.result()
 
         assert result.outcome == "RECOVERED"
-        assert services.cancelled_keys == {
-            "payment-before-approval:cancel:action-1"
-        }
+        assert services.cancelled_keys == {"payment-before-approval:cancel:action-1"}
 
 
 @pytest.mark.asyncio

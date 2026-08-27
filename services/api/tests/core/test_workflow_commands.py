@@ -92,9 +92,7 @@ async def test_terminal_workflow_is_reconciled_without_a_blind_signal() -> None:
 
 
 async def test_missing_workflow_returns_structured_unavailable_error() -> None:
-    handle = FakeHandle(
-        error=RPCError("not found", RPCStatusCode.NOT_FOUND, b"not-found")
-    )
+    handle = FakeHandle(error=RPCError("not found", RPCStatusCode.NOT_FOUND, b"not-found"))
 
     with pytest.raises(WorkflowCommandUnavailableError) as rejected:
         await commander_for(handle).escalate(case_id="case-missing", reason="review")

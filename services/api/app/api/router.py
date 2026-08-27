@@ -114,9 +114,7 @@ def get_case_service(
 Service = Annotated[RecoveryCaseService, Depends(get_case_service)]
 MerchantScope = Annotated[str, Depends(get_merchant_scope)]
 Session = Annotated[AsyncSession, Depends(get_async_session)]
-WorkflowCommander = Annotated[
-    RecoveryWorkflowCommander, Depends(get_recovery_workflow_commander)
-]
+WorkflowCommander = Annotated[RecoveryWorkflowCommander, Depends(get_recovery_workflow_commander)]
 
 
 def get_razorpay_webhook_secret() -> str:
