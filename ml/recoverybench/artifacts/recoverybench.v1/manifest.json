@@ -1,0 +1,22 @@
+{
+  "artifact_checksum": "f20ccfe34e35101e0a62eb91299d40b8501cfc88652d7bd25261c7b3cb20cbf8",
+  "artifact_version": "recoverybench.v1",
+  "categorical_features": [
+    "diagnosis",
+    "candidate_action"
+  ],
+  "feature_columns": [
+    "amount_at_risk_paise",
+    "diagnosis",
+    "candidate_action",
+    "tenure_days",
+    "prior_successful_payments",
+    "failed_attempt_count",
+    "customer_agent_available",
+    "voice_consent",
+    "is_quiet_hours"
+  ],
+  "model_type": "CatBoostClassifier+isotonic",
+  "schema_version": "recoverybench.artifact.v1",
+  "training_seed": 20260827
+}
