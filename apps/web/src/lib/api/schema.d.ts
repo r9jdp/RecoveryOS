@@ -24,6 +24,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/operator/session": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create Operator Session */
+    post: operations["create_operator_session_v1_operator_session_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/webhooks/razorpay": {
     parameters: {
       query?: never;
@@ -925,6 +942,22 @@ export interface components {
        */
       status: "ACCEPTED";
     };
+    /** OperatorLoginRequest */
+    OperatorLoginRequest: {
+      /** Email */
+      email: string;
+      /** Password */
+      password: string;
+    };
+    /** OperatorSessionResponse */
+    OperatorSessionResponse: {
+      /** Operator */
+      operator: string;
+      /** Csrf Token */
+      csrf_token: string;
+      /** Expires At Epoch */
+      expires_at_epoch: number;
+    };
     /** PageResponse */
     PageResponse: {
       /** Next Cursor */
@@ -1413,6 +1446,39 @@ export interface operations {
       };
     };
   };
+  create_operator_session_v1_operator_session_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OperatorLoginRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OperatorSessionResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   ingest_razorpay_webhook_v1_webhooks_razorpay_post: {
     parameters: {
       query?: never;
@@ -1470,9 +1536,12 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path?: never;
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1658,11 +1727,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1695,11 +1767,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1732,11 +1807,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1769,12 +1847,15 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
         action_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody?: never;
     responses: {
@@ -1803,12 +1884,15 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
         action_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1841,11 +1925,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1878,11 +1965,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1915,11 +2005,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -1952,11 +2045,14 @@ export interface operations {
       query?: never;
       header?: {
         "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {

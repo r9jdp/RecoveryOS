@@ -4,7 +4,10 @@ import httpx
 import pytest
 from fastapi import Depends, FastAPI
 
-from services.api.app.api.operator_auth import require_operator_for_non_mock_payment
+from services.api.app.api.operator_auth import (
+    operator_router,
+    require_operator_for_non_mock_payment,
+)
 from services.api.app.api.router import application_error_handler, install_core_api
 from services.api.app.services.cases import ApplicationServiceError
 
@@ -12,6 +15,7 @@ from services.api.app.services.cases import ApplicationServiceError
 def authorization_test_app() -> FastAPI:
     app = FastAPI()
     app.add_exception_handler(ApplicationServiceError, application_error_handler)
+    app.include_router(operator_router)
 
     @app.post("/consequential", dependencies=[Depends(require_operator_for_non_mock_payment)])
     async def consequential_action() -> dict[str, bool]:
@@ -70,6 +74,59 @@ async def test_non_mock_provider_rejects_anonymous_and_accepts_operator(
 
     assert anonymous.status_code == 401
     assert wrong.status_code == 401
+    assert authorized.status_code == 200
+
+
+async def test_explicit_worker_real_action_flag_requires_api_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PAYMENT_PROVIDER", "mock")
+    monkeypatch.setenv("RECOVERY_ALLOW_REAL_PAYMENT_ACTIONS", "true")
+    monkeypatch.setenv("OPERATOR_DEMO_TOKEN", "test-operator-secret")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=authorization_test_app()),
+        base_url="http://test",
+    ) as client:
+        anonymous = await client.post("/consequential")
+        authorized = await client.post(
+            "/consequential",
+            headers={"X-RecoveryOS-Operator-Token": "test-operator-secret"},
+        )
+
+    assert anonymous.status_code == 401
+    assert authorized.status_code == 200
+
+
+async def test_browser_session_requires_matching_csrf_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
+    monkeypatch.setenv("OPERATOR_DEMO_TOKEN", "test-operator-secret")
+    monkeypatch.setenv("OPERATOR_SESSION_SECRET", "test-session-signing-secret")
+    app = authorization_test_app()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        login = await client.post(
+            "/v1/operator/session",
+            json={
+                "email": "demo@recoveryos.dev",
+                "password": "test-operator-secret",
+            },
+        )
+        csrf_token = login.json()["csrf_token"]
+        missing_csrf = await client.post("/consequential")
+        authorized = await client.post(
+            "/consequential",
+            headers={"X-RecoveryOS-CSRF-Token": csrf_token},
+        )
+
+    assert login.status_code == 200
+    assert "recoveryos_operator_session" in login.cookies
+    assert missing_csrf.status_code == 401
     assert authorized.status_code == 200
 
 

@@ -12,6 +12,7 @@ import type {
   SafetyDisposition,
   SafetyDispositionResult,
 } from "@/types/recovery";
+import { operatorMutationHeaders } from "@/lib/operator-session";
 
 type ApiSchemas = components["schemas"];
 type LiveDashboard = ApiSchemas["DashboardResponse"];
@@ -70,6 +71,7 @@ async function apiErrorMessage(
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: { Accept: "application/json", ...init?.headers },
   });
   if (!response.ok) {
@@ -421,7 +423,11 @@ export async function executeCaseCommand(
     `${baseUrl}/v1/recovery-cases/${encodeURIComponent(caseId)}/commands`,
     {
       body: JSON.stringify({ command }),
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...operatorMutationHeaders(),
+      },
       method: "POST",
     },
   );
@@ -464,7 +470,11 @@ export async function executeSafetyDisposition(
     `${baseUrl}/v1/recovery-cases/${encodeURIComponent(caseId)}/safety-dispositions`,
     {
       body: JSON.stringify({ disposition }),
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...operatorMutationHeaders(),
+      },
       method: "POST",
     },
   );
@@ -495,7 +505,11 @@ export async function updatePolicySettings(
   }
   const response = await fetch(`${baseUrl}/v1/policy-settings`, {
     body: JSON.stringify(settings),
-    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...operatorMutationHeaders(),
+    },
     method: "PUT",
   });
   if (!response.ok)

@@ -2,6 +2,8 @@ services:
   api:
     environment:
       APP_ENV: staging
+      OPERATOR_AUTH_REQUIRED: "true"
+      OPERATOR_COOKIE_SECURE: "true"
     deploy:
       resources:
         limits:

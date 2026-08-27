@@ -58,6 +58,47 @@
         }
       }
     },
+    "/v1/operator/session": {
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "Create Operator Session",
+        "operationId": "create_operator_session_v1_operator_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/webhooks/razorpay": {
       "post": {
         "tags": [
@@ -156,6 +197,38 @@
                 }
               ],
               "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -525,6 +598,38 @@
               ],
               "title": "X-Recoveryos-Operator-Token"
             }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
           }
         ],
         "requestBody": {
@@ -594,6 +699,38 @@
               ],
               "title": "X-Recoveryos-Operator-Token"
             }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
           }
         ],
         "requestBody": {
@@ -661,6 +798,38 @@
                 }
               ],
               "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -739,6 +908,38 @@
               ],
               "title": "X-Recoveryos-Operator-Token"
             }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
           }
         ],
         "responses": {
@@ -805,6 +1006,38 @@
                 }
               ],
               "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -874,6 +1107,38 @@
               ],
               "title": "X-Recoveryos-Operator-Token"
             }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
           }
         ],
         "requestBody": {
@@ -941,6 +1206,38 @@
                 }
               ],
               "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -1011,6 +1308,38 @@
               ],
               "title": "X-Recoveryos-Operator-Token"
             }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
           }
         ],
         "requestBody": {
@@ -1078,6 +1407,38 @@
                 }
               ],
               "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -2799,6 +3160,52 @@
           "occurred_at"
         ],
         "title": "OperatorCommandResponse"
+      },
+      "OperatorLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "OperatorLoginRequest"
+      },
+      "OperatorSessionResponse": {
+        "properties": {
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          },
+          "expires_at_epoch": {
+            "type": "integer",
+            "title": "Expires At Epoch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator",
+          "csrf_token",
+          "expires_at_epoch"
+        ],
+        "title": "OperatorSessionResponse"
       },
       "PageResponse": {
         "properties": {

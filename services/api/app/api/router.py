@@ -40,7 +40,7 @@ from services.api.app.workflows import (
     get_recovery_workflow_commander,
 )
 
-from .operator_auth import require_operator_for_non_mock_payment
+from .operator_auth import operator_router, require_operator_for_non_mock_payment
 from .schemas import (
     ActionDecisionResponse,
     ActionResponse,
@@ -213,6 +213,7 @@ ExceptionHandler = Callable[[Request, Exception], Awaitable[JSONResponse]]
 def install_core_api(app: FastAPI) -> None:
     """Register routes and required structured error handlers on an application."""
 
+    app.include_router(operator_router)
     app.include_router(router)
     app.add_exception_handler(ApplicationServiceError, application_error_handler)
     app.add_exception_handler(InvalidCursorError, validation_error_handler)
