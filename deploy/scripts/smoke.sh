@@ -41,11 +41,11 @@ retry_json() {
       --connect-timeout 3 --max-time 8 \
       --header 'Accept: application/json' \
       --output "$response_file" "$url" && \
-      python3 - "$response_file" "$assertion" "$expected_version" <<'PY'
+      python3 - "$response_file" "$assertion" "$expected_version" "$agent_base_url" <<'PY'
 import json
 import sys
 
-path, assertion, expected_version = sys.argv[1:]
+path, assertion, expected_version, expected_agent_origin = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     payload = json.load(handle)
 
@@ -66,7 +66,10 @@ elif assertion == "agent-card":
     assert isinstance(interfaces, list) and interfaces
     assert any(
         isinstance(interface, dict)
-        and interface.get("url", "").startswith("https://")
+        and interface.get("url", "").rstrip("/")
+        == f"{expected_agent_origin.rstrip('/')}/rpc"
+        and interface.get("protocolBinding") == "JSONRPC"
+        and interface.get("protocolVersion") == "1.0"
         for interface in interfaces
     )
     assert payload.get("skills")

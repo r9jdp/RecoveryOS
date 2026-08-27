@@ -134,3 +134,11 @@ def test_shell_scripts_enable_strict_error_handling() -> None:
         lines = script.read_text(encoding="utf-8").splitlines()
         assert lines[0] == "#!/usr/bin/env bash", script
         assert lines[1] == "set -Eeuo pipefail", script
+
+
+def test_agent_card_smoke_uses_supported_interface_and_exact_rpc_origin() -> None:
+    smoke = (ROOT / "deploy" / "scripts" / "smoke.sh").read_text(encoding="utf-8")
+    assert 'payload.get("supportedInterfaces", [])' in smoke
+    assert "f\"{expected_agent_origin.rstrip('/')}/rpc\"" in smoke
+    assert 'interface.get("protocolBinding") == "JSONRPC"' in smoke
+    assert 'payload.get("url"' not in smoke
