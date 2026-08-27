@@ -104,6 +104,39 @@ class Merchant(Timestamped, Base):
     __table_args__ = (CheckConstraint("length(currency) = 3", name="currency_length"),)
 
 
+class MerchantPolicySetting(Timestamped, Base):
+    """Mutable merchant controls kept separate from the frozen merchant identity."""
+
+    __tablename__ = "merchant_policy_settings"
+
+    merchant_id: Mapped[str] = mapped_column(
+        ForeignKey("merchants.id", ondelete="CASCADE"), primary_key=True
+    )
+    quiet_hours_start: Mapped[str | None] = mapped_column(String(5), default="20:00")
+    quiet_hours_end: Mapped[str | None] = mapped_column(String(5), default="09:00")
+    max_contacts_per_7_days: Mapped[int | None] = mapped_column(Integer, default=2)
+    require_approval_above_paise: Mapped[int | None] = mapped_column(BigInteger, default=500_000)
+    require_approval_actions: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    recovery_kill_switch: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(quiet_hours_start IS NULL) = (quiet_hours_end IS NULL)",
+            name="policy_quiet_pair",
+        ),
+        CheckConstraint(
+            "max_contacts_per_7_days IS NULL OR max_contacts_per_7_days > 0",
+            name="policy_contact_limit_positive",
+        ),
+        CheckConstraint(
+            "require_approval_above_paise IS NULL OR require_approval_above_paise >= 0",
+            name="approval_threshold_nonnegative",
+        ),
+        CheckConstraint("version >= 1", name="policy_settings_version_positive"),
+    )
+
+
 class Customer(Timestamped, Base):
     __tablename__ = "customers"
 

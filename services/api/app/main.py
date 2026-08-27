@@ -20,7 +20,7 @@ app.add_middleware(
         origin.strip() for origin in os.getenv("WEB_ORIGIN", "http://localhost:3000").split(",")
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 app.include_router(health_router)

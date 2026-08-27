@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 
 from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
+    ContactDisposition,
     Diagnosis,
     EvidenceKind,
     PaymentState,
@@ -30,8 +31,11 @@ from services.api.app.providers.contracts import OpenPaymentSurfaceRequest
 from services.api.app.providers.interfaces import PaymentProvider
 from services.api.app.repositories import CaseFilters, CaseRepository
 from services.api.app.repositories.cases import CaseAggregate, CasePage
-
-from .policy import PolicyContext, evaluate_policy
+from services.api.app.safety import (
+    SafetyPolicyConfig,
+    SafetyPolicyContext,
+    evaluate_safety_policy,
+)
 
 
 class ApplicationServiceError(RuntimeError):
@@ -79,9 +83,16 @@ class PaymentSuccessResult:
 class RecoveryCaseService:
     """Coordinates repositories and provider ports without workflow concerns."""
 
-    def __init__(self, repository: CaseRepository, payment_provider: PaymentProvider) -> None:
+    def __init__(
+        self,
+        repository: CaseRepository,
+        payment_provider: PaymentProvider,
+        *,
+        global_kill_switch: bool = False,
+    ) -> None:
         self.repository = repository
         self.payment_provider = payment_provider
+        self.global_kill_switch = global_kill_switch
 
     async def list_cases(
         self,
@@ -170,8 +181,35 @@ class RecoveryCaseService:
                 "Payment surface type must be set only for customer payment surface actions."
             )
         evaluated_at = now or datetime.now(UTC)
-        decision = evaluate_policy(
-            PolicyContext(
+        merchant_policy = await self.repository.get_merchant_policy_settings(
+            merchant_id=merchant_id
+        )
+        if merchant_policy is None:
+            raise CaseNotFoundError(
+                "Merchant policy settings were not found.",
+                metadata={"merchant_id": merchant_id},
+            )
+        merchant, settings = merchant_policy
+        policy_config = SafetyPolicyConfig(
+            merchant_timezone=merchant.timezone,
+            quiet_hours_start=(
+                time.fromisoformat(settings.quiet_hours_start)
+                if settings.quiet_hours_start
+                else None
+            ),
+            quiet_hours_end=(
+                time.fromisoformat(settings.quiet_hours_end) if settings.quiet_hours_end else None
+            ),
+            max_contacts_per_window=settings.max_contacts_per_7_days,
+            manual_approval_actions=frozenset(
+                RecoveryActionType(value) for value in settings.require_approval_actions
+            ),
+            manual_approval_above_paise=settings.require_approval_above_paise,
+            global_kill_switch=self.global_kill_switch,
+            merchant_kill_switch=settings.recovery_kill_switch,
+        )
+        decision = evaluate_safety_policy(
+            SafetyPolicyContext(
                 now=evaluated_at,
                 recovery_deadline=recovery_case.recovery_deadline,
                 case_outcome=recovery_case.case_outcome,
@@ -181,8 +219,12 @@ class RecoveryCaseService:
                 action=action_type,
                 payment_surface_type=payment_surface_type,
                 amount_at_risk_paise=recovery_case.amount_at_risk_paise,
-            )
-        )
+                active_gateway_retries=(
+                    recovery_case.subscription_state == SubscriptionState.PENDING
+                ),
+            ),
+            policy_config,
+        ).to_contract()
         statuses = {
             PolicyDisposition.ALLOW: ActionStatus.PROPOSED,
             PolicyDisposition.BLOCK: ActionStatus.CANCELLED,
@@ -266,9 +308,23 @@ class RecoveryCaseService:
                 metadata={"action_id": action_id, "status": action.status.value},
             )
         completed_at = now or datetime.now(UTC)
+        action_evidence = EvidenceKind.SIMULATED
+        provider_name = "none"
         if action.action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE:
             if action.payment_surface_type is None or aggregate.invoice is None:
                 raise CaseConflictError("The recovery case has no payable failed invoice.")
+            reference_id: str | None = None
+            expires_at: datetime | None = None
+            notes: dict[str, str] = {}
+            if action.payment_surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
+                reference_id = (
+                    "rec_" + hashlib.sha256(action.idempotency_key.encode()).hexdigest()[:32]
+                )
+                expires_at = aggregate.recovery_case.recovery_deadline
+                notes = {
+                    "case_id": case_id,
+                    "invoice_id": aggregate.invoice.provider_invoice_id,
+                }
             result = await self.payment_provider.open_customer_payment_surface(
                 OpenPaymentSurfaceRequest(
                     idempotency_key=action.idempotency_key,
@@ -281,10 +337,16 @@ class RecoveryCaseService:
                     exact_amount_paise=aggregate.recovery_case.amount_at_risk_paise,
                     currency=aggregate.invoice.currency,
                     recovery_deadline=aggregate.recovery_case.recovery_deadline,
+                    expires_at=expires_at,
+                    reference_id=reference_id,
+                    notes=notes,
                 )
             )
             action.external_reference = result.provider_reference
             action.customer_url = result.customer_url
+            provider_name = result.provider
+            if result.provider == "razorpay":
+                action_evidence = EvidenceKind.RAZORPAY_TEST_VERIFIED
         action.status = ActionStatus.SUCCEEDED
         action.completed_at = completed_at
         await self.repository.add_event(
@@ -292,8 +354,12 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="ACTION_APPROVED",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
-                payload={"action_id": action.id, "action_type": action.action_type.value},
+                evidence_kind=action_evidence,
+                payload={
+                    "action_id": action.id,
+                    "action_type": action.action_type.value,
+                    "provider": provider_name,
+                },
                 occurred_at=completed_at,
                 correlation_id=f"corr_{case_id}",
                 source_event_id=f"approval:{action.id}",
@@ -412,6 +478,72 @@ class RecoveryCaseService:
                 occurred_at=escalated_at,
                 correlation_id=f"corr_{case_id}",
                 source_event_id=f"escalation:{action.id}",
+            )
+        )
+        await self.repository.commit()
+        return recovery_case
+
+    async def record_safety_disposition(
+        self,
+        *,
+        merchant_id: str,
+        case_id: str,
+        disposition: ContactDisposition,
+        now: datetime | None = None,
+    ) -> RecoveryCase:
+        """Persist a safety-first customer disposition and cancel pending execution."""
+
+        terminal_outcomes = {
+            ContactDisposition.DISPUTE: CaseOutcome.DISPUTED,
+            ContactDisposition.OPTED_OUT: CaseOutcome.STOPPED,
+            ContactDisposition.WRONG_PERSON: CaseOutcome.STOPPED,
+            ContactDisposition.ALREADY_PAID: CaseOutcome.ESCALATED,
+        }
+        if disposition not in terminal_outcomes:
+            raise CaseConflictError(
+                "This contact disposition is not a safety terminal.",
+                metadata={"contact_disposition": disposition.value},
+            )
+        recovery_case = await self.repository.get_case_for_update(
+            merchant_id=merchant_id, case_id=case_id
+        )
+        if recovery_case is None:
+            raise CaseNotFoundError("Recovery case was not found.", metadata={"case_id": case_id})
+        target_outcome = terminal_outcomes[disposition]
+        if recovery_case.case_outcome != CaseOutcome.OPEN:
+            if (
+                recovery_case.case_outcome == target_outcome
+                and recovery_case.contact_disposition == disposition
+            ):
+                return recovery_case
+            raise CaseConflictError("The recovery case is already terminal.")
+
+        recorded_at = now or datetime.now(UTC)
+        recovery_case.contact_disposition = disposition
+        recovery_case.case_outcome = target_outcome
+        recovery_case.version += 1
+        if disposition == ContactDisposition.OPTED_OUT:
+            customer = await self.repository.get_customer_for_update(
+                customer_id=recovery_case.customer_id
+            )
+            if customer is None:
+                raise RuntimeError("recovery case has a missing customer")
+            customer.opted_out_at = recorded_at
+        await self.repository.cancel_nonterminal_actions(case_id=case_id, completed_at=recorded_at)
+        await self.repository.add_event(
+            RecoveryEventRecord(
+                case_id=case_id,
+                event_type=f"SAFETY_{disposition.value}",
+                source="operator",
+                evidence_kind=EvidenceKind.SIMULATED,
+                payload={
+                    "contact_disposition": disposition.value,
+                    "case_outcome": target_outcome.value,
+                    "provider_action_taken": False,
+                },
+                occurred_at=recorded_at,
+                correlation_id=f"corr_{case_id}",
+                source_event_id=f"safety:{case_id}:{disposition.value}",
             )
         )
         await self.repository.commit()

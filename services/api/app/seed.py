@@ -27,6 +27,7 @@ from services.api.app.models import (
     Customer,
     Invoice,
     Merchant,
+    MerchantPolicySetting,
     OutboxMessage,
     PaymentAttempt,
     PolicyDecisionRecord,
@@ -67,6 +68,9 @@ async def reset_demo_data(session: AsyncSession) -> None:
     await session.execute(delete(Invoice).where(Invoice.merchant_id == merchant_id))
     await session.execute(delete(Subscription).where(Subscription.merchant_id == merchant_id))
     await session.execute(delete(Customer).where(Customer.merchant_id == merchant_id))
+    await session.execute(
+        delete(MerchantPolicySetting).where(MerchantPolicySetting.merchant_id == merchant_id)
+    )
     await session.execute(delete(Merchant).where(Merchant.id == merchant_id))
     await session.commit()
 
@@ -93,6 +97,15 @@ async def seed_fitbox(session: AsyncSession, *, reset: bool = False) -> bool:
         display_name="FitBox",
         timezone="Asia/Kolkata",
         currency="INR",
+    )
+    policy_settings = MerchantPolicySetting(
+        merchant_id=merchant.id,
+        quiet_hours_start="20:00",
+        quiet_hours_end="09:00",
+        max_contacts_per_7_days=2,
+        require_approval_above_paise=500_000,
+        require_approval_actions=[],
+        recovery_kill_switch=False,
     )
     customer = Customer(
         id="customer_fitbox_001",
@@ -231,7 +244,16 @@ async def seed_fitbox(session: AsyncSession, *, reset: bool = False) -> bool:
     ]
     # Flush dependency tiers explicitly because the demo models intentionally omit
     # ORM relationships; foreign-key columns alone do not create unit-of-work edges.
-    for record in (merchant, customer, subscription, invoice, payment, recovery_case, action):
+    for record in (
+        merchant,
+        policy_settings,
+        customer,
+        subscription,
+        invoice,
+        payment,
+        recovery_case,
+        action,
+    ):
         session.add(record)
         await session.flush()
     session.add_all([policy, *events])

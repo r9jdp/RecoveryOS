@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from services.api.app.domain.enums import (
     ActionStatus,
@@ -236,6 +237,101 @@ class OperatorCommandResponse(ApiModel):
     occurred_at: datetime
     source: Literal["api"] = "api"
     status: Literal["ACCEPTED"] = "ACCEPTED"
+
+
+class SafetyDispositionRequest(ApiModel):
+    disposition: Literal[
+        "MARK_DISPUTE",
+        "MARK_OPT_OUT",
+        "MARK_ALREADY_PAID",
+        "MARK_WRONG_PERSON",
+        "ESCALATE_TO_HUMAN",
+    ]
+
+
+class SafetyDispositionResponse(ApiModel):
+    disposition: str
+    message: str
+    occurred_at: datetime
+    case: RecoveryCaseResponse
+    source: Literal["api"] = "api"
+    status: Literal["ACCEPTED"] = "ACCEPTED"
+
+
+class PolicySettingsUpdate(ApiModel):
+    timezone: str = Field(min_length=1, max_length=64)
+    quiet_hours_start: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    quiet_hours_end: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    max_contacts_per_7_days: int | None = Field(default=None, gt=0)
+    require_approval_above_paise: int | None = Field(default=None, ge=0)
+    recovery_kill_switch: bool
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("timezone must be a known IANA timezone") from error
+        return value
+
+    @model_validator(mode="after")
+    def validate_quiet_hours(self) -> PolicySettingsUpdate:
+        if (self.quiet_hours_start is None) != (self.quiet_hours_end is None):
+            raise ValueError("quiet-hours start and end must both be set or both be disabled")
+        if self.quiet_hours_start == self.quiet_hours_end and self.quiet_hours_start is not None:
+            raise ValueError("quiet-hours start and end cannot be equal")
+        return self
+
+
+class PolicySettingsResponse(PolicySettingsUpdate):
+    version: int = Field(ge=1)
+    updated_at: datetime
+
+
+class RazorpayWebhookAckResponse(ApiModel):
+    provider_event_id: str
+    inbox_id: str
+    outbox_id: str
+    accepted: bool
+    duplicate: bool
+    acknowledge_elapsed_ms: float = Field(ge=0)
+    acknowledge_within_sla: bool
+
+
+class FailureSimulationRequest(ApiModel):
+    scenario: Literal[
+        "DUPLICATE_WEBHOOK",
+        "OUT_OF_ORDER_WEBHOOK",
+        "LATE_SUCCESS",
+        "CHANGED_AUTHORITATIVE_PAYMENT_STATE",
+    ]
+    seed: int = 20_260_827
+    amount_paise: int = Field(default=149_900, gt=0)
+    evidence_kind: EvidenceKind = EvidenceKind.SIMULATED
+
+
+class SimulatedDeliveryResponse(ApiModel):
+    delivery_id: str
+    provider_event_id: str
+    event_type: str
+    occurred_at: datetime
+    delivered_at: datetime
+    observed_payment_state: PaymentState
+    authoritative_payment_state: PaymentState
+    evidence_kind: EvidenceKind
+    payload: dict[str, object]
+
+
+class FailureSimulationResponse(ApiModel):
+    scenario: str
+    seed: int
+    case_id: str
+    payment_id: str
+    amount_paise: int
+    deliveries: list[SimulatedDeliveryResponse]
+    expected_final_payment_state: PaymentState
+    expected_revenue_entries: int = Field(ge=0)
 
 
 class MockPaymentSuccessRequest(ApiModel):

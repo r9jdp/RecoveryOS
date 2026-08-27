@@ -22,6 +22,8 @@ from services.api.app.domain.enums import (
 from services.api.app.models import (
     Customer,
     Invoice,
+    Merchant,
+    MerchantPolicySetting,
     PaymentAttempt,
     PolicyDecisionRecord,
     RecoveryActionRecord,
@@ -91,6 +93,15 @@ class CaseRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def get_merchant_policy_settings(
+        self, *, merchant_id: str
+    ) -> tuple[Merchant, MerchantPolicySetting] | None:
+        merchant = await self.session.get(Merchant, merchant_id)
+        settings = await self.session.get(MerchantPolicySetting, merchant_id)
+        if merchant is None or settings is None:
+            return None
+        return merchant, settings
+
     async def list_cases(
         self,
         *,
@@ -154,6 +165,14 @@ class CaseRepository:
                     RecoveryCase.merchant_id == merchant_id,
                 )
                 .with_for_update()
+            ),
+        )
+
+    async def get_customer_for_update(self, *, customer_id: str) -> Customer | None:
+        return cast(
+            Customer | None,
+            await self.session.scalar(
+                select(Customer).where(Customer.id == customer_id).with_for_update()
             ),
         )
 
