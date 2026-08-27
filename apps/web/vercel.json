@@ -5,4 +5,3 @@
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "regions": ["sin1"]
 }
-

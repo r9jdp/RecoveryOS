@@ -3,7 +3,8 @@ import type { HTMLAttributes, ReactNode } from "react";
 import styles from "../../styles/recovery-ui.module.css";
 import { cx } from "./class-names";
 
-export type TimelineTone = "info" | "success" | "warning" | "danger" | "neutral";
+export type TimelineTone =
+  "info" | "success" | "warning" | "danger" | "neutral";
 
 export interface TimelineItem {
   id: string;
@@ -14,7 +15,10 @@ export interface TimelineItem {
   trailing?: ReactNode;
 }
 
-export interface TimelineProps extends Omit<HTMLAttributes<HTMLOListElement>, "children"> {
+export interface TimelineProps extends Omit<
+  HTMLAttributes<HTMLOListElement>,
+  "children"
+> {
   items: TimelineItem[];
 }
 
@@ -31,14 +35,28 @@ export function Timeline({ items, className, ...props }: TimelineProps) {
     <ol className={cx(styles.timeline, className)} {...props}>
       {items.map((item) => (
         <li key={item.id} className={styles.timelineItem}>
-          <span className={cx(styles.timelineMarker, markerClasses[item.tone ?? "info"])} aria-hidden="true" />
+          <span
+            className={cx(
+              styles.timelineMarker,
+              markerClasses[item.tone ?? "info"],
+            )}
+            aria-hidden="true"
+          />
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "1rem",
+              }}
+            >
               <p className={styles.timelineTitle}>{item.title}</p>
               {item.trailing}
             </div>
             <p className={styles.timelineMeta}>{item.timestamp}</p>
-            {item.description && <p className={styles.timelineDescription}>{item.description}</p>}
+            {item.description && (
+              <p className={styles.timelineDescription}>{item.description}</p>
+            )}
           </div>
         </li>
       ))}

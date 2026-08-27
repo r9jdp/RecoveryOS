@@ -19,7 +19,13 @@ const toneClasses: Record<BadgeTone, string> = {
   danger: styles.badgeDanger,
 };
 
-export function Badge({ tone = "neutral", showDot = false, className, children, ...props }: BadgeProps) {
+export function Badge({
+  tone = "neutral",
+  showDot = false,
+  className,
+  children,
+  ...props
+}: BadgeProps) {
   return (
     <span className={cx(styles.badge, toneClasses[tone], className)} {...props}>
       {showDot && <span className={styles.badgeDot} aria-hidden="true" />}
@@ -28,9 +34,15 @@ export function Badge({ tone = "neutral", showDot = false, className, children, 
   );
 }
 
-export function TestModeBadge({ className, ...props }: Omit<BadgeProps, "tone" | "children">) {
+export function TestModeBadge({
+  className,
+  ...props
+}: Omit<BadgeProps, "tone" | "children">) {
   return (
-    <span className={cx(styles.badge, styles.testModeBadge, className)} {...props}>
+    <span
+      className={cx(styles.badge, styles.testModeBadge, className)}
+      {...props}
+    >
       <span className={styles.badgeDot} aria-hidden="true" />
       Razorpay Test Mode
     </span>

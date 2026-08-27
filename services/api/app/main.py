@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from services.api.app.api import install_core_api
 from services.api.app.demo import router as demo_router
 from services.api.app.health.router import router as health_router
 
@@ -13,13 +16,16 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        origin.strip() for origin in os.getenv("WEB_ORIGIN", "http://localhost:3000").split(",")
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 app.include_router(health_router)
 app.include_router(demo_router)
+install_core_api(app)
 
 
 @app.get("/", tags=["meta"])

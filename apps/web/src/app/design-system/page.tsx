@@ -38,9 +38,18 @@ const navigation: NavigationGroup[] = [
   {
     label: "Recovery",
     items: [
-      { label: "Control Tower", href: "#overview", icon: <Icon name="chart" />, active: true },
+      {
+        label: "Control Tower",
+        href: "#overview",
+        icon: <Icon name="chart" />,
+        active: true,
+      },
       { label: "Cases", href: "#table", icon: <Icon name="case" /> },
-      { label: "Audit trail", href: "#timeline", icon: <Icon name="activity" /> },
+      {
+        label: "Audit trail",
+        href: "#timeline",
+        icon: <Icon name="activity" />,
+      },
     ],
   },
   {
@@ -68,7 +77,8 @@ const timelineItems = [
     id: "evt-1",
     title: "Payment failure verified",
     timestamp: "Today, 10:42 AM · payment.failed",
-    description: "The signature is valid and the event is correlated to invoice inv_FIT_1024.",
+    description:
+      "The signature is valid and the event is correlated to invoice inv_FIT_1024.",
     tone: "danger" as const,
     trailing: <Badge tone="danger">Failed</Badge>,
   },
@@ -76,7 +86,8 @@ const timelineItems = [
     id: "evt-2",
     title: "Recovery policy evaluated",
     timestamp: "Today, 10:43 AM · deterministic policy",
-    description: "Gateway retries remain active. A standalone Payment Link was rejected as unsafe.",
+    description:
+      "Gateway retries remain active. A standalone Payment Link was rejected as unsafe.",
     tone: "warning" as const,
     trailing: <Badge tone="warning">Approval</Badge>,
   },
@@ -84,7 +95,8 @@ const timelineItems = [
     id: "evt-3",
     title: "Card update surface prepared",
     timestamp: "Today, 10:44 AM · Razorpay test mode",
-    description: "The customer can update the card for this subscription; no charge is initiated by RecoveryOS.",
+    description:
+      "The customer can update the card for this subscription; no charge is initiated by RecoveryOS.",
     tone: "success" as const,
     trailing: <Badge tone="success">Ready</Badge>,
   },
@@ -117,21 +129,37 @@ export default function DesignSystemPage() {
         eyebrow="Phase 0 · Visual foundation"
         title="RecoveryOS design system"
         description="An original revenue-recovery interface with the clarity, density, blue-led palette, and restrained motion of Razorpay’s public product experience."
-        action={<Button onClick={() => setDrawerOpen(true)}>Open policy drawer</Button>}
+        action={
+          <Button onClick={() => setDrawerOpen(true)}>
+            Open policy drawer
+          </Button>
+        }
       />
 
       <div className={styles.stack}>
-        <section id="overview" className={styles.previewSection} aria-labelledby="overview-title">
+        <section
+          id="overview"
+          className={styles.previewSection}
+          aria-labelledby="overview-title"
+        >
           <h2 id="overview-title">Control Tower foundations</h2>
           <div className={styles.grid4}>
-            <MetricCard label="Revenue at risk" value="₹4,28,600" delta="18 active billing cycles" />
+            <MetricCard
+              label="Revenue at risk"
+              value="₹4,28,600"
+              delta="18 active billing cycles"
+            />
             <MetricCard
               label="Verified recovered"
               value="₹1,84,920"
               delta="↑ 12.4% this week"
               badge={<Badge tone="success">Verified</Badge>}
             />
-            <MetricCard label="Recovery rate" value="43.1%" delta="+4.2 pts vs baseline" />
+            <MetricCard
+              label="Recovery rate"
+              value="43.1%"
+              delta="+4.2 pts vs baseline"
+            />
             <MetricCard
               label="Human review"
               value="7"
@@ -141,11 +169,18 @@ export default function DesignSystemPage() {
           </div>
         </section>
 
-        <section className={styles.previewSection} aria-labelledby="color-title">
+        <section
+          className={styles.previewSection}
+          aria-labelledby="color-title"
+        >
           <h2 id="color-title">Color tokens</h2>
           <div className={styles.swatches}>
             {swatches.map(([name, value, color]) => (
-              <div key={name} className={styles.swatch} style={{ background: value, color }}>
+              <div
+                key={name}
+                className={styles.swatch}
+                style={{ background: value, color }}
+              >
                 <span>{name}</span>
                 <span>{value}</span>
               </div>
@@ -153,7 +188,10 @@ export default function DesignSystemPage() {
           </div>
         </section>
 
-        <section className={styles.previewSection} aria-labelledby="actions-title">
+        <section
+          className={styles.previewSection}
+          aria-labelledby="actions-title"
+        >
           <h2 id="actions-title">Actions and evidence states</h2>
           <div className={styles.previewRow}>
             <Button>Approve recovery</Button>
@@ -164,18 +202,35 @@ export default function DesignSystemPage() {
           </div>
           <div className={styles.previewRow}>
             <TestModeBadge />
-            <Badge tone="neutral" showDot>Simulated</Badge>
-            <Badge tone="info" showDot>Waiting</Badge>
-            <Badge tone="success" showDot>Recovered</Badge>
-            <Badge tone="warning" showDot>Review required</Badge>
-            <Badge tone="danger" showDot>Policy blocked</Badge>
+            <Badge tone="neutral" showDot>
+              Simulated
+            </Badge>
+            <Badge tone="info" showDot>
+              Waiting
+            </Badge>
+            <Badge tone="success" showDot>
+              Recovered
+            </Badge>
+            <Badge tone="warning" showDot>
+              Review required
+            </Badge>
+            <Badge tone="danger" showDot>
+              Policy blocked
+            </Badge>
           </div>
         </section>
 
-        <section id="forms" className={styles.previewSection} aria-labelledby="forms-title">
+        <section
+          id="forms"
+          className={styles.previewSection}
+          aria-labelledby="forms-title"
+        >
           <h2 id="forms-title">Form controls</h2>
           <Card>
-            <CardHeader title="Recovery policy" description="Controls are explicit about scope and customer impact." />
+            <CardHeader
+              title="Recovery policy"
+              description="Controls are explicit about scope and customer impact."
+            />
             <CardBody>
               <div className={styles.grid2}>
                 <Input
@@ -185,9 +240,15 @@ export default function DesignSystemPage() {
                   hint="Amounts above ₹10,000 require a human decision."
                   required
                 />
-                <Select label="Preferred recovery action" defaultValue="card-update" required>
+                <Select
+                  label="Preferred recovery action"
+                  defaultValue="card-update"
+                  required
+                >
                   <option value="card-update">Subscription card update</option>
-                  <option value="invoice-link">Subscription invoice link</option>
+                  <option value="invoice-link">
+                    Subscription invoice link
+                  </option>
                   <option value="wait">Wait for gateway retry</option>
                 </Select>
               </div>
@@ -195,13 +256,19 @@ export default function DesignSystemPage() {
             <CardFooter>
               <div className={styles.previewRow}>
                 <Button size="sm">Save policy</Button>
-                <Button size="sm" variant="secondary">Reset</Button>
+                <Button size="sm" variant="secondary">
+                  Reset
+                </Button>
               </div>
             </CardFooter>
           </Card>
         </section>
 
-        <section id="charts" className={styles.previewSection} aria-labelledby="charts-title">
+        <section
+          id="charts"
+          className={styles.previewSection}
+          aria-labelledby="charts-title"
+        >
           <h2 id="charts-title">Chart shell</h2>
           <Card>
             <CardBody>
@@ -210,17 +277,26 @@ export default function DesignSystemPage() {
                 subtitle="Authoritative payment events only · ₹ thousands"
                 action={<Badge tone="info">7 days</Badge>}
               >
-                <BarChart data={chartData} valueLabel={(value) => `₹${value}k`} />
+                <BarChart
+                  data={chartData}
+                  valueLabel={(value) => `₹${value}k`}
+                />
               </ChartShell>
             </CardBody>
           </Card>
         </section>
 
-        <section id="table" className={styles.previewSection} aria-labelledby="table-title">
+        <section
+          id="table"
+          className={styles.previewSection}
+          aria-labelledby="table-title"
+        >
           <h2 id="table-title">Case table</h2>
           <TableViewport>
             <Table>
-              <TableCaption>Active recovery cases. Scroll horizontally on small screens.</TableCaption>
+              <TableCaption>
+                Active recovery cases. Scroll horizontally on small screens.
+              </TableCaption>
               <TableHead>
                 <TableRow>
                   <TableHeaderCell>Case</TableHeaderCell>
@@ -232,59 +308,98 @@ export default function DesignSystemPage() {
               </TableHead>
               <TableBody>
                 <TableRow>
-                  <TableCell><strong>REC-1024</strong></TableCell>
+                  <TableCell>
+                    <strong>REC-1024</strong>
+                  </TableCell>
                   <TableCell>Ananya Sharma</TableCell>
                   <TableCell>Insufficient funds</TableCell>
                   <TableCell>₹1,499</TableCell>
-                  <TableCell><Badge tone="warning">Awaiting approval</Badge></TableCell>
+                  <TableCell>
+                    <Badge tone="warning">Awaiting approval</Badge>
+                  </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell><strong>REC-1023</strong></TableCell>
+                  <TableCell>
+                    <strong>REC-1023</strong>
+                  </TableCell>
                   <TableCell>Vikram Rao</TableCell>
                   <TableCell>Card expired</TableCell>
                   <TableCell>₹2,999</TableCell>
-                  <TableCell><Badge tone="info">Card update sent</Badge></TableCell>
+                  <TableCell>
+                    <Badge tone="info">Card update sent</Badge>
+                  </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell><strong>REC-1022</strong></TableCell>
+                  <TableCell>
+                    <strong>REC-1022</strong>
+                  </TableCell>
                   <TableCell>Mira Patel</TableCell>
                   <TableCell>Unknown</TableCell>
                   <TableCell>₹899</TableCell>
-                  <TableCell><Badge tone="success">Recovered</Badge></TableCell>
+                  <TableCell>
+                    <Badge tone="success">Recovered</Badge>
+                  </TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           </TableViewport>
         </section>
 
-        <section id="timeline" className={styles.previewSection} aria-labelledby="timeline-title">
+        <section
+          id="timeline"
+          className={styles.previewSection}
+          aria-labelledby="timeline-title"
+        >
           <h2 id="timeline-title">Case timeline</h2>
           <Card>
-            <CardHeader title="REC-1024 · FitBox Annual" description="Every policy decision and provider event remains inspectable." />
+            <CardHeader
+              title="REC-1024 · FitBox Annual"
+              description="Every policy decision and provider event remains inspectable."
+            />
             <CardBody>
               <Timeline items={timelineItems} />
             </CardBody>
           </Card>
         </section>
 
-        <section id="feedback" className={styles.previewSection} aria-labelledby="feedback-title">
+        <section
+          id="feedback"
+          className={styles.previewSection}
+          aria-labelledby="feedback-title"
+        >
           <h2 id="feedback-title">Feedback, loading, and empty states</h2>
           <div className={styles.grid2}>
             <div className={styles.stack}>
-              <Alert tone="info" title="Gateway retry is active">RecoveryOS will not create a standalone Payment Link.</Alert>
-              <Alert tone="success" title="Payment verified">Revenue was attributed once from payment.captured.</Alert>
-              <Alert tone="warning" title="Human approval required">This action exceeds the ₹10,000 threshold.</Alert>
-              <Alert tone="danger" title="Outreach blocked">The customer opted out of automated contact.</Alert>
+              <Alert tone="info" title="Gateway retry is active">
+                RecoveryOS will not create a standalone Payment Link.
+              </Alert>
+              <Alert tone="success" title="Payment verified">
+                Revenue was attributed once from payment.captured.
+              </Alert>
+              <Alert tone="warning" title="Human approval required">
+                This action exceeds the ₹10,000 threshold.
+              </Alert>
+              <Alert tone="danger" title="Outreach blocked">
+                The customer opted out of automated contact.
+              </Alert>
             </div>
             <EmptyState
               title="No cases need review"
               description="New policy-blocked or high-value recoveries will appear here."
-              action={<Button variant="secondary" size="sm">View all cases</Button>}
+              action={
+                <Button variant="secondary" size="sm">
+                  View all cases
+                </Button>
+              }
             />
           </div>
           <Card>
             <CardBody>
-              <div className={styles.stack} aria-label="Loading case details" aria-busy="true">
+              <div
+                className={styles.stack}
+                aria-label="Loading case details"
+                aria-busy="true"
+              >
                 <Skeleton width="38%" height="1.5rem" />
                 <Skeleton height="0.875rem" />
                 <Skeleton width="72%" height="0.875rem" />
@@ -301,14 +416,24 @@ export default function DesignSystemPage() {
         description="Preview of the focus-trapped settings drawer. Escape and backdrop click close it."
         footer={
           <>
-            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={() => setDrawerOpen(false)}>Save policy</Button>
           </>
         }
       >
         <div className={styles.stack}>
-          <Alert tone="info" title="Safe by default">Native subscription recovery surfaces are preferred over standalone links.</Alert>
-          <Input label="Daily contact limit" type="number" defaultValue="2" required />
+          <Alert tone="info" title="Safe by default">
+            Native subscription recovery surfaces are preferred over standalone
+            links.
+          </Alert>
+          <Input
+            label="Daily contact limit"
+            type="number"
+            defaultValue="2"
+            required
+          />
           <Select label="Quiet hours" defaultValue="22-08" required>
             <option value="22-08">10:00 PM – 8:00 AM IST</option>
             <option value="21-09">9:00 PM – 9:00 AM IST</option>

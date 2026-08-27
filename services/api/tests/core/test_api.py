@@ -35,6 +35,23 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
         recommendation = await client.post(
             f"/v1/recovery-cases/{FITBOX_CASE_ID}/actions/recommend", json={}
         )
+        approval = await client.post(
+            f"/v1/recovery-cases/{FITBOX_CASE_ID}/commands",
+            json={"command": "APPROVE"},
+        )
+        success_payload = {
+            "provider_event_id": "evt_api_contract_success",
+            "amount_paise": 149_900,
+            "subscription_reactivated": True,
+        }
+        success = await client.post(
+            f"/v1/mock/recovery-cases/{FITBOX_CASE_ID}/payment-success",
+            json=success_payload,
+        )
+        duplicate_success = await client.post(
+            f"/v1/mock/recovery-cases/{FITBOX_CASE_ID}/payment-success",
+            json=success_payload,
+        )
         missing = await client.get("/v1/recovery-cases/missing")
 
     assert dashboard.status_code == 200
@@ -51,5 +68,12 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
     assert len(timeline.json()["items"]) == 3
     assert recommendation.status_code == 201
     assert recommendation.json()["action"]["payment_surface_type"] == ("SUBSCRIPTION_CARD_UPDATE")
+    assert approval.status_code == 200
+    assert approval.json()["status"] == "ACCEPTED"
+    assert success.status_code == 200
+    assert success.json()["newly_recognized"] is True
+    assert success.json()["case"]["case_outcome"] == "RECOVERED"
+    assert duplicate_success.status_code == 200
+    assert duplicate_success.json()["newly_recognized"] is False
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "RESOURCE_NOT_FOUND"

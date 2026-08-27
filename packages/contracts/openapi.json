@@ -58,6 +58,689 @@
         }
       }
     },
+    "/v1/dashboard/metrics": {
+      "get": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Get Dashboard",
+        "operationId": "get_dashboard_v1_dashboard_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases": {
+      "get": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "List Recovery Cases",
+        "operationId": "list_recovery_cases_v1_recovery_cases_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "case_outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseOutcome"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Case Outcome"
+            }
+          },
+          {
+            "name": "diagnosis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Diagnosis"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Diagnosis"
+            }
+          },
+          {
+            "name": "subscription_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionState"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscription State"
+            }
+          },
+          {
+            "name": "opened_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opened From"
+            }
+          },
+          {
+            "name": "opened_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Opened To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}": {
+      "get": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Get Recovery Case",
+        "operationId": "get_recovery_case_v1_recovery_cases__case_id__get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/timeline": {
+      "get": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Get Recovery Case Timeline",
+        "operationId": "get_recovery_case_timeline_v1_recovery_cases__case_id__timeline_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/commands": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Execute Operator Command",
+        "description": "Stable UI command fa\u00e7ade over action-specific recovery endpoints.",
+        "operationId": "execute_operator_command_v1_recovery_cases__case_id__commands_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorCommandResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/actions/recommend": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Recommend Recovery Action",
+        "operationId": "recommend_recovery_action_v1_recovery_cases__case_id__actions_recommend_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionDecisionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/actions/{action_id}/approve": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Approve Recovery Action",
+        "operationId": "approve_recovery_action_v1_recovery_cases__case_id__actions__action_id__approve_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/actions/{action_id}/reject": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Reject Recovery Action",
+        "operationId": "reject_recovery_action_v1_recovery_cases__case_id__actions__action_id__reject_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/stop": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Stop Recovery Case",
+        "operationId": "stop_recovery_case_v1_recovery_cases__case_id__stop_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/escalate": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Escalate Recovery Case",
+        "operationId": "escalate_recovery_case_v1_recovery_cases__case_id__escalate_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCaseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/mock/recovery-cases/{case_id}/payment-surfaces": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Open Mock Payment Surface",
+        "description": "Explicit mock endpoint mirroring approval-triggered surface creation.",
+        "operationId": "open_mock_payment_surface_v1_mock_recovery_cases__case_id__payment_surfaces_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockPaymentSurfaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/mock/recovery-cases/{case_id}/payment-success": {
+      "post": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Apply Mock Payment Success",
+        "operationId": "apply_mock_payment_success_v1_mock_recovery_cases__case_id__payment_success_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockPaymentSuccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockPaymentSuccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -86,6 +769,580 @@
   },
   "components": {
     "schemas": {
+      "ActionDecisionResponse": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionResponse"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PolicyResponse"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "policy"
+        ],
+        "title": "ActionDecisionResponse"
+      },
+      "ActionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "action_type": {
+            "$ref": "#/components/schemas/RecoveryActionType"
+          },
+          "payment_surface_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSurfaceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ActionStatus"
+          },
+          "scheduled_for": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled For"
+          },
+          "external_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reference"
+          },
+          "customer_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Url"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "action_type",
+          "payment_surface_type",
+          "status",
+          "scheduled_for",
+          "external_reference",
+          "customer_url",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "ActionResponse"
+      },
+      "ActionStatus": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "AWAITING_APPROVAL",
+          "SCHEDULED",
+          "EXECUTING",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "ActionStatus"
+      },
+      "CaseCommandRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "CaseCommandRequest"
+      },
+      "CaseDetailResponse": {
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/RecoveryCaseResponse"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerResponse"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/SubscriptionResponse"
+          },
+          "invoice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvoiceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentFailureResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "available_commands": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Commands"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case",
+          "customer",
+          "subscription",
+          "invoice",
+          "payment_failure",
+          "latest_action",
+          "latest_policy",
+          "available_commands"
+        ],
+        "title": "CaseDetailResponse"
+      },
+      "CaseListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseSummaryResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageResponse"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page"
+        ],
+        "title": "CaseListResponse"
+      },
+      "CaseOutcome": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "RECOVERED",
+          "PARTIALLY_RECOVERED",
+          "ESCALATED",
+          "DISPUTED",
+          "STOPPED",
+          "EXPIRED"
+        ],
+        "title": "CaseOutcome"
+      },
+      "CaseSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "failed_invoice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Invoice Id"
+          },
+          "billing_cycle_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Cycle Key"
+          },
+          "customer_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Display Name"
+          },
+          "plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Name"
+          },
+          "amount_at_risk_paise": {
+            "type": "integer",
+            "title": "Amount At Risk Paise"
+          },
+          "case_outcome": {
+            "$ref": "#/components/schemas/CaseOutcome"
+          },
+          "payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "subscription_state": {
+            "$ref": "#/components/schemas/SubscriptionState"
+          },
+          "contact_disposition": {
+            "$ref": "#/components/schemas/ContactDisposition"
+          },
+          "revenue_attribution": {
+            "$ref": "#/components/schemas/RevenueAttribution"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/Diagnosis"
+          },
+          "recommended_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoveryActionType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_surface_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSurfaceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "merchant_id",
+          "failed_invoice_id",
+          "billing_cycle_key",
+          "amount_at_risk_paise",
+          "case_outcome",
+          "payment_state",
+          "subscription_state",
+          "contact_disposition",
+          "revenue_attribution",
+          "diagnosis",
+          "updated_at"
+        ],
+        "title": "CaseSummaryResponse"
+      },
+      "ContactDisposition": {
+        "type": "string",
+        "enum": [
+          "NOT_CONTACTED",
+          "CONTACT_SCHEDULED",
+          "NO_ANSWER",
+          "BUSY",
+          "ENGAGED",
+          "PROMISE_TO_PAY",
+          "OPTED_OUT",
+          "WRONG_PERSON",
+          "DISPUTE",
+          "ALREADY_PAID"
+        ],
+        "title": "ContactDisposition"
+      },
+      "CustomerResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "preferred_language": {
+            "type": "string",
+            "title": "Preferred Language"
+          },
+          "voice_consent_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Consent At"
+          },
+          "opted_out_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opted Out At"
+          },
+          "customer_agent_available": {
+            "type": "boolean",
+            "title": "Customer Agent Available"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "preferred_language",
+          "voice_consent_at",
+          "opted_out_at",
+          "customer_agent_available"
+        ],
+        "title": "CustomerResponse"
+      },
+      "DashboardMetricsResponse": {
+        "properties": {
+          "revenue_at_risk_paise": {
+            "type": "integer",
+            "title": "Revenue At Risk Paise"
+          },
+          "verified_recovered_revenue_paise": {
+            "type": "integer",
+            "title": "Verified Recovered Revenue Paise"
+          },
+          "simulated_incremental_recovery_paise": {
+            "type": "integer",
+            "title": "Simulated Incremental Recovery Paise"
+          },
+          "net_recovered_value_paise": {
+            "type": "integer",
+            "title": "Net Recovered Value Paise"
+          },
+          "active_cases": {
+            "type": "integer",
+            "title": "Active Cases"
+          },
+          "recovered_cases": {
+            "type": "integer",
+            "title": "Recovered Cases"
+          },
+          "total_cases": {
+            "type": "integer",
+            "title": "Total Cases"
+          },
+          "recovery_rate_basis_points": {
+            "type": "integer",
+            "title": "Recovery Rate Basis Points"
+          },
+          "human_review_count": {
+            "type": "integer",
+            "title": "Human Review Count"
+          },
+          "policy_blocked_actions": {
+            "type": "integer",
+            "title": "Policy Blocked Actions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revenue_at_risk_paise",
+          "verified_recovered_revenue_paise",
+          "simulated_incremental_recovery_paise",
+          "net_recovered_value_paise",
+          "active_cases",
+          "recovered_cases",
+          "total_cases",
+          "recovery_rate_basis_points",
+          "human_review_count",
+          "policy_blocked_actions"
+        ],
+        "title": "DashboardMetricsResponse"
+      },
+      "DashboardResponse": {
+        "properties": {
+          "evidence_kind": {
+            "$ref": "#/components/schemas/EvidenceKind",
+            "default": "SIMULATED"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "INR"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/DashboardMetricsResponse"
+          },
+          "diagnosis_distribution": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosisBucketResponse"
+            },
+            "type": "array",
+            "title": "Diagnosis Distribution"
+          },
+          "recent_events": {
+            "items": {
+              "$ref": "#/components/schemas/RecentEventResponse"
+            },
+            "type": "array",
+            "title": "Recent Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metrics",
+          "diagnosis_distribution",
+          "recent_events"
+        ],
+        "title": "DashboardResponse"
+      },
+      "Diagnosis": {
+        "type": "string",
+        "enum": [
+          "TRANSIENT_RETRYABLE",
+          "INSUFFICIENT_FUNDS",
+          "AUTHENTICATION_REQUIRED",
+          "INSTRUMENT_INVALID",
+          "MERCHANT_ERROR",
+          "RISK_OR_COMPLIANCE_BLOCK",
+          "UNKNOWN"
+        ],
+        "title": "Diagnosis"
+      },
+      "DiagnosisBucketResponse": {
+        "properties": {
+          "diagnosis": {
+            "$ref": "#/components/schemas/Diagnosis"
+          },
+          "case_count": {
+            "type": "integer",
+            "title": "Case Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "diagnosis",
+          "case_count"
+        ],
+        "title": "DiagnosisBucketResponse"
+      },
+      "EvidenceKind": {
+        "type": "string",
+        "enum": [
+          "SIMULATED",
+          "RAZORPAY_TEST_VERIFIED"
+        ],
+        "title": "EvidenceKind"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -98,6 +1355,788 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InvoiceResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider_invoice_id": {
+            "type": "string",
+            "title": "Provider Invoice Id"
+          },
+          "billing_cycle_key": {
+            "type": "string",
+            "title": "Billing Cycle Key"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "title": "Amount Paise"
+          },
+          "amount_paid_paise": {
+            "type": "integer",
+            "title": "Amount Paid Paise"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "invoice_state": {
+            "type": "string",
+            "title": "Invoice State"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "provider_invoice_id",
+          "billing_cycle_key",
+          "amount_paise",
+          "amount_paid_paise",
+          "currency",
+          "invoice_state"
+        ],
+        "title": "InvoiceResponse"
+      },
+      "MockPaymentSuccessRequest": {
+        "properties": {
+          "provider_event_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Provider Event Id"
+          },
+          "amount_paise": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Paise"
+          },
+          "subscription_reactivated": {
+            "type": "boolean",
+            "title": "Subscription Reactivated",
+            "default": false
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_event_id"
+        ],
+        "title": "MockPaymentSuccessRequest"
+      },
+      "MockPaymentSuccessResponse": {
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/RecoveryCaseResponse"
+          },
+          "newly_recognized": {
+            "type": "boolean",
+            "title": "Newly Recognized"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case",
+          "newly_recognized"
+        ],
+        "title": "MockPaymentSuccessResponse"
+      },
+      "MockPaymentSurfaceRequest": {
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Action Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action_id"
+        ],
+        "title": "MockPaymentSurfaceRequest"
+      },
+      "OperatorCommandRequest": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "APPROVE",
+              "REJECT",
+              "STOP",
+              "ESCALATE_TO_HUMAN"
+            ],
+            "title": "Command"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "OperatorCommandRequest"
+      },
+      "OperatorCommandResponse": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "source": {
+            "type": "string",
+            "const": "api",
+            "title": "Source",
+            "default": "api"
+          },
+          "status": {
+            "type": "string",
+            "const": "ACCEPTED",
+            "title": "Status",
+            "default": "ACCEPTED"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command",
+          "message",
+          "occurred_at"
+        ],
+        "title": "OperatorCommandResponse"
+      },
+      "PageResponse": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "next_cursor",
+          "has_more",
+          "limit"
+        ],
+        "title": "PageResponse"
+      },
+      "PaymentFailureResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider_payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Payment Id"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "title": "Amount Paise"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Source"
+          },
+          "error_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Step"
+          },
+          "error_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Reason"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "provider_payment_id",
+          "amount_paise",
+          "currency",
+          "payment_state",
+          "method",
+          "error_code",
+          "error_source",
+          "error_step",
+          "error_reason",
+          "occurred_at"
+        ],
+        "title": "PaymentFailureResponse"
+      },
+      "PaymentState": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN",
+          "FAILED",
+          "PENDING",
+          "AUTHORIZED",
+          "CAPTURED",
+          "REFUNDED"
+        ],
+        "title": "PaymentState"
+      },
+      "PaymentSurfaceType": {
+        "type": "string",
+        "enum": [
+          "SUBSCRIPTION_CARD_UPDATE",
+          "SUBSCRIPTION_INVOICE_LINK",
+          "STANDARD_PAYMENT_LINK"
+        ],
+        "title": "PaymentSurfaceType"
+      },
+      "PolicyDisposition": {
+        "type": "string",
+        "enum": [
+          "ALLOW",
+          "BLOCK",
+          "DELAY",
+          "REQUIRE_MANUAL_APPROVAL"
+        ],
+        "title": "PolicyDisposition"
+      },
+      "PolicyResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "disposition": {
+            "$ref": "#/components/schemas/PolicyDisposition"
+          },
+          "decision_code": {
+            "type": "string",
+            "title": "Decision Code"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "delay_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delay Until"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "disposition",
+          "decision_code",
+          "reason_codes",
+          "reasons",
+          "policy_version",
+          "delay_until",
+          "created_at"
+        ],
+        "title": "PolicyResponse"
+      },
+      "RecentEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "event_type",
+          "occurred_at",
+          "correlation_id"
+        ],
+        "title": "RecentEventResponse"
+      },
+      "RecommendActionRequest": {
+        "properties": {
+          "action_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoveryActionType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_surface_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSurfaceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RecommendActionRequest"
+      },
+      "RecoveryActionType": {
+        "type": "string",
+        "enum": [
+          "WAIT_FOR_GATEWAY_RETRY",
+          "OPEN_CUSTOMER_PAYMENT_SURFACE",
+          "START_VOICE",
+          "SEND_TO_CUSTOMER_AGENT",
+          "ESCALATE_TO_HUMAN",
+          "STOP"
+        ],
+        "title": "RecoveryActionType"
+      },
+      "RecoveryCaseResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "customer_id": {
+            "type": "string",
+            "title": "Customer Id"
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          },
+          "failed_invoice_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Invoice Id"
+          },
+          "billing_cycle_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Cycle Key"
+          },
+          "failed_payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Payment Id"
+          },
+          "case_outcome": {
+            "$ref": "#/components/schemas/CaseOutcome"
+          },
+          "payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "subscription_state": {
+            "$ref": "#/components/schemas/SubscriptionState"
+          },
+          "contact_disposition": {
+            "$ref": "#/components/schemas/ContactDisposition"
+          },
+          "revenue_attribution": {
+            "$ref": "#/components/schemas/RevenueAttribution"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/Diagnosis"
+          },
+          "amount_at_risk_paise": {
+            "type": "integer",
+            "title": "Amount At Risk Paise"
+          },
+          "arrears_collected_paise": {
+            "type": "integer",
+            "title": "Arrears Collected Paise"
+          },
+          "case_recovered": {
+            "type": "boolean",
+            "title": "Case Recovered"
+          },
+          "subscription_reactivated": {
+            "type": "boolean",
+            "title": "Subscription Reactivated"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opened At"
+          },
+          "recovery_deadline": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recovery Deadline"
+          },
+          "recovered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovered At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "merchant_id",
+          "customer_id",
+          "subscription_id",
+          "failed_invoice_id",
+          "billing_cycle_key",
+          "failed_payment_id",
+          "case_outcome",
+          "payment_state",
+          "subscription_state",
+          "contact_disposition",
+          "revenue_attribution",
+          "diagnosis",
+          "amount_at_risk_paise",
+          "arrears_collected_paise",
+          "case_recovered",
+          "subscription_reactivated",
+          "opened_at",
+          "recovery_deadline",
+          "recovered_at",
+          "version",
+          "updated_at"
+        ],
+        "title": "RecoveryCaseResponse"
+      },
+      "RejectActionRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "RejectActionRequest"
+      },
+      "RevenueAttribution": {
+        "type": "string",
+        "enum": [
+          "NONE",
+          "SIMULATED",
+          "RAZORPAY_TEST_VERIFIED",
+          "VERIFIED_EXTERNAL"
+        ],
+        "title": "RevenueAttribution"
+      },
+      "SubscriptionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider_subscription_id": {
+            "type": "string",
+            "title": "Provider Subscription Id"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "title": "Amount Paise"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "subscription_state": {
+            "$ref": "#/components/schemas/SubscriptionState"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "provider_subscription_id",
+          "plan_name",
+          "amount_paise",
+          "currency",
+          "subscription_state"
+        ],
+        "title": "SubscriptionResponse"
+      },
+      "SubscriptionState": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN",
+          "CREATED",
+          "AUTHENTICATED",
+          "ACTIVE",
+          "PENDING",
+          "HALTED",
+          "PAUSED",
+          "CANCELLED",
+          "COMPLETED"
+        ],
+        "title": "SubscriptionState"
+      },
+      "TimelineEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "evidence_kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "event_type",
+          "source",
+          "evidence_kind",
+          "payload",
+          "occurred_at",
+          "recorded_at",
+          "correlation_id"
+        ],
+        "title": "TimelineEventResponse"
+      },
+      "TimelineResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEventResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "TimelineResponse"
       },
       "ValidationError": {
         "properties": {

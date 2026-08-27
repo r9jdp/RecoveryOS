@@ -53,7 +53,11 @@ export function Button({
       disabled={disabled || loading}
       {...props}
     >
-      {loading ? <span className={styles.buttonSpinner} aria-hidden="true" /> : leadingIcon}
+      {loading ? (
+        <span className={styles.buttonSpinner} aria-hidden="true" />
+      ) : (
+        leadingIcon
+      )}
       <span>{children}</span>
     </button>
   );

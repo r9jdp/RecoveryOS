@@ -10,7 +10,14 @@ export interface PageHeaderProps extends HTMLAttributes<HTMLElement> {
   action?: ReactNode;
 }
 
-export function PageHeader({ eyebrow, title, description, action, className, ...props }: PageHeaderProps) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  action,
+  className,
+  ...props
+}: PageHeaderProps) {
   return (
     <header className={cx(styles.sectionHeader, className)} {...props}>
       <div>

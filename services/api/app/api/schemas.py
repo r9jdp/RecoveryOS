@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -223,6 +224,18 @@ class RejectActionRequest(ApiModel):
 
 class CaseCommandRequest(ApiModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class OperatorCommandRequest(ApiModel):
+    command: Literal["APPROVE", "REJECT", "STOP", "ESCALATE_TO_HUMAN"]
+
+
+class OperatorCommandResponse(ApiModel):
+    command: str
+    message: str
+    occurred_at: datetime
+    source: Literal["api"] = "api"
+    status: Literal["ACCEPTED"] = "ACCEPTED"
 
 
 class MockPaymentSuccessRequest(ApiModel):

@@ -229,19 +229,12 @@ async def seed_fitbox(session: AsyncSession, *, reset: bool = False) -> bool:
             source_event_id="sim_action_recommended_001",
         ),
     ]
-    session.add_all(
-        [
-            merchant,
-            customer,
-            subscription,
-            invoice,
-            payment,
-            recovery_case,
-            action,
-            policy,
-            *events,
-        ]
-    )
+    # Flush dependency tiers explicitly because the demo models intentionally omit
+    # ORM relationships; foreign-key columns alone do not create unit-of-work edges.
+    for record in (merchant, customer, subscription, invoice, payment, recovery_case, action):
+        session.add(record)
+        await session.flush()
+    session.add_all([policy, *events])
     await session.commit()
     return True
 

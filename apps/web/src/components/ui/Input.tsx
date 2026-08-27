@@ -10,7 +10,8 @@ interface FieldMeta {
   error?: string;
 }
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement>, FieldMeta {}
+export interface InputProps
+  extends InputHTMLAttributes<HTMLInputElement>, FieldMeta {}
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, hint, error, id: suppliedId, className, required, ...props },
@@ -30,7 +31,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         ref={ref}
         id={id}
         required={required}
-        className={cx(styles.input, Boolean(error) && styles.inputInvalid, className)}
+        className={cx(
+          styles.input,
+          Boolean(error) && styles.inputInvalid,
+          className,
+        )}
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={descriptionId}
         {...props}
@@ -48,42 +53,62 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   );
 });
 
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement>, FieldMeta {}
+export interface SelectProps
+  extends SelectHTMLAttributes<HTMLSelectElement>, FieldMeta {}
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, id: suppliedId, className, required, children, ...props },
-  ref,
-) {
-  const generatedId = useId();
-  const id = suppliedId ?? generatedId;
-  const descriptionId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  function Select(
+    {
+      label,
+      hint,
+      error,
+      id: suppliedId,
+      className,
+      required,
+      children,
+      ...props
+    },
+    ref,
+  ) {
+    const generatedId = useId();
+    const id = suppliedId ?? generatedId;
+    const descriptionId = error
+      ? `${id}-error`
+      : hint
+        ? `${id}-hint`
+        : undefined;
 
-  return (
-    <label className={styles.field} htmlFor={id}>
-      <span className={styles.fieldLabel}>
-        <span>{label}</span>
-        {!required && <span className={styles.fieldHint}>Optional</span>}
-      </span>
-      <select
-        ref={ref}
-        id={id}
-        required={required}
-        className={cx(styles.select, Boolean(error) && styles.inputInvalid, className)}
-        aria-invalid={Boolean(error) || undefined}
-        aria-describedby={descriptionId}
-        {...props}
-      >
-        {children}
-      </select>
-      {error ? (
-        <span id={descriptionId} className={styles.fieldError} role="alert">
-          {error}
+    return (
+      <label className={styles.field} htmlFor={id}>
+        <span className={styles.fieldLabel}>
+          <span>{label}</span>
+          {!required && <span className={styles.fieldHint}>Optional</span>}
         </span>
-      ) : hint ? (
-        <span id={descriptionId} className={styles.fieldHint}>
-          {hint}
-        </span>
-      ) : null}
-    </label>
-  );
-});
+        <select
+          ref={ref}
+          id={id}
+          required={required}
+          className={cx(
+            styles.select,
+            Boolean(error) && styles.inputInvalid,
+            className,
+          )}
+          aria-invalid={Boolean(error) || undefined}
+          aria-describedby={descriptionId}
+          {...props}
+        >
+          {children}
+        </select>
+        {error ? (
+          <span id={descriptionId} className={styles.fieldError} role="alert">
+            {error}
+          </span>
+        ) : hint ? (
+          <span id={descriptionId} className={styles.fieldHint}>
+            {hint}
+          </span>
+        ) : null}
+      </label>
+    );
+  },
+);

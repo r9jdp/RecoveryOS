@@ -23,7 +23,14 @@ export interface DrawerProps {
   footer?: ReactNode;
 }
 
-export function Drawer({ open, onClose, title, description, children, footer }: DrawerProps) {
+export function Drawer({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+}: DrawerProps) {
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLElement>(null);
@@ -31,7 +38,10 @@ export function Drawer({ open, onClose, title, description, children, footer }: 
   useEffect(() => {
     if (!open) return;
 
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const panel = panelRef.current;
     const focusable = panel?.querySelectorAll<HTMLElement>(focusableSelector);
     (focusable?.[0] ?? panel)?.focus();
@@ -44,7 +54,9 @@ export function Drawer({ open, onClose, title, description, children, footer }: 
       }
 
       if (event.key !== "Tab" || !panel) return;
-      const elements = [...panel.querySelectorAll<HTMLElement>(focusableSelector)];
+      const elements = [
+        ...panel.querySelectorAll<HTMLElement>(focusableSelector),
+      ];
       if (elements.length === 0) {
         event.preventDefault();
         panel.focus();
@@ -101,7 +113,12 @@ export function Drawer({ open, onClose, title, description, children, footer }: 
               </p>
             )}
           </div>
-          <button className={styles.drawerClose} type="button" onClick={onClose} aria-label="Close drawer">
+          <button
+            className={styles.drawerClose}
+            type="button"
+            onClick={onClose}
+            aria-label="Close drawer"
+          >
             ×
           </button>
         </header>

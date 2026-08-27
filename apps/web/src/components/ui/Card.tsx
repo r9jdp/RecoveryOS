@@ -8,16 +8,34 @@ export interface CardProps extends HTMLAttributes<HTMLElement> {
 }
 
 export function Card({ interactive = false, className, ...props }: CardProps) {
-  return <section className={cx(styles.card, interactive && styles.cardInteractive, className)} {...props} />;
+  return (
+    <section
+      className={cx(
+        styles.card,
+        interactive && styles.cardInteractive,
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
-export interface CardHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, "title"> {
+export interface CardHeaderProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "title"
+> {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
 }
 
-export function CardHeader({ title, description, action, className, ...props }: CardHeaderProps) {
+export function CardHeader({
+  title,
+  description,
+  action,
+  className,
+  ...props
+}: CardHeaderProps) {
   return (
     <header className={cx(styles.cardHeader, className)} {...props}>
       <div>
@@ -29,11 +47,17 @@ export function CardHeader({ title, description, action, className, ...props }: 
   );
 }
 
-export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function CardBody({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
   return <div className={cx(styles.cardBody, className)} {...props} />;
 }
 
-export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function CardFooter({
+  className,
+  ...props
+}: HTMLAttributes<HTMLDivElement>) {
   return <footer className={cx(styles.cardFooter, className)} {...props} />;
 }
 
@@ -44,11 +68,23 @@ export interface MetricCardProps extends Omit<CardProps, "children"> {
   badge?: ReactNode;
 }
 
-export function MetricCard({ label, value, delta, badge, ...props }: MetricCardProps) {
+export function MetricCard({
+  label,
+  value,
+  delta,
+  badge,
+  ...props
+}: MetricCardProps) {
   return (
     <Card {...props}>
       <CardBody>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "1rem",
+          }}
+        >
           <p className={styles.metricLabel}>{label}</p>
           {badge}
         </div>

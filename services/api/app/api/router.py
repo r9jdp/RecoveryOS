@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
 
@@ -31,6 +31,8 @@ from .schemas import (
     MockPaymentSuccessRequest,
     MockPaymentSuccessResponse,
     MockPaymentSurfaceRequest,
+    OperatorCommandRequest,
+    OperatorCommandResponse,
     PageResponse,
     RecentEventResponse,
     RecommendActionRequest,
@@ -220,6 +222,66 @@ async def get_recovery_case_timeline(
 ) -> TimelineResponse:
     events = await service.timeline(merchant_id=merchant_id, case_id=case_id)
     return TimelineResponse(items=[TimelineEventResponse.model_validate(event) for event in events])
+
+
+@router.post(
+    "/recovery-cases/{case_id}/commands",
+    response_model=OperatorCommandResponse,
+)
+async def execute_operator_command(
+    case_id: str,
+    request: OperatorCommandRequest,
+    service: Service,
+    merchant_id: MerchantScope,
+) -> OperatorCommandResponse:
+    """Stable UI command façade over action-specific recovery endpoints."""
+
+    occurred_at = datetime.now(UTC)
+    if request.command in {"APPROVE", "REJECT"}:
+        aggregate = await service.get_case(merchant_id=merchant_id, case_id=case_id)
+        action = aggregate.latest_action
+        if action is None:
+            action, _ = await service.recommend_action(
+                merchant_id=merchant_id,
+                case_id=case_id,
+                now=occurred_at,
+            )
+        if request.command == "APPROVE":
+            await service.approve_action(
+                merchant_id=merchant_id,
+                case_id=case_id,
+                action_id=action.id,
+                now=occurred_at,
+            )
+            message = "Recovery action approved."
+        else:
+            await service.reject_action(
+                merchant_id=merchant_id,
+                case_id=case_id,
+                action_id=action.id,
+                reason="Rejected by the merchant operator.",
+                now=occurred_at,
+            )
+            message = "Recovery action rejected."
+    elif request.command == "STOP":
+        await service.stop_case(
+            merchant_id=merchant_id,
+            case_id=case_id,
+            reason="Stopped by the merchant operator.",
+            now=occurred_at,
+        )
+        message = "Recovery case stopped."
+    else:
+        await service.escalate_case(
+            merchant_id=merchant_id,
+            case_id=case_id,
+            reason="Escalated by the merchant operator.",
+            now=occurred_at,
+        )
+        message = "Recovery case escalated to human review."
+    return OperatorCommandResponse(
+        command=request.command, message=message, occurred_at=occurred_at
+    )
 
 
 @router.post(

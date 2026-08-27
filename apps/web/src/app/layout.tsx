@@ -6,11 +6,12 @@ export const metadata: Metadata = {
   description: "Auditable recovery orchestration for failed subscriptions",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body>{children}</body>
     </html>
   );
 }
-

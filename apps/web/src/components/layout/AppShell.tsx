@@ -29,13 +29,19 @@ export function AppShell({
       <aside className={styles.sidebar}>
         <Brand />
         <Navigation groups={navigation} />
-        <div className={styles.sidebarFooter}>{sidebarFooter ?? <TestModeBadge />}</div>
+        <div className={styles.sidebarFooter}>
+          {sidebarFooter ?? <TestModeBadge />}
+        </div>
       </aside>
 
       <main className={styles.shellMain}>
         <div className={styles.mobileHeader}>
           <Brand />
-          <button className={styles.iconButton} type="button" aria-label="Open navigation">
+          <button
+            className={styles.iconButton}
+            type="button"
+            aria-label="Open navigation"
+          >
             <Icon name="menu" />
           </button>
         </div>
@@ -43,7 +49,10 @@ export function AppShell({
           <p className={styles.breadcrumb}>{breadcrumb}</p>
           <div className={styles.topbarActions}>
             {topbarActions ?? <TestModeBadge />}
-            <span className={styles.avatar} aria-label={`Signed in as ${operatorInitials}`}>
+            <span
+              className={styles.avatar}
+              aria-label={`Signed in as ${operatorInitials}`}
+            >
               {operatorInitials}
             </span>
           </div>

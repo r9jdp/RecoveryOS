@@ -10,7 +10,14 @@ export interface ChartShellProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
-export function ChartShell({ title, subtitle, action, children, className, ...props }: ChartShellProps) {
+export function ChartShell({
+  title,
+  subtitle,
+  action,
+  children,
+  className,
+  ...props
+}: ChartShellProps) {
   return (
     <div className={cx(styles.chartShell, className)} {...props}>
       <div className={styles.chartHeader}>
@@ -37,13 +44,22 @@ export interface BarChartProps {
 
 export function BarChart({ data, valueLabel }: BarChartProps) {
   const max = Math.max(...data.map((datum) => datum.value), 1);
-  const accessibleSummary = data.map((datum) => `${datum.label}: ${valueLabel(datum.value)}`).join(", ");
+  const accessibleSummary = data
+    .map((datum) => `${datum.label}: ${valueLabel(datum.value)}`)
+    .join(", ");
 
   return (
     <div className={styles.barChart} role="img" aria-label={accessibleSummary}>
       {data.map((datum) => (
-        <div className={styles.barItem} key={datum.label} title={`${datum.label}: ${valueLabel(datum.value)}`}>
-          <span className={styles.bar} style={{ height: `${Math.max((datum.value / max) * 100, 2)}%` }} />
+        <div
+          className={styles.barItem}
+          key={datum.label}
+          title={`${datum.label}: ${valueLabel(datum.value)}`}
+        >
+          <span
+            className={styles.bar}
+            style={{ height: `${Math.max((datum.value / max) * 100, 2)}%` }}
+          />
           <span className={styles.barLabel}>{datum.label}</span>
         </div>
       ))}

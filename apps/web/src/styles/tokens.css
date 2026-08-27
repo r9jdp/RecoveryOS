@@ -26,7 +26,8 @@
   --ros-dark: #032a3e;
   --ros-dark-raised: #0c3a51;
 
-  --ros-font-display: "TASA Orbiter Display", "Inter", "Avenir Next", "Segoe UI", sans-serif;
+  --ros-font-display:
+    "TASA Orbiter Display", "Inter", "Avenir Next", "Segoe UI", sans-serif;
   --ros-font-body: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --ros-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 

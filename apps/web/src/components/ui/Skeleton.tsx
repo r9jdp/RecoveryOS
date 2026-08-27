@@ -8,7 +8,13 @@ export interface SkeletonProps extends HTMLAttributes<HTMLSpanElement> {
   height?: CSSProperties["height"];
 }
 
-export function Skeleton({ width = "100%", height = "1rem", className, style, ...props }: SkeletonProps) {
+export function Skeleton({
+  width = "100%",
+  height = "1rem",
+  className,
+  style,
+  ...props
+}: SkeletonProps) {
   return (
     <span
       className={cx(styles.skeleton, className)}

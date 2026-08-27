@@ -4,127 +4,1240 @@
  */
 
 export interface paths {
-    "/v1/demo/fixtures/{fixture_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Demo Fixture
-         * @description Return a versioned, synthetic screen fixture with no provider side effects.
-         */
-        get: operations["getDemoFixture"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/v1/demo/fixtures/{fixture_name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Root */
-        get: operations["root__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get Demo Fixture
+     * @description Return a versioned, synthetic screen fixture with no provider side effects.
+     */
+    get: operations["getDemoFixture"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/dashboard/metrics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    /** Get Dashboard */
+    get: operations["get_dashboard_v1_dashboard_metrics_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Recovery Cases */
+    get: operations["list_recovery_cases_v1_recovery_cases_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Recovery Case */
+    get: operations["get_recovery_case_v1_recovery_cases__case_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/timeline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Recovery Case Timeline */
+    get: operations["get_recovery_case_timeline_v1_recovery_cases__case_id__timeline_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/commands": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Execute Operator Command
+     * @description Stable UI command façade over action-specific recovery endpoints.
+     */
+    post: operations["execute_operator_command_v1_recovery_cases__case_id__commands_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/actions/recommend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Recommend Recovery Action */
+    post: operations["recommend_recovery_action_v1_recovery_cases__case_id__actions_recommend_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/actions/{action_id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Approve Recovery Action */
+    post: operations["approve_recovery_action_v1_recovery_cases__case_id__actions__action_id__approve_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/actions/{action_id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject Recovery Action */
+    post: operations["reject_recovery_action_v1_recovery_cases__case_id__actions__action_id__reject_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/stop": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Stop Recovery Case */
+    post: operations["stop_recovery_case_v1_recovery_cases__case_id__stop_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/escalate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Escalate Recovery Case */
+    post: operations["escalate_recovery_case_v1_recovery_cases__case_id__escalate_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/mock/recovery-cases/{case_id}/payment-surfaces": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Open Mock Payment Surface
+     * @description Explicit mock endpoint mirroring approval-triggered surface creation.
+     */
+    post: operations["open_mock_payment_surface_v1_mock_recovery_cases__case_id__payment_surfaces_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/mock/recovery-cases/{case_id}/payment-success": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Apply Mock Payment Success */
+    post: operations["apply_mock_payment_success_v1_mock_recovery_cases__case_id__payment_success_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Root */
+    get: operations["root__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
-        };
+  schemas: {
+    /** ActionDecisionResponse */
+    ActionDecisionResponse: {
+      action: components["schemas"]["ActionResponse"];
+      policy: components["schemas"]["PolicyResponse"];
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    /** ActionResponse */
+    ActionResponse: {
+      /** Id */
+      id: string;
+      /** Case Id */
+      case_id: string;
+      action_type: components["schemas"]["RecoveryActionType"];
+      payment_surface_type: components["schemas"]["PaymentSurfaceType"] | null;
+      status: components["schemas"]["ActionStatus"];
+      /** Scheduled For */
+      scheduled_for: string | null;
+      /** External Reference */
+      external_reference: string | null;
+      /** Customer Url */
+      customer_url: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Completed At */
+      completed_at: string | null;
+    };
+    /**
+     * ActionStatus
+     * @enum {string}
+     */
+    ActionStatus:
+      | "PROPOSED"
+      | "AWAITING_APPROVAL"
+      | "SCHEDULED"
+      | "EXECUTING"
+      | "SUCCEEDED"
+      | "FAILED"
+      | "CANCELLED";
+    /** CaseCommandRequest */
+    CaseCommandRequest: {
+      /** Reason */
+      reason: string;
+    };
+    /** CaseDetailResponse */
+    CaseDetailResponse: {
+      case: components["schemas"]["RecoveryCaseResponse"];
+      customer: components["schemas"]["CustomerResponse"];
+      subscription: components["schemas"]["SubscriptionResponse"];
+      invoice: components["schemas"]["InvoiceResponse"] | null;
+      payment_failure: components["schemas"]["PaymentFailureResponse"] | null;
+      latest_action: components["schemas"]["ActionResponse"] | null;
+      latest_policy: components["schemas"]["PolicyResponse"] | null;
+      /** Available Commands */
+      available_commands: string[];
+    };
+    /** CaseListResponse */
+    CaseListResponse: {
+      /** Items */
+      items: components["schemas"]["CaseSummaryResponse"][];
+      page: components["schemas"]["PageResponse"];
+    };
+    /**
+     * CaseOutcome
+     * @enum {string}
+     */
+    CaseOutcome:
+      | "OPEN"
+      | "RECOVERED"
+      | "PARTIALLY_RECOVERED"
+      | "ESCALATED"
+      | "DISPUTED"
+      | "STOPPED"
+      | "EXPIRED";
+    /** CaseSummaryResponse */
+    CaseSummaryResponse: {
+      /** Id */
+      id: string;
+      /** Merchant Id */
+      merchant_id: string;
+      /** Failed Invoice Id */
+      failed_invoice_id: string | null;
+      /** Billing Cycle Key */
+      billing_cycle_key: string | null;
+      /** Customer Display Name */
+      customer_display_name?: string | null;
+      /** Plan Name */
+      plan_name?: string | null;
+      /** Amount At Risk Paise */
+      amount_at_risk_paise: number;
+      case_outcome: components["schemas"]["CaseOutcome"];
+      payment_state: components["schemas"]["PaymentState"];
+      subscription_state: components["schemas"]["SubscriptionState"];
+      contact_disposition: components["schemas"]["ContactDisposition"];
+      revenue_attribution: components["schemas"]["RevenueAttribution"];
+      diagnosis: components["schemas"]["Diagnosis"];
+      recommended_action?: components["schemas"]["RecoveryActionType"] | null;
+      payment_surface_type?: components["schemas"]["PaymentSurfaceType"] | null;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /**
+     * ContactDisposition
+     * @enum {string}
+     */
+    ContactDisposition:
+      | "NOT_CONTACTED"
+      | "CONTACT_SCHEDULED"
+      | "NO_ANSWER"
+      | "BUSY"
+      | "ENGAGED"
+      | "PROMISE_TO_PAY"
+      | "OPTED_OUT"
+      | "WRONG_PERSON"
+      | "DISPUTE"
+      | "ALREADY_PAID";
+    /** CustomerResponse */
+    CustomerResponse: {
+      /** Id */
+      id: string;
+      /** Display Name */
+      display_name: string;
+      /** Preferred Language */
+      preferred_language: string;
+      /** Voice Consent At */
+      voice_consent_at: string | null;
+      /** Opted Out At */
+      opted_out_at: string | null;
+      /** Customer Agent Available */
+      customer_agent_available: boolean;
+    };
+    /** DashboardMetricsResponse */
+    DashboardMetricsResponse: {
+      /** Revenue At Risk Paise */
+      revenue_at_risk_paise: number;
+      /** Verified Recovered Revenue Paise */
+      verified_recovered_revenue_paise: number;
+      /** Simulated Incremental Recovery Paise */
+      simulated_incremental_recovery_paise: number;
+      /** Net Recovered Value Paise */
+      net_recovered_value_paise: number;
+      /** Active Cases */
+      active_cases: number;
+      /** Recovered Cases */
+      recovered_cases: number;
+      /** Total Cases */
+      total_cases: number;
+      /** Recovery Rate Basis Points */
+      recovery_rate_basis_points: number;
+      /** Human Review Count */
+      human_review_count: number;
+      /** Policy Blocked Actions */
+      policy_blocked_actions: number;
+    };
+    /** DashboardResponse */
+    DashboardResponse: {
+      /** @default SIMULATED */
+      evidence_kind: components["schemas"]["EvidenceKind"];
+      /**
+       * Currency
+       * @default INR
+       */
+      currency: string;
+      metrics: components["schemas"]["DashboardMetricsResponse"];
+      /** Diagnosis Distribution */
+      diagnosis_distribution: components["schemas"]["DiagnosisBucketResponse"][];
+      /** Recent Events */
+      recent_events: components["schemas"]["RecentEventResponse"][];
+    };
+    /**
+     * Diagnosis
+     * @enum {string}
+     */
+    Diagnosis:
+      | "TRANSIENT_RETRYABLE"
+      | "INSUFFICIENT_FUNDS"
+      | "AUTHENTICATION_REQUIRED"
+      | "INSTRUMENT_INVALID"
+      | "MERCHANT_ERROR"
+      | "RISK_OR_COMPLIANCE_BLOCK"
+      | "UNKNOWN";
+    /** DiagnosisBucketResponse */
+    DiagnosisBucketResponse: {
+      diagnosis: components["schemas"]["Diagnosis"];
+      /** Case Count */
+      case_count: number;
+    };
+    /**
+     * EvidenceKind
+     * @enum {string}
+     */
+    EvidenceKind: "SIMULATED" | "RAZORPAY_TEST_VERIFIED";
+    /** HTTPValidationError */
+    HTTPValidationError: {
+      /** Detail */
+      detail?: components["schemas"]["ValidationError"][];
+    };
+    /** InvoiceResponse */
+    InvoiceResponse: {
+      /** Id */
+      id: string;
+      /** Provider Invoice Id */
+      provider_invoice_id: string;
+      /** Billing Cycle Key */
+      billing_cycle_key: string;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Amount Paid Paise */
+      amount_paid_paise: number;
+      /** Currency */
+      currency: string;
+      /** Invoice State */
+      invoice_state: string;
+    };
+    /** MockPaymentSuccessRequest */
+    MockPaymentSuccessRequest: {
+      /** Provider Event Id */
+      provider_event_id: string;
+      /** Amount Paise */
+      amount_paise?: number | null;
+      /**
+       * Subscription Reactivated
+       * @default false
+       */
+      subscription_reactivated: boolean;
+      /** Occurred At */
+      occurred_at?: string | null;
+    };
+    /** MockPaymentSuccessResponse */
+    MockPaymentSuccessResponse: {
+      case: components["schemas"]["RecoveryCaseResponse"];
+      /** Newly Recognized */
+      newly_recognized: boolean;
+    };
+    /** MockPaymentSurfaceRequest */
+    MockPaymentSurfaceRequest: {
+      /** Action Id */
+      action_id: string;
+    };
+    /** OperatorCommandRequest */
+    OperatorCommandRequest: {
+      /**
+       * Command
+       * @enum {string}
+       */
+      command: "APPROVE" | "REJECT" | "STOP" | "ESCALATE_TO_HUMAN";
+    };
+    /** OperatorCommandResponse */
+    OperatorCommandResponse: {
+      /** Command */
+      command: string;
+      /** Message */
+      message: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /**
+       * Source
+       * @default api
+       * @constant
+       */
+      source: "api";
+      /**
+       * Status
+       * @default ACCEPTED
+       * @constant
+       */
+      status: "ACCEPTED";
+    };
+    /** PageResponse */
+    PageResponse: {
+      /** Next Cursor */
+      next_cursor: string | null;
+      /** Has More */
+      has_more: boolean;
+      /** Limit */
+      limit: number;
+    };
+    /** PaymentFailureResponse */
+    PaymentFailureResponse: {
+      /** Id */
+      id: string;
+      /** Provider Payment Id */
+      provider_payment_id: string | null;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Currency */
+      currency: string;
+      payment_state: components["schemas"]["PaymentState"];
+      /** Method */
+      method: string | null;
+      /** Error Code */
+      error_code: string | null;
+      /** Error Source */
+      error_source: string | null;
+      /** Error Step */
+      error_step: string | null;
+      /** Error Reason */
+      error_reason: string | null;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+    };
+    /**
+     * PaymentState
+     * @enum {string}
+     */
+    PaymentState:
+      "UNKNOWN" | "FAILED" | "PENDING" | "AUTHORIZED" | "CAPTURED" | "REFUNDED";
+    /**
+     * PaymentSurfaceType
+     * @enum {string}
+     */
+    PaymentSurfaceType:
+      | "SUBSCRIPTION_CARD_UPDATE"
+      | "SUBSCRIPTION_INVOICE_LINK"
+      | "STANDARD_PAYMENT_LINK";
+    /**
+     * PolicyDisposition
+     * @enum {string}
+     */
+    PolicyDisposition: "ALLOW" | "BLOCK" | "DELAY" | "REQUIRE_MANUAL_APPROVAL";
+    /** PolicyResponse */
+    PolicyResponse: {
+      /** Id */
+      id: string;
+      disposition: components["schemas"]["PolicyDisposition"];
+      /** Decision Code */
+      decision_code: string;
+      /** Reason Codes */
+      reason_codes: string[];
+      /** Reasons */
+      reasons: string[];
+      /** Policy Version */
+      policy_version: string;
+      /** Delay Until */
+      delay_until: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** RecentEventResponse */
+    RecentEventResponse: {
+      /** Id */
+      id: string;
+      /** Case Id */
+      case_id: string;
+      /** Event Type */
+      event_type: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /** Correlation Id */
+      correlation_id: string;
+    };
+    /** RecommendActionRequest */
+    RecommendActionRequest: {
+      action_type?: components["schemas"]["RecoveryActionType"] | null;
+      payment_surface_type?: components["schemas"]["PaymentSurfaceType"] | null;
+    };
+    /**
+     * RecoveryActionType
+     * @enum {string}
+     */
+    RecoveryActionType:
+      | "WAIT_FOR_GATEWAY_RETRY"
+      | "OPEN_CUSTOMER_PAYMENT_SURFACE"
+      | "START_VOICE"
+      | "SEND_TO_CUSTOMER_AGENT"
+      | "ESCALATE_TO_HUMAN"
+      | "STOP";
+    /** RecoveryCaseResponse */
+    RecoveryCaseResponse: {
+      /** Id */
+      id: string;
+      /** Merchant Id */
+      merchant_id: string;
+      /** Customer Id */
+      customer_id: string;
+      /** Subscription Id */
+      subscription_id: string;
+      /** Failed Invoice Id */
+      failed_invoice_id: string | null;
+      /** Billing Cycle Key */
+      billing_cycle_key: string | null;
+      /** Failed Payment Id */
+      failed_payment_id: string | null;
+      case_outcome: components["schemas"]["CaseOutcome"];
+      payment_state: components["schemas"]["PaymentState"];
+      subscription_state: components["schemas"]["SubscriptionState"];
+      contact_disposition: components["schemas"]["ContactDisposition"];
+      revenue_attribution: components["schemas"]["RevenueAttribution"];
+      diagnosis: components["schemas"]["Diagnosis"];
+      /** Amount At Risk Paise */
+      amount_at_risk_paise: number;
+      /** Arrears Collected Paise */
+      arrears_collected_paise: number;
+      /** Case Recovered */
+      case_recovered: boolean;
+      /** Subscription Reactivated */
+      subscription_reactivated: boolean;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /**
+       * Recovery Deadline
+       * Format: date-time
+       */
+      recovery_deadline: string;
+      /** Recovered At */
+      recovered_at: string | null;
+      /** Version */
+      version: number;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** RejectActionRequest */
+    RejectActionRequest: {
+      /** Reason */
+      reason: string;
+    };
+    /**
+     * RevenueAttribution
+     * @enum {string}
+     */
+    RevenueAttribution:
+      "NONE" | "SIMULATED" | "RAZORPAY_TEST_VERIFIED" | "VERIFIED_EXTERNAL";
+    /** SubscriptionResponse */
+    SubscriptionResponse: {
+      /** Id */
+      id: string;
+      /** Provider Subscription Id */
+      provider_subscription_id: string;
+      /** Plan Name */
+      plan_name: string;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Currency */
+      currency: string;
+      subscription_state: components["schemas"]["SubscriptionState"];
+    };
+    /**
+     * SubscriptionState
+     * @enum {string}
+     */
+    SubscriptionState:
+      | "UNKNOWN"
+      | "CREATED"
+      | "AUTHENTICATED"
+      | "ACTIVE"
+      | "PENDING"
+      | "HALTED"
+      | "PAUSED"
+      | "CANCELLED"
+      | "COMPLETED";
+    /** TimelineEventResponse */
+    TimelineEventResponse: {
+      /** Id */
+      id: string;
+      /** Case Id */
+      case_id: string;
+      /** Event Type */
+      event_type: string;
+      /** Source */
+      source: string;
+      evidence_kind: components["schemas"]["EvidenceKind"];
+      /** Payload */
+      payload: {
+        [key: string]: unknown;
+      };
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /**
+       * Recorded At
+       * Format: date-time
+       */
+      recorded_at: string;
+      /** Correlation Id */
+      correlation_id: string;
+    };
+    /** TimelineResponse */
+    TimelineResponse: {
+      /** Items */
+      items: components["schemas"]["TimelineEventResponse"][];
+    };
+    /** ValidationError */
+    ValidationError: {
+      /** Location */
+      loc: (string | number)[];
+      /** Message */
+      msg: string;
+      /** Error Type */
+      type: string;
+      /** Input */
+      input?: unknown;
+      /** Context */
+      ctx?: Record<string, never>;
+    };
+  };
+  responses: never;
+  parameters: never;
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getDemoFixture: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                fixture_name: "dashboard" | "case-detail" | "customer-agent" | "customer-voice" | "ml-lab";
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+  getDemoFixture: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        fixture_name:
+          | "dashboard"
+          | "case-detail"
+          | "customer-agent"
+          | "customer-voice"
+          | "ml-lab";
+      };
+      cookie?: never;
     };
-    root__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
     };
+  };
+  get_dashboard_v1_dashboard_metrics_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DashboardResponse"];
+        };
+      };
+    };
+  };
+  list_recovery_cases_v1_recovery_cases_get: {
+    parameters: {
+      query?: {
+        limit?: number;
+        cursor?: string | null;
+        case_outcome?: components["schemas"]["CaseOutcome"][] | null;
+        diagnosis?: components["schemas"]["Diagnosis"][] | null;
+        subscription_state?:
+          components["schemas"]["SubscriptionState"][] | null;
+        opened_from?: string | null;
+        opened_to?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseListResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_recovery_case_v1_recovery_cases__case_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_recovery_case_timeline_v1_recovery_cases__case_id__timeline_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TimelineResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  execute_operator_command_v1_recovery_cases__case_id__commands_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OperatorCommandRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OperatorCommandResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  recommend_recovery_action_v1_recovery_cases__case_id__actions_recommend_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RecommendActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionDecisionResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  approve_recovery_action_v1_recovery_cases__case_id__actions__action_id__approve_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        action_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  reject_recovery_action_v1_recovery_cases__case_id__actions__action_id__reject_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        action_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RejectActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stop_recovery_case_v1_recovery_cases__case_id__stop_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseCommandRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecoveryCaseResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  escalate_recovery_case_v1_recovery_cases__case_id__escalate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseCommandRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecoveryCaseResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  open_mock_payment_surface_v1_mock_recovery_cases__case_id__payment_surfaces_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MockPaymentSurfaceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ActionResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  apply_mock_payment_success_v1_mock_recovery_cases__case_id__payment_success_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MockPaymentSuccessRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MockPaymentSuccessResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  root__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: string;
+          };
+        };
+      };
+    };
+  };
 }

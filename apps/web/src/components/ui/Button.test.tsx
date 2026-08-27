@@ -12,4 +12,3 @@ describe("Button", () => {
     expect(button).toHaveAttribute("aria-busy", "true");
   });
 });
-

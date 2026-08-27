@@ -25,7 +25,13 @@ const toneSymbols: Record<AlertTone, string> = {
   danger: "×",
 };
 
-export function Alert({ tone = "info", title, children, className, ...props }: AlertProps) {
+export function Alert({
+  tone = "info",
+  title,
+  children,
+  className,
+  ...props
+}: AlertProps) {
   return (
     <div
       className={cx(styles.alert, toneClasses[tone], className)}
