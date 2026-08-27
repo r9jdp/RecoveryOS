@@ -26,6 +26,7 @@
     "test": "pnpm test:web && uv run pytest",
     "test:web": "pnpm --filter @recovery-os/web test",
     "e2e": "pnpm --filter @recovery-os/web e2e",
+    "e2e:service": "node scripts/e2e/run-service-stack.mjs",
     "build": "pnpm --filter @recovery-os/web build",
     "generate:openapi": "uv run python scripts/export_openapi.py",
     "generate:client": "pnpm --filter @recovery-os/web generate:client",
