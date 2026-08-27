@@ -28,7 +28,6 @@ services:
       POSTGRES_USER: recovery
       POSTGRES_PWD: recovery
       POSTGRES_SEEDS: postgres
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
     ports:
       - "7233:7233"
     healthcheck:
@@ -50,4 +49,3 @@ services:
 
 volumes:
   postgres-data:
-
