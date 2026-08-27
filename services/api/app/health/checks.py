@@ -53,16 +53,21 @@ async def database_check() -> ComponentStatus:
 
         database_url = _psycopg_dsn(_required("DATABASE_URL"))
         timeout_seconds = float(os.getenv("HEALTHCHECK_TIMEOUT_SECONDS", "3"))
-        async with asyncio.timeout(timeout_seconds):
-            connection = await psycopg.AsyncConnection.connect(
-                database_url,
-                connect_timeout=max(1, round(timeout_seconds)),
-            )
-            async with connection, connection.cursor() as cursor:
-                await cursor.execute("SELECT 1")
-                row = await cursor.fetchone()
+
+        def probe() -> None:
+            with (
+                psycopg.connect(
+                    database_url, connect_timeout=max(1, round(timeout_seconds))
+                ) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute("SELECT 1")
+                row = cursor.fetchone()
                 if row != (1,):
                     raise RuntimeError("database probe returned an unexpected result")
+
+        async with asyncio.timeout(timeout_seconds):
+            await asyncio.to_thread(probe)
         return ComponentStatus("database", "ok", _elapsed_ms(started_at))
     except Exception:
         return ComponentStatus("database", "unavailable", _elapsed_ms(started_at), "probe_failed")
