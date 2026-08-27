@@ -414,6 +414,21 @@ class VoiceContactService:
                 attempt_id=claim.attempt.id,
                 reason_code="VOICE_CANCELLATION_ALREADY_REQUESTED",
             )
+        if isinstance(self.provider, DisabledVoiceProvider) and claim.attempt.provider != "mock":
+            await self.repository.finalize_payment_cancellation(
+                attempt_id=claim.attempt.id,
+                cancellation_key=cancellation_key,
+                confirmed=False,
+                now=now,
+                error_code="VOICE_PROVIDER_NOT_CONFIGURED",
+            )
+            return VoiceCancellationResult(
+                status="UNCERTAIN",
+                cancellation_key=cancellation_key,
+                attempt_id=claim.attempt.id,
+                provider_submission_performed=False,
+                reason_code="VOICE_CANCELLATION_PROVIDER_NOT_CONFIGURED",
+            )
         try:
             await self.provider.cancel_contact(
                 contact_attempt_id=claim.attempt.id,

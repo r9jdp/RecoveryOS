@@ -172,6 +172,31 @@ async def test_no_active_call_is_a_successful_noop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_existing_real_call_is_not_falsely_cancelled_when_provider_is_disabled() -> None:
+    repository = InMemoryVoiceRepository()
+    repository.attempts["voice-attempt-1"] = _attempt()
+    service = VoiceContactService(
+        repository=repository,
+        provider=DisabledVoiceProvider(),
+        real_calls_enabled=False,
+        operator_token="",
+        allowlisted_destinations=frozenset(),
+    )
+
+    result = await service.cancel_for_authoritative_payment(
+        case_id="case-1", cancellation_key=CANCELLATION_KEY, now=NOW
+    )
+
+    stored = await repository.get_attempt("voice-attempt-1")
+    assert result.status == "UNCERTAIN"
+    assert not result.provider_submission_performed
+    assert result.reason_code == "VOICE_CANCELLATION_PROVIDER_NOT_CONFIGURED"
+    assert stored is not None
+    assert stored.status == "CANCEL_UNCERTAIN"
+    assert stored.uncertain_submission
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("terminal_status", ["COMPLETED", "BUSY", "FAILED", "CANCELED"])
 async def test_already_terminal_call_is_never_cancelled(terminal_status: str) -> None:
     service, repository, provider = _service(attempt=_attempt(status=terminal_status))
