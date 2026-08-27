@@ -92,6 +92,45 @@ async def test_twilio_cancel_resolves_persisted_call_sid_after_process_restart()
     assert b"Status=completed" in cancellations[0].content
 
 
+@pytest.mark.asyncio
+async def test_twilio_cancel_rejects_missing_persisted_call_sid() -> None:
+    async def resolve_call_sid(contact_attempt_id: str) -> str | None:
+        assert contact_attempt_id == "attempt-missing"
+        return None
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: pytest.fail(str(request.url)))
+    ) as client:
+        provider = TwilioVoiceProvider(
+            TwilioConfig("AC123", "secret", "+12025550100", "https://voice.example"),
+            client,
+            call_sid_resolver=resolve_call_sid,
+        )
+        with pytest.raises(RuntimeError, match="TWILIO_CALL_SID_NOT_AVAILABLE"):
+            await provider.cancel_contact(
+                contact_attempt_id="attempt-missing", reason="PAYMENT_RECOVERED"
+            )
+
+
+@pytest.mark.asyncio
+async def test_twilio_cancel_raises_when_provider_rejects_update() -> None:
+    async def resolve_call_sid(contact_attempt_id: str) -> str | None:
+        return "CA-rejected"
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    ) as client:
+        provider = TwilioVoiceProvider(
+            TwilioConfig("AC123", "secret", "+12025550100", "https://voice.example"),
+            client,
+            call_sid_resolver=resolve_call_sid,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await provider.cancel_contact(
+                contact_attempt_id="attempt-rejected", reason="PAYMENT_RECOVERED"
+            )
+
+
 def test_twiml_escapes_attempt_and_requires_secure_stream() -> None:
     xml = render_elevenlabs_twiml(
         stream_url="wss://eleven.example/stream?a=1&b=2", attempt_id='a"b'

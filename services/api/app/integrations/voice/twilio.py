@@ -170,12 +170,16 @@ class TwilioVoiceProvider:
         del reason
         sid = await self._resolve_call_sid(contact_attempt_id)
         if not sid:
-            return
-        await self._client.post(
+            # A persisted active attempt without a provider SID cannot be
+            # declared cancelled. The caller records this as uncertain and
+            # reconciles by observation instead of submitting blindly again.
+            raise RuntimeError("TWILIO_CALL_SID_NOT_AVAILABLE")
+        response = await self._client.post(
             f"https://api.twilio.com/2010-04-01/Accounts/{self._config.account_sid}/Calls/{sid}.json",
             auth=(self._config.account_sid, self._config.auth_token),
             data={"Status": "completed"},
         )
+        response.raise_for_status()
 
     async def fetch_contact(self, *, contact_attempt_id: str) -> VoiceContactSnapshot:
         sid = await self._resolve_call_sid(contact_attempt_id)
