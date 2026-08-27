@@ -22,7 +22,7 @@ interception:
   workflow received it;
 - executes only the mock payment provider, then verifies database/workflow
   convergence and one revenue row after a duplicate success;
-- checks the customer-agent readiness endpoint and published Agent Card.
+- checks the customer-agent SQL-backed readiness endpoint and published Agent Card.
 
 All real-provider flags are forced off. Set
 `RECOVERYOS_SERVICE_E2E_KEEP_STACK=1` only for local diagnosis; the unique

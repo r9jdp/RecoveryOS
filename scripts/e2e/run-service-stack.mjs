@@ -162,7 +162,9 @@ async function main() {
   const serviceEnv = {
     ...stackEnv,
     A2A_ENABLED: "false",
+    CUSTOMER_AGENT_DATABASE_URL: databaseUrl,
     CUSTOMER_AGENT_ORIGIN: agentOrigin,
+    CUSTOMER_AGENT_TASK_STORE: "sql",
     CUSTOMER_AGENT_WEB_ORIGIN: webOrigin,
     DATABASE_URL: databaseUrl,
     NEXT_PUBLIC_API_BASE_URL: apiOrigin,
