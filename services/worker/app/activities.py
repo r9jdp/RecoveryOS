@@ -62,9 +62,7 @@ class RecoveryActivities:
         return await self._services.evaluate_policy(command)
 
     @activity.defn(name=EXECUTE_RECOVERY_ACTION)
-    async def execute_recovery_action(
-        self, command: ExecuteActionInput
-    ) -> ActionExecutionResult:
+    async def execute_recovery_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
         return await self._services.execute_recovery_action(command)
 
     @activity.defn(name=RECONCILE_CASE)
@@ -175,9 +173,7 @@ class MockRecoveryActivityServices:
             reason_codes=("MOCK_MODE",),
         )
 
-    async def execute_recovery_action(
-        self, command: ExecuteActionInput
-    ) -> ActionExecutionResult:
+    async def execute_recovery_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
         existing = self.executed_actions.get(command.idempotency_key)
         if existing is not None:
             return existing

@@ -215,7 +215,7 @@ class RecoveryCaseWorkflow:
         while not self._terminal:
             if self._deadline is not None and workflow.now() >= self._deadline:
                 await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")
-                self._finish("EXPIRED", "DEADLINE_EXPIRED")
+                self._finish(self._deadline_outcome(), "DEADLINE_EXPIRED")
                 break
             await self._wait_for_signal_or_deadline()
             await self._drain_signals()
@@ -288,7 +288,7 @@ class RecoveryCaseWorkflow:
             await self._drain_signals()
             if self._deadline is not None and workflow.now() >= self._deadline:
                 await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")
-                self._finish("EXPIRED", "DEADLINE_EXPIRED")
+                self._finish(self._deadline_outcome(), "DEADLINE_EXPIRED")
 
     async def _wait_until(self, target: datetime) -> None:
         while not self._terminal and workflow.now() < target:
@@ -301,7 +301,7 @@ class RecoveryCaseWorkflow:
             await self._drain_signals()
         if self._deadline is not None and workflow.now() >= self._deadline and not self._terminal:
             await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")
-            self._finish("EXPIRED", "DEADLINE_EXPIRED")
+            self._finish(self._deadline_outcome(), "DEADLINE_EXPIRED")
 
     async def _wait_for_signal_or_deadline(self) -> None:
         if self._deadline is None:
@@ -392,7 +392,7 @@ class RecoveryCaseWorkflow:
             {"intent": intent, "confidence": signal.payload.get("confidence")},
         )
         if intent in {"OPT_OUT", "WRONG_PERSON"}:
-            await self._suppress_and_stop(signal.signal_id, disposition)
+            await self._suppress_outreach(signal.signal_id, disposition)
         elif intent == "DISPUTE":
             await self._cancel_active_action("CUSTOMER_DISPUTE")
             self._finish("DISPUTED", "CUSTOMER_DISPUTE")
@@ -421,7 +421,7 @@ class RecoveryCaseWorkflow:
             signal.signal_id,
             {"source": signal.payload["source"], "reason": signal.payload.get("reason")},
         )
-        await self._suppress_and_stop(signal.signal_id, "OPTED_OUT")
+        await self._suppress_outreach(signal.signal_id, "OPTED_OUT")
 
     async def _handle_cancellation(self, signal: QueuedSignal) -> None:
         await self._audit(
@@ -478,7 +478,7 @@ class RecoveryCaseWorkflow:
             )
             await self._execute_action(policy, mandate=dict(signal.payload["artifact"]))
 
-    async def _suppress_and_stop(self, signal_id: str, disposition: str) -> None:
+    async def _suppress_outreach(self, signal_id: str, disposition: str) -> None:
         self._outreach_suppressed = True
         await self._cancel_active_action(disposition)
         await self._audit(
@@ -486,7 +486,10 @@ class RecoveryCaseWorkflow:
             signal_id,
             {"contact_disposition": disposition},
         )
-        self._finish("STOPPED", disposition)
+        # Keep the workflow passively open for authoritative late-payment signals.
+        # Outreach is stopped, but contact and financial state are independent axes.
+        self._outcome = "STOPPED"
+        self._phase = "OUTREACH_SUPPRESSED"
 
     async def _execute_action(
         self, policy: PolicyResult, mandate: dict[str, Any] | None = None
@@ -548,9 +551,7 @@ class RecoveryCaseWorkflow:
         if result.cancelled:
             self._action_status = "CANCELLED"
 
-    async def _audit(
-        self, event_type: str, correlation_id: str, details: dict[str, Any]
-    ) -> None:
+    async def _audit(self, event_type: str, correlation_id: str, details: dict[str, Any]) -> None:
         await self._activity(
             RECORD_AUDIT_EVENT,
             AuditInput(
@@ -575,9 +576,7 @@ class RecoveryCaseWorkflow:
             argument,
             result_type=result_type,
             start_to_close_timeout=_ACTIVITY_TIMEOUT,
-            retry_policy=(
-                _PROVIDER_SUBMISSION_RETRY if provider_submission else _STANDARD_RETRY
-            ),
+            retry_policy=(_PROVIDER_SUBMISSION_RETRY if provider_submission else _STANDARD_RETRY),
         )
 
     def _apply_reconciliation(self, result: ReconciliationResult) -> None:
@@ -595,6 +594,9 @@ class RecoveryCaseWorkflow:
         if outcome == "RECOVERED":
             self._payment_state = "CAPTURED"
         workflow.logger.info("Recovery workflow finished", extra={"reason": reason})
+
+    def _deadline_outcome(self) -> str:
+        return "STOPPED" if self._outreach_suppressed else "EXPIRED"
 
     def _require_input(self) -> RecoveryWorkflowInput:
         if self._input is None:

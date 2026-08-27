@@ -157,8 +157,7 @@ async def test_safety_signals_stop_workflow(
         assert result.contact_disposition == expected_disposition
         if signal_name == "opt_out":
             assert any(
-                event.event_type == "SUPPRESSION_PERSIST_REQUESTED"
-                for event in services.audits
+                event.event_type == "SUPPRESSION_PERSIST_REQUESTED" for event in services.audits
             )
 
 
@@ -185,6 +184,47 @@ async def test_deadline_expires_without_external_action_retry() -> None:
         assert result.outcome == "EXPIRED"
         assert len(services.executed_actions) == 1
         assert len(services.cancelled_keys) == 1
+
+
+@pytest.mark.asyncio
+async def test_authoritative_payment_can_recover_after_opt_out() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=True)
+        activities = RecoveryActivities(services)
+        task_queue = "recovery-late-payment-after-optout"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            command = workflow_input("late-after-optout")
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            await handle.signal(
+                "opt_out",
+                OptOutSignal(signal_id="optout-late", source="voice"),
+            )
+            await handle.signal(
+                "payment_event",
+                PaymentEventSignal(
+                    signal_id="payment-late",
+                    provider_event_id="evt-captured-late",
+                    payment_state="CAPTURED",
+                    amount_paise=149_900,
+                    authoritative=True,
+                ),
+            )
+            result = await handle.result()
+
+        assert result.outcome == "RECOVERED"
+        assert result.case_recovered is True
+        assert result.contact_disposition == "OPTED_OUT"
+        assert result.arrears_collected_paise == 149_900
 
 
 @pytest.mark.asyncio
