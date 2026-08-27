@@ -452,26 +452,20 @@ async def execute_operator_command(
                 now=occurred_at,
             )
         if request.command == "APPROVE":
-            await workflow_commander.approval(
-                case_id=case_id,
-                action_id=action.id,
-                approved=True,
-                reason=None,
-            )
             await service.approve_action(
                 merchant_id=merchant_id,
                 case_id=case_id,
                 action_id=action.id,
                 now=occurred_at,
             )
-            message = "Recovery action approved."
-        else:
             await workflow_commander.approval(
                 case_id=case_id,
                 action_id=action.id,
-                approved=False,
-                reason="Rejected by the merchant operator.",
+                approved=True,
+                reason=None,
             )
+            message = "Recovery action approved."
+        else:
             await service.reject_action(
                 merchant_id=merchant_id,
                 case_id=case_id,
@@ -479,29 +473,35 @@ async def execute_operator_command(
                 reason="Rejected by the merchant operator.",
                 now=occurred_at,
             )
+            await workflow_commander.approval(
+                case_id=case_id,
+                action_id=action.id,
+                approved=False,
+                reason="Rejected by the merchant operator.",
+            )
             message = "Recovery action rejected."
     elif request.command == "STOP":
-        await workflow_commander.stop(
-            case_id=case_id,
-            reason="Stopped by the merchant operator.",
-        )
         await service.stop_case(
             merchant_id=merchant_id,
             case_id=case_id,
             reason="Stopped by the merchant operator.",
             now=occurred_at,
         )
+        await workflow_commander.stop(
+            case_id=case_id,
+            reason="Stopped by the merchant operator.",
+        )
         message = "Recovery case stopped."
     else:
-        await workflow_commander.escalate(
-            case_id=case_id,
-            reason="Escalated by the merchant operator.",
-        )
         await service.escalate_case(
             merchant_id=merchant_id,
             case_id=case_id,
             reason="Escalated by the merchant operator.",
             now=occurred_at,
+        )
+        await workflow_commander.escalate(
+            case_id=case_id,
+            reason="Escalated by the merchant operator.",
         )
         message = "Recovery case escalated to human review."
     return OperatorCommandResponse(
@@ -523,15 +523,15 @@ async def record_safety_disposition(
 ) -> SafetyDispositionResponse:
     occurred_at = datetime.now(UTC)
     if request.disposition == "ESCALATE_TO_HUMAN":
-        await workflow_commander.escalate(
-            case_id=case_id,
-            reason="Escalated by the merchant operator from the safety controls.",
-        )
         recovery_case = await service.escalate_case(
             merchant_id=merchant_id,
             case_id=case_id,
             reason="Escalated by the merchant operator from the safety controls.",
             now=occurred_at,
+        )
+        await workflow_commander.escalate(
+            case_id=case_id,
+            reason="Escalated by the merchant operator from the safety controls.",
         )
         message = "Recovery case escalated to human review."
     else:
@@ -598,14 +598,17 @@ async def approve_recovery_action(
     merchant_id: MerchantScope,
     workflow_commander: WorkflowCommander,
 ) -> ActionResponse:
+    await service.get_action_for_command(
+        merchant_id=merchant_id, case_id=case_id, action_id=action_id
+    )
+    action = await service.approve_action(
+        merchant_id=merchant_id, case_id=case_id, action_id=action_id
+    )
     await workflow_commander.approval(
         case_id=case_id,
         action_id=action_id,
         approved=True,
         reason=None,
-    )
-    action = await service.approve_action(
-        merchant_id=merchant_id, case_id=case_id, action_id=action_id
     )
     return ActionResponse.model_validate(action)
 
@@ -622,16 +625,19 @@ async def reject_recovery_action(
     merchant_id: MerchantScope,
     workflow_commander: WorkflowCommander,
 ) -> ActionResponse:
-    await workflow_commander.approval(
-        case_id=case_id,
-        action_id=action_id,
-        approved=False,
-        reason=request.reason,
+    await service.get_action_for_command(
+        merchant_id=merchant_id, case_id=case_id, action_id=action_id
     )
     action = await service.reject_action(
         merchant_id=merchant_id,
         case_id=case_id,
         action_id=action_id,
+        reason=request.reason,
+    )
+    await workflow_commander.approval(
+        case_id=case_id,
+        action_id=action_id,
+        approved=False,
         reason=request.reason,
     )
     return ActionResponse.model_validate(action)
@@ -645,10 +651,11 @@ async def stop_recovery_case(
     merchant_id: MerchantScope,
     workflow_commander: WorkflowCommander,
 ) -> RecoveryCaseResponse:
-    await workflow_commander.stop(case_id=case_id, reason=request.reason)
+    await service.get_case(merchant_id=merchant_id, case_id=case_id)
     recovery_case = await service.stop_case(
         merchant_id=merchant_id, case_id=case_id, reason=request.reason
     )
+    await workflow_commander.stop(case_id=case_id, reason=request.reason)
     return RecoveryCaseResponse.model_validate(recovery_case)
 
 
@@ -660,10 +667,11 @@ async def escalate_recovery_case(
     merchant_id: MerchantScope,
     workflow_commander: WorkflowCommander,
 ) -> RecoveryCaseResponse:
-    await workflow_commander.escalate(case_id=case_id, reason=request.reason)
+    await service.get_case(merchant_id=merchant_id, case_id=case_id)
     recovery_case = await service.escalate_case(
         merchant_id=merchant_id, case_id=case_id, reason=request.reason
     )
+    await workflow_commander.escalate(case_id=case_id, reason=request.reason)
     return RecoveryCaseResponse.model_validate(recovery_case)
 
 
@@ -680,16 +688,21 @@ async def open_mock_payment_surface(
 ) -> ActionResponse:
     """Explicit mock endpoint mirroring approval-triggered surface creation."""
 
-    await workflow_commander.approval(
+    await service.get_action_for_command(
+        merchant_id=merchant_id,
         case_id=case_id,
         action_id=request.action_id,
-        approved=True,
-        reason=None,
     )
     action = await service.approve_action(
         merchant_id=merchant_id,
         case_id=case_id,
         action_id=request.action_id,
+    )
+    await workflow_commander.approval(
+        case_id=case_id,
+        action_id=request.action_id,
+        approved=True,
+        reason=None,
     )
     return ActionResponse.model_validate(action)
 

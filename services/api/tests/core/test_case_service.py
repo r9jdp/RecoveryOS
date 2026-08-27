@@ -35,9 +35,9 @@ async def test_mock_vertical_slice_and_duplicate_success_are_idempotent(
         case_id=FITBOX_CASE_ID,
         action_id=aggregate.latest_action.id,
     )
-    assert action.status == ActionStatus.SUCCEEDED
-    assert action.external_reference is not None
-    assert action.customer_url is not None
+    assert action.status == ActionStatus.SCHEDULED
+    assert action.external_reference is None
+    assert action.customer_url is None
 
     first = await service.apply_mock_payment_success(
         merchant_id="merchant_fitbox",

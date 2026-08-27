@@ -9,6 +9,44 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from services.api.app.api import install_core_api
 from services.api.app.db import get_async_session
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
+from services.api.app.workflows import (
+    WorkflowCommandDelivery,
+    WorkflowCommandUnavailableError,
+    get_recovery_workflow_commander,
+)
+
+
+class FakeWorkflowCommander:
+    async def approval(self, **kwargs: object) -> WorkflowCommandDelivery:
+        return WorkflowCommandDelivery(
+            f"recovery-case:{kwargs['case_id']}",
+            f"test:{kwargs['action_id']}",
+            "DELIVERED",
+        )
+
+    async def stop(self, **kwargs: object) -> WorkflowCommandDelivery:
+        return WorkflowCommandDelivery(
+            f"recovery-case:{kwargs['case_id']}", "test:stop", "DELIVERED"
+        )
+
+    async def escalate(self, **kwargs: object) -> WorkflowCommandDelivery:
+        return WorkflowCommandDelivery(
+            f"recovery-case:{kwargs['case_id']}", "test:escalate", "DELIVERED"
+        )
+
+
+class FlakyWorkflowCommander(FakeWorkflowCommander):
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    async def approval(self, **kwargs: object) -> WorkflowCommandDelivery:
+        self.attempts += 1
+        if self.attempts == 1:
+            raise WorkflowCommandUnavailableError(
+                "Temporal unavailable",
+                metadata={"reason": "TEMPORAL_RPC_FAILED"},
+            )
+        return await super().approval(**kwargs)
 
 
 async def test_exported_router_serves_dashboard_case_and_timeline(
@@ -25,6 +63,7 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
             yield active_session
 
     app.dependency_overrides[get_async_session] = override_session
+    app.dependency_overrides[get_recovery_workflow_commander] = FakeWorkflowCommander
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -77,3 +116,40 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
     assert duplicate_success.json()["newly_recognized"] is False
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+async def test_approval_is_durable_and_retryable_when_signal_delivery_fails(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as seed_session:
+        await seed_fitbox(seed_session)
+
+    app = FastAPI()
+    install_core_api(app)
+    commander = FlakyWorkflowCommander()
+
+    async def override_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as active_session:
+            yield active_session
+
+    app.dependency_overrides[get_async_session] = override_session
+    app.dependency_overrides[get_recovery_workflow_commander] = lambda: commander
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first = await client.post(
+            f"/v1/recovery-cases/{FITBOX_CASE_ID}/commands",
+            json={"command": "APPROVE"},
+        )
+        detail = await client.get(f"/v1/recovery-cases/{FITBOX_CASE_ID}")
+        retried = await client.post(
+            f"/v1/recovery-cases/{FITBOX_CASE_ID}/commands",
+            json={"command": "APPROVE"},
+        )
+
+    assert first.status_code == 503
+    assert first.json()["error"]["code"] == "RECOVERY_WORKFLOW_UNAVAILABLE"
+    assert detail.json()["latest_action"]["status"] == "SCHEDULED"
+    assert detail.json()["latest_action"]["customer_url"] is None
+    assert retried.status_code == 200
+    assert commander.attempts == 2

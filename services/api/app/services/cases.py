@@ -116,6 +116,19 @@ class RecoveryCaseService:
             raise CaseNotFoundError("Recovery case was not found.", metadata={"case_id": case_id})
         return aggregate
 
+    async def get_action_for_command(
+        self, *, merchant_id: str, case_id: str, action_id: str
+    ) -> RecoveryActionRecord:
+        """Validate command scope before any signal is delivered to Temporal."""
+
+        await self.get_case(merchant_id=merchant_id, case_id=case_id)
+        action = await self.repository.get_action(case_id=case_id, action_id=action_id)
+        if action is None:
+            raise CaseNotFoundError(
+                "Recovery action was not found.", metadata={"action_id": action_id}
+            )
+        return action
+
     async def dashboard(self, *, merchant_id: str) -> DashboardSnapshot:
         metrics = await self.repository.dashboard_metrics(merchant_id=merchant_id)
         human_review_count, policy_blocked_actions = await self.repository.review_and_block_counts(

@@ -269,6 +269,12 @@ class ProductionRecoveryActivityServices:
                     provider="none",
                     reason_code="ACTION_CANCELLED",
                 )
+            if action.status != ActionStatus.SCHEDULED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_NOT_AUTHORIZED",
+                )
             action.status = ActionStatus.EXECUTING
             await session.commit()
             return action
