@@ -7,11 +7,14 @@ from .circuit_breaker import (
     FailureKind,
     FallbackReason,
 )
+from .registry import CircuitBreakerRegistry, provider_breaker_registry
 
 __all__ = [
     "BreakerDecision",
     "CircuitBreaker",
+    "CircuitBreakerRegistry",
     "CircuitState",
     "FailureKind",
     "FallbackReason",
+    "provider_breaker_registry",
 ]

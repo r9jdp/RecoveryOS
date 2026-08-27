@@ -15,6 +15,11 @@ from services.api.app.providers.contracts import (
     VoiceContactResult,
     VoiceContactSnapshot,
 )
+from services.api.app.reliability.circuit_breaker import FailureKind
+from services.api.app.reliability.registry import (
+    CircuitBreakerRegistry,
+    provider_breaker_registry,
+)
 
 
 @dataclass(frozen=True)
@@ -60,11 +65,18 @@ class TwilioVoiceProvider:
         client: httpx.AsyncClient,
         *,
         call_sid_resolver: CallSidResolver | None = None,
+        breaker_registry: CircuitBreakerRegistry | None = None,
     ) -> None:
         self._config = config
         self._client = client
         self._call_sid_resolver = call_sid_resolver
         self._attempt_calls: dict[str, str] = {}
+        registry = breaker_registry or provider_breaker_registry()
+        self._start_breaker = registry.get(
+            provider="twilio",
+            operation="start_contact",
+            scope=config.account_sid,
+        )
 
     async def _resolve_call_sid(self, contact_attempt_id: str) -> str | None:
         known_sid = self._attempt_calls.get(contact_attempt_id)
@@ -88,6 +100,17 @@ class TwilioVoiceProvider:
                 provider_call_id=known_sid,
                 status="SUBMITTED",
             )
+        decision = self._start_breaker.before_call()
+        if not decision.allowed:
+            reason = decision.reason
+            if reason is None:  # pragma: no cover - defensive invariant
+                raise RuntimeError("blocked circuit decision omitted its fallback reason")
+            return VoiceContactResult(
+                provider="twilio",
+                contact_attempt_id=request.idempotency_key,
+                status="UNCERTAIN" if reason.requires_reconciliation else "REJECTED",
+                reason_code=reason.code,
+            )
         try:
             response = await self._client.post(
                 self._calls_url,
@@ -109,6 +132,7 @@ class TwilioVoiceProvider:
                 },
             )
         except (httpx.TimeoutException, httpx.NetworkError):
+            self._start_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
             return VoiceContactResult(
                 provider="twilio",
                 contact_attempt_id=request.idempotency_key,
@@ -116,6 +140,7 @@ class TwilioVoiceProvider:
                 reason_code="TWILIO_SUBMISSION_UNCERTAIN_RECONCILE_REQUIRED",
             )
         if response.status_code >= 500:
+            self._start_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
             return VoiceContactResult(
                 provider="twilio",
                 contact_attempt_id=request.idempotency_key,
@@ -123,6 +148,7 @@ class TwilioVoiceProvider:
                 reason_code="TWILIO_SUBMISSION_UNCERTAIN_RECONCILE_REQUIRED",
             )
         if response.status_code >= 400:
+            self._start_breaker.record_failure(FailureKind.PERMANENT)
             return VoiceContactResult(
                 provider="twilio",
                 contact_attempt_id=request.idempotency_key,
@@ -132,6 +158,7 @@ class TwilioVoiceProvider:
         payload: dict[str, Any] = response.json()
         sid = str(payload["sid"])
         self._attempt_calls[request.idempotency_key] = sid
+        self._start_breaker.record_success()
         return VoiceContactResult(
             provider="twilio",
             contact_attempt_id=request.idempotency_key,
@@ -164,6 +191,8 @@ class TwilioVoiceProvider:
         )
         response.raise_for_status()
         payload: dict[str, Any] = response.json()
+        if self._start_breaker.uncertain_submission:
+            self._start_breaker.record_success()
         duration = payload.get("duration")
         return VoiceContactSnapshot(
             contact_attempt_id=contact_attempt_id,

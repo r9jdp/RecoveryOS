@@ -95,7 +95,6 @@ class CircuitBreaker:
 
     def record_failure(self, kind: FailureKind) -> FallbackReason | None:
         now = self._now()
-        self.failure_count += 1
         self._probe_in_flight = False
         if kind == FailureKind.PERMANENT:
             return FallbackReason(
@@ -108,6 +107,7 @@ class CircuitBreaker:
                 requires_reconciliation=False,
                 automatic_retry_permitted=False,
             )
+        self.failure_count += 1
         if kind == FailureKind.UNCERTAIN_SUBMISSION:
             self._uncertain = True
             self._open(now)
@@ -116,6 +116,10 @@ class CircuitBreaker:
             self._open(now)
             return self._fallback_reason(now)
         return None
+
+    @property
+    def uncertain_submission(self) -> bool:
+        return self._uncertain
 
     def reconcile_uncertain(self, *, provider_confirmed_absent: bool) -> None:
         """Resolve an uncertain submission without deciding to retry it.

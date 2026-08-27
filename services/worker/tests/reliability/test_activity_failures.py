@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from temporalio import activity, workflow
@@ -12,6 +14,25 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 ATTEMPTS: dict[str, int] = {}
+
+
+def test_workflow_module_has_no_external_provider_or_http_imports() -> None:
+    workflow_path = Path(__file__).resolve().parents[2] / "app" / "workflow.py"
+    tree = ast.parse(workflow_path.read_text(encoding="utf-8"))
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imports.add(node.module)
+    forbidden = {
+        name
+        for name in imports
+        if name == "httpx"
+        or ".integrations" in name
+        or name.startswith("services.api.app.providers")
+    }
+    assert forbidden == set()
 
 
 @activity.defn(name="phase4.retry_probe")

@@ -16,6 +16,11 @@ from services.api.app.providers.contracts import (
     PaymentSnapshot,
     PaymentSurfaceResult,
 )
+from services.api.app.reliability.circuit_breaker import FailureKind, FallbackReason
+from services.api.app.reliability.registry import (
+    CircuitBreakerRegistry,
+    provider_breaker_registry,
+)
 
 from .errors import (
     RazorpayContractError,
@@ -71,6 +76,19 @@ def _subscription_state(value: Any) -> SubscriptionState:
     return mapping.get(value, SubscriptionState.UNKNOWN)
 
 
+def _fallback_metadata(reason: FallbackReason) -> dict[str, Any]:
+    return {
+        "fallback_reason_code": reason.code,
+        "provider": reason.provider,
+        "operation": reason.operation,
+        "circuit_state": reason.state.value,
+        "failure_count": reason.failure_count,
+        "retry_after_seconds": reason.retry_after_seconds,
+        "requires_reconciliation": reason.requires_reconciliation,
+        "automatic_retry_permitted": reason.automatic_retry_permitted,
+    }
+
+
 class RazorpayClient:
     """Customer-surface and read-only reconciliation operations.
 
@@ -83,12 +101,19 @@ class RazorpayClient:
         config: RazorpayConfig,
         *,
         client: httpx.AsyncClient | None = None,
+        breaker_registry: CircuitBreakerRegistry | None = None,
     ) -> None:
         self.config = config
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=config.base_url,
             timeout=config.timeout_seconds,
+        )
+        registry = breaker_registry or provider_breaker_registry()
+        self._payment_link_breaker = registry.get(
+            provider="razorpay",
+            operation="create_payment_link",
+            scope=config.key_id,
         )
 
     async def aclose(self) -> None:
@@ -247,12 +272,36 @@ class RazorpayClient:
         if request.callback_url:
             body["callback_url"] = request.callback_url
             body["callback_method"] = "get"
-        link = await self._request_json(
-            "POST",
-            "/v1/payment_links",
-            json=body,
-            uncertain_reference_id=request.reference_id,
-        )
+        decision = self._payment_link_breaker.before_call()
+        if not decision.allowed:
+            reason = decision.reason
+            if reason is None:  # pragma: no cover - defensive invariant
+                raise RuntimeError("blocked circuit decision omitted its fallback reason")
+            raise RazorpayRequestError(
+                reason.code,
+                "Razorpay Payment Link creation is temporarily blocked by provider safety.",
+                status_code=503,
+                retriable=reason.automatic_retry_permitted,
+                metadata=_fallback_metadata(reason),
+            )
+        try:
+            link = await self._request_json(
+                "POST",
+                "/v1/payment_links",
+                json=body,
+                uncertain_reference_id=request.reference_id,
+            )
+        except RazorpayUncertainSubmissionError:
+            self._payment_link_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
+            raise
+        except RazorpayRequestError as error:
+            reason = self._payment_link_breaker.record_failure(
+                FailureKind.RETRYABLE if error.retriable else FailureKind.PERMANENT
+            )
+            if reason is not None:
+                error.metadata.update(_fallback_metadata(reason))
+            raise
+        self._payment_link_breaker.record_success()
         link_id = _text(link.get("id"))
         short_url = _text(link.get("short_url"))
         if link_id is None or short_url is None:
@@ -323,7 +372,7 @@ class RazorpayClient:
         items = collection.get("payment_links", collection.get("items"))
         if not isinstance(items, list):
             return None
-        return next(
+        match = next(
             (
                 cast(dict[str, Any], item)
                 for item in items
@@ -331,3 +380,6 @@ class RazorpayClient:
             ),
             None,
         )
+        if self._payment_link_breaker.uncertain_submission:
+            self._payment_link_breaker.reconcile_uncertain(provider_confirmed_absent=match is None)
+        return match
