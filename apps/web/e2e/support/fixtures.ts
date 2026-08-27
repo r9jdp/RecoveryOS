@@ -81,7 +81,7 @@ export async function captureEvidence(
   await page.screenshot({
     animations: "disabled",
     fullPage: true,
-    path: `public/evidence/phase-4/${testInfo.project.name}-${filename}`,
+    path: `public/evidence/phase-5/${testInfo.project.name}-${filename}`,
   });
 }
 

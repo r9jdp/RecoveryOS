@@ -8,6 +8,22 @@ import {
   prepareVisualPage,
 } from "./support/fixtures";
 
+test("public demo entry visual baseline", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "From failed invoice to an auditable next action.",
+    }),
+  ).toBeVisible();
+  await prepareVisualPage(page);
+  await assertNoHorizontalOverflow(page);
+  await expect(page).toHaveScreenshot("public-demo-entry.png", {
+    fullPage: true,
+  });
+  await captureEvidence(page, testInfo, "public-demo-entry.png");
+});
+
 test("Control Tower visual baseline", async ({ page }, testInfo) => {
   await page.goto("/dashboard");
   await expectMockDashboard(page);
@@ -29,6 +45,25 @@ test("case workspace visual baseline", async ({ page }, testInfo) => {
   await assertNoHorizontalOverflow(page);
   await expect(page).toHaveScreenshot("case-workspace.png", { fullPage: true });
   await captureEvidence(page, testInfo, "case-workspace.png");
+});
+
+test("five-minute demo guide visual baseline", async ({ page }, testInfo) => {
+  await page.goto("/dashboard");
+  await expectMockDashboard(page);
+  await prepareVisualPage(page);
+  const trigger = page.getByRole("button", { name: /5-min demo/i });
+  await expect(trigger).toContainText("1/5");
+  // This is a visual assertion; DOM activation avoids touch-emulation timing
+  // around the animated fixed panel while preserving the actual click path.
+  await trigger.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(
+    page.getByRole("dialog", { name: "FitBox judge route" }),
+  ).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+  await expect(page).toHaveScreenshot("fitbox-demo-guide.png", {
+    fullPage: true,
+  });
+  await captureEvidence(page, testInfo, "fitbox-demo-guide.png");
 });
 
 test("voice safety visual baseline", async ({ page }, testInfo) => {

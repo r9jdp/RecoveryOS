@@ -11,7 +11,15 @@ test("five-minute judge journey stays simulated and auditable", async ({
   page,
 }) => {
   await mockMerchantMutations(page);
-  await page.goto("/login");
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "From failed invoice to an auditable next action.",
+    }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /Open the FitBox demo/i }).click();
+  await expect(page).toHaveURL(/\/login$/);
   await expect(
     page.getByRole("heading", {
       level: 1,
@@ -94,4 +102,31 @@ test("dashboard filters recover cleanly from an empty result", async ({
   await expect(
     page.getByRole("link", { name: "REC-FITBOX-AUG-2026" }),
   ).toBeVisible();
+});
+
+test("five-minute FitBox guide tracks navigation and resets only local progress", async ({
+  page,
+}) => {
+  await page.goto("/dashboard");
+  await expectMockDashboard(page);
+
+  const trigger = page.getByRole("button", { name: /5-min demo/i });
+  await expect(trigger).toContainText("1/5");
+  await trigger.click();
+  const guide = page.getByRole("dialog", { name: "FitBox judge route" });
+  await expect(guide).toBeVisible();
+  await expect(guide.getByText("External actions stay locked")).toBeVisible();
+  await expect(guide.getByText("1 of 5 stops visited")).toBeVisible();
+
+  await guide.getByRole("link", { name: "Inspect the decision" }).click();
+  await expect(page).toHaveURL(new RegExp(`${FITBOX_CASE_PATH}$`));
+  await page.getByRole("button", { name: /5-min demo/i }).click();
+  await expect(guide.getByText("2 of 5 stops visited")).toBeVisible();
+  await guide.getByRole("button", { name: "Reset guided demo" }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("button", { name: /5-min demo/i })).toContainText(
+    "1/5",
+  );
+  await assertNoHorizontalOverflow(page);
 });

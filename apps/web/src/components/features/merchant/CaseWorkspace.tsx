@@ -518,7 +518,7 @@ function CaseContent({
         <Card className={styles.recommendationCard}>
           <CardHeader
             title="Recommended recovery action"
-            description="Ranked by expected utility after deterministic policy checks."
+            description="Selected by the backend after expected-utility ranking and deterministic policy checks."
             action={
               <Badge
                 tone={
@@ -530,6 +530,17 @@ function CaseContent({
             }
           />
           <CardBody>
+            <div className={styles.decisionSummary}>
+              <span className={styles.decisionSummaryIndex}>01</span>
+              <div>
+                <p className={styles.label}>Why this path</p>
+                <p>
+                  Resolve customer-present authentication on the
+                  subscription-native surface while preserving failed-invoice
+                  correlation.
+                </p>
+              </div>
+            </div>
             <div className={styles.split}>
               <div>
                 <p className={styles.label}>Action</p>
@@ -558,13 +569,18 @@ function CaseContent({
             <ul className={styles.reasonList}>
               {fixture.recommendation.reasons.map((reason, index) => (
                 <li
-                  className={styles.reasonItem}
+                  className={`${styles.reasonItem} ${styles.selectedReason}`}
                   key={fixture.recommendation.reason_codes[index] ?? reason}
                 >
-                  <p className={styles.reasonTitle}>{reason}</p>
-                  <p className={styles.mono}>
-                    {fixture.recommendation.reason_codes[index]}
-                  </p>
+                  <span className={styles.reasonOrdinal} aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div>
+                    <p className={styles.reasonTitle}>{reason}</p>
+                    <p className={styles.mono}>
+                      {fixture.recommendation.reason_codes[index]}
+                    </p>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -650,24 +666,34 @@ function CaseContent({
         <Card>
           <CardHeader
             title="Rejected alternatives"
-            description="Why apparently valid paths were ruled out."
+            description="Backend-provided reasons show why safer or more effective paths won."
           />
           <CardBody>
             <ul className={styles.reasonList}>
               {fixture.recommendation.rejected_alternatives.map(
-                (alternative) => (
+                (alternative, index) => (
                   <li
-                    className={styles.reasonItem}
+                    className={`${styles.reasonItem} ${styles.rejectedReason}`}
                     key={`${alternative.action}-${alternative.reason_code}`}
                   >
-                    <p className={styles.reasonTitle}>
-                      {humanize(alternative.action)}
-                      {alternative.payment_surface_type
-                        ? ` · ${humanize(alternative.payment_surface_type)}`
-                        : ""}
-                    </p>
-                    <p className={styles.quiet}>{alternative.reason}</p>
-                    <p className={styles.mono}>{alternative.reason_code}</p>
+                    <div className={styles.alternativeHeading}>
+                      <span className={styles.alternativeIndex}>
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <Badge tone="neutral">Not selected</Badge>
+                    </div>
+                    <div>
+                      <p className={styles.reasonTitle}>
+                        {humanize(alternative.action)}
+                        {alternative.payment_surface_type
+                          ? ` · ${humanize(alternative.payment_surface_type)}`
+                          : ""}
+                      </p>
+                      <p className={styles.alternativeRationale}>
+                        <strong>Rationale:</strong> {alternative.reason}
+                      </p>
+                      <p className={styles.mono}>{alternative.reason_code}</p>
+                    </div>
                   </li>
                 ),
               )}
@@ -737,14 +763,21 @@ function CaseContent({
           />
           <CardBody>
             <ol className={styles.timelineList} aria-live="polite">
-              {timeline.map((event) => (
+              {timeline.map((event, index) => (
                 <li className={styles.timelineItem} key={event.id}>
                   <span
                     className={`${styles.timelineMarker} ${event.optimistic ? styles.timelineMarkerOptimistic : ""}`}
                     aria-hidden="true"
-                  />
+                  >
+                    {index + 1}
+                  </span>
                   <div>
-                    <p className={styles.timelineTitle}>{event.title}</p>
+                    <div className={styles.timelineHeading}>
+                      <p className={styles.timelineTitle}>{event.title}</p>
+                      <Badge tone={event.optimistic ? "warning" : "neutral"}>
+                        {event.optimistic ? "Pending" : "Recorded"}
+                      </Badge>
+                    </div>
                     <p className={styles.timelineMeta}>{event.meta}</p>
                     <p className={styles.timelineDescription}>
                       {event.description}

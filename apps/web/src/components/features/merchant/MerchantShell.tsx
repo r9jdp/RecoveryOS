@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Brand } from "@/components/layout";
 import { Icon, TestModeBadge } from "@/components/ui";
 
+import { DemoGuide } from "./DemoGuide";
 import styles from "./merchant.module.css";
 
 interface MerchantShellProps {
@@ -15,12 +16,12 @@ interface MerchantShellProps {
 
 const items = [
   { href: "/dashboard", icon: "chart" as const, label: "Control Tower" },
-  { href: "/approvals", icon: "shield" as const, label: "Approval queue" },
   {
     href: "/cases/case_fitbox_aug_2026",
     icon: "case" as const,
-    label: "Active case",
+    label: "FitBox case",
   },
+  { href: "/approvals", icon: "shield" as const, label: "Approval queue" },
   { href: "/dashboard#audit", icon: "activity" as const, label: "Audit trail" },
   { href: "/lab", icon: "lab" as const, label: "Recovery Lab" },
   { href: "/voice", icon: "voice" as const, label: "Voice outreach" },
@@ -126,7 +127,10 @@ export function MerchantShell({ children }: MerchantShellProps) {
               </p>
             </div>
             <div className={styles.topbarEnd}>
-              <TestModeBadge />
+              <DemoGuide />
+              <span className={styles.topbarTestMode}>
+                <TestModeBadge />
+              </span>
               <span
                 className={styles.operator}
                 aria-label="Signed in as Demo Operator"
