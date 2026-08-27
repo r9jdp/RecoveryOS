@@ -264,6 +264,7 @@ class PolicySettingsUpdate(ApiModel):
     quiet_hours_end: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     max_contacts_per_7_days: int | None = Field(default=None, gt=0)
     require_approval_above_paise: int | None = Field(default=None, ge=0)
+    require_approval_actions: list[RecoveryActionType] = Field(default_factory=list)
     recovery_kill_switch: bool
 
     @field_validator("timezone")

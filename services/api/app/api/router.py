@@ -250,6 +250,7 @@ def _policy_settings_response(
         quiet_hours_end=settings.quiet_hours_end,
         max_contacts_per_7_days=settings.max_contacts_per_7_days,
         require_approval_above_paise=settings.require_approval_above_paise,
+        require_approval_actions=settings.require_approval_actions,
         recovery_kill_switch=settings.recovery_kill_switch,
         version=settings.version,
         updated_at=settings.updated_at,
@@ -293,6 +294,9 @@ async def update_policy_settings(
     settings.quiet_hours_end = request.quiet_hours_end
     settings.max_contacts_per_7_days = request.max_contacts_per_7_days
     settings.require_approval_above_paise = request.require_approval_above_paise
+    settings.require_approval_actions = [
+        action.value for action in request.require_approval_actions
+    ]
     settings.recovery_kill_switch = request.recovery_kill_switch
     settings.version += 1
     await session.commit()

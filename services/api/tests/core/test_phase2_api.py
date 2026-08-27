@@ -74,6 +74,7 @@ async def test_phase2_policy_webhook_and_opt_out_http_contracts(
                 "quiet_hours_end": "08:00",
                 "max_contacts_per_7_days": 1,
                 "require_approval_above_paise": 149_900,
+                "require_approval_actions": ["START_VOICE"],
                 "recovery_kill_switch": True,
             },
         )
@@ -97,6 +98,7 @@ async def test_phase2_policy_webhook_and_opt_out_http_contracts(
     assert settings.json()["version"] == 1
     assert updated_settings.status_code == 200
     assert updated_settings.json()["recovery_kill_switch"] is True
+    assert updated_settings.json()["require_approval_actions"] == ["START_VOICE"]
     assert updated_settings.json()["version"] == 2
     assert first_webhook.status_code == 202
     assert first_webhook.json()["duplicate"] is False
