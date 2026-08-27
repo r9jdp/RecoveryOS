@@ -1,0 +1,1 @@
+"""Razorpay adapter contract tests."""
