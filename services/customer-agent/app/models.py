@@ -42,7 +42,7 @@ class CancelTaskParams(WireModel):
 class JsonRpcRequest(WireModel):
     jsonrpc: Literal["2.0"] = "2.0"
     id: str | int
-    method: Literal["SendMessage", "GetTask", "CancelTask"]
+    method: str = Field(min_length=1)
     params: dict[str, Any]
 
 
@@ -136,6 +136,7 @@ class TaskRecord(WireModel):
     request: RecoveryRequestData
     created_at: datetime
     updated_at: datetime
+    revision: int = Field(default=1, ge=1, exclude=True)
 
     def public_dict(self, *, history_length: int | None = None) -> dict[str, Any]:
         history = self.history

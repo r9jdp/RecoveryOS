@@ -22,7 +22,7 @@ from .models import (
     TaskRecord,
 )
 from .signing import MandateSigner
-from .store import TaskStore
+from .store import TaskStore, TaskVersionConflictError
 
 
 class TaskNotFoundError(LookupError):
@@ -101,22 +101,30 @@ class CustomerAgentService:
         return task
 
     async def cancel_task(self, task_id: str, *, reason: str) -> TaskRecord:
-        task = await self.get_task(task_id)
-        if task.state in {"TASK_STATE_COMPLETED", "TASK_STATE_CANCELED"}:
+        # Cancellation is safety-preferred. Retry only an optimistic conflict so
+        # a concurrent approval cannot silently overwrite an accepted cancel.
+        for _attempt in range(3):
+            task = await self.get_task(task_id)
+            if task.state in {"TASK_STATE_COMPLETED", "TASK_STATE_CANCELED"}:
+                return task
+            expected_revision = task.revision
+            now = datetime.now(UTC)
+            task.state = "TASK_STATE_CANCELED"
+            task.status = {
+                "state": task.state,
+                "timestamp": now.isoformat(),
+                "message": self._agent_message(
+                    task,
+                    {"protocol_version": "recovery.canceled.v1", "reason": reason},
+                ),
+            }
+            task.updated_at = now
+            try:
+                await self._store.save(task, expected_revision=expected_revision)
+            except TaskVersionConflictError:
+                continue
             return task
-        now = datetime.now(UTC)
-        task.state = "TASK_STATE_CANCELED"
-        task.status = {
-            "state": task.state,
-            "timestamp": now.isoformat(),
-            "message": self._agent_message(
-                task,
-                {"protocol_version": "recovery.canceled.v1", "reason": reason},
-            ),
-        }
-        task.updated_at = now
-        await self._store.save(task)
-        return task
+        raise TaskConflictError("task changed concurrently; retry cancellation")
 
     async def approval_summary(self, task_id: str) -> ApprovalSummary:
         task = await self.get_task(task_id)
@@ -139,6 +147,7 @@ class CustomerAgentService:
 
     async def decide(self, *, task_id: str, decision: ApprovalDecision) -> TaskRecord:
         task = await self.get_task(task_id)
+        expected_revision = task.revision
         request = task.request
         if task.state != "TASK_STATE_AUTH_REQUIRED":
             raise TaskConflictError("authorization has already been decided")
@@ -170,7 +179,7 @@ class CustomerAgentService:
                 ),
             }
             task.updated_at = now
-            await self._store.save(task)
+            await self._save_once(task, expected_revision=expected_revision)
             return task
 
         mandate = RecoveryMandateData(
@@ -204,7 +213,7 @@ class CustomerAgentService:
             ),
         }
         task.updated_at = now
-        await self._store.save(task)
+        await self._save_once(task, expected_revision=expected_revision)
         return task
 
     async def _complete_with_receipt(
@@ -212,8 +221,11 @@ class CustomerAgentService:
     ) -> TaskRecord:
         task_id = message.task_id or receipt.task_id
         task = await self.get_task(task_id)
+        if self._is_duplicate_message(task, message):
+            return task
         if task.state != "TASK_STATE_WORKING":
             raise TaskConflictError("task is not awaiting a payment receipt")
+        expected_revision = task.revision
         mandate_part = task.artifacts[0]["parts"][0]["data"]
         mandate_data = mandate_part["data"]
         expected = (
@@ -257,8 +269,31 @@ class CustomerAgentService:
             ),
         }
         task.updated_at = now
-        await self._store.save(task)
+        try:
+            await self._store.save(task, expected_revision=expected_revision)
+        except TaskVersionConflictError as exc:
+            latest = await self.get_task(task_id)
+            if self._is_duplicate_message(latest, message):
+                return latest
+            raise TaskConflictError("task changed concurrently; retry receipt") from exc
         return task
+
+    async def _save_once(self, task: TaskRecord, *, expected_revision: int) -> None:
+        try:
+            await self._store.save(task, expected_revision=expected_revision)
+        except TaskVersionConflictError as exc:
+            raise TaskConflictError("task changed concurrently; retry request") from exc
+
+    @staticmethod
+    def _is_duplicate_message(task: TaskRecord, message: Message) -> bool:
+        received = message.model_dump(mode="json", by_alias=True, exclude_none=True)
+        for item in task.history:
+            if not isinstance(item, dict) or item.get("messageId") != message.message_id:
+                continue
+            if item != received:
+                raise TaskConflictError("messageId was reused with different receipt data")
+            return True
+        return False
 
     @staticmethod
     def _agent_message(task: TaskRecord, data: dict[str, Any]) -> dict[str, Any]:

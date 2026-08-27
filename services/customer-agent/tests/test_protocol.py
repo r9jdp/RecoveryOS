@@ -230,3 +230,59 @@ async def test_cancel_task_is_idempotent(client: httpx.AsyncClient) -> None:
     second = await client.post("/rpc", json=payload)
     assert first.json()["result"]["status"]["state"] == "TASK_STATE_CANCELED"
     assert second.json()["result"]["status"]["state"] == "TASK_STATE_CANCELED"
+
+
+@pytest.mark.asyncio
+async def test_unknown_json_rpc_method_returns_protocol_error(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/rpc",
+        json={"jsonrpc": "2.0", "id": "unknown", "method": "FutureMethod", "params": {}},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "jsonrpc": "2.0",
+        "id": "unknown",
+        "error": {"code": -32601, "message": "Method not found"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_malformed_json_rpc_requests_are_protocol_errors(client: httpx.AsyncClient) -> None:
+    invalid_envelope = await client.post(
+        "/rpc",
+        json={"jsonrpc": "2.0", "id": "invalid-envelope", "method": "GetTask"},
+    )
+    assert invalid_envelope.status_code == 200
+    assert invalid_envelope.json()["error"]["code"] == -32600
+    assert invalid_envelope.json()["id"] == "invalid-envelope"
+
+    invalid_params = await client.post(
+        "/rpc",
+        json={"jsonrpc": "2.0", "id": "invalid-params", "method": "GetTask", "params": {}},
+    )
+    assert invalid_params.status_code == 200
+    assert invalid_params.json()["error"]["code"] == -32602
+
+    parse_error = await client.post(
+        "/rpc",
+        content=b'{"jsonrpc":',
+        headers={"Content-Type": "application/json"},
+    )
+    assert parse_error.status_code == 200
+    assert parse_error.json() == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "Parse error"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_default_app_uses_ready_in_memory_mock_store() -> None:
+    app = create_app(CustomerAgentSettings(task_store="memory", database_url=None))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://customer-agent.test",
+    ) as default_client:
+        response = await default_client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "mode": "mock", "store": "memory"}

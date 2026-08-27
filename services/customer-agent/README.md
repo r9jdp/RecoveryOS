@@ -32,9 +32,36 @@ The wire shape follows the current [A2A specification](https://github.com/a2apro
 | `CUSTOMER_AGENT_ED25519_PRIVATE_KEY` | Base64url-encoded 32-byte Ed25519 seed |
 | `CUSTOMER_AGENT_REAL_SIGNING_ENABLED` | Requires the configured private key when true |
 | `CUSTOMER_AGENT_REQUEST_TTL_SECONDS` | Maximum signed-mandate lifetime, default 900 seconds |
+| `CUSTOMER_AGENT_TASK_STORE` | `memory` by default; set `sql` explicitly for hosted durability |
+| `CUSTOMER_AGENT_DATABASE_URL` | Server-only PostgreSQL URL required when the task store is `sql` |
 
 Mock mode is the default and uses a deterministic development-only key. A hosted non-mock process
-must set the real-signing flag and inject the seed from server-side secret storage.
+must set the real-signing flag, inject the seed from server-side secret storage, select the SQL
+task store, and apply the coordinator-owned database migration. Readiness reports only the store
+kind and availability; it never includes the connection URL.
+
+## Durable task-store contract
+
+The SQL adapter persists the complete task payload, including signed mandate artifacts, message
+history, and payment receipts. `idempotency_key` is database-unique, while a monotonically
+increasing `version` provides optimistic concurrency for approval, cancellation, and receipt
+updates. The cancellation path retries version conflicts so a simultaneous approval cannot erase a
+requested cancellation.
+
+The coordinator migration must create `customer_agent_tasks` with these columns and constraints:
+
+- `task_id VARCHAR(96)` primary key
+- `idempotency_key VARCHAR(255)` not null and unique as
+  `uq_customer_agent_tasks_idempotency_key`
+- `state VARCHAR(64)` not null
+- `payload JSON` not null
+- `version INTEGER` not null with default `1` and check constraint `version >= 1` named
+  `ck_customer_agent_tasks_version_positive`
+- `created_at TIMESTAMP WITH TIME ZONE` and `updated_at TIMESTAMP WITH TIME ZONE`, both not null
+- composite index `ix_customer_agent_tasks_state_updated` on `(state, updated_at)`
+
+Application startup does not create this table. `/health/ready` returns HTTP 503 with
+`store: "sql"` when either the database or the migration is unavailable.
 
 ## Lifecycle
 
@@ -44,6 +71,6 @@ must set the real-signing flag and inject the seed from server-side secret stora
 4. RecoveryOS verifies the pinned key and full scope, then atomically consumes the nonce.
 5. A scoped `recovery.receipt.v1` message completes the task with the provider result.
 
-The mock task store is process-local. Hosted multi-instance operation requires a durable task store;
-nonce replay protection is already defined at the RecoveryOS API boundary using the coordinator-owned
+The mock task store is process-local. Hosted multi-instance operation uses the durable task store;
+nonce replay protection remains at the RecoveryOS API boundary using the coordinator-owned
 `a2a_mandate_nonce_consumptions` PostgreSQL table.

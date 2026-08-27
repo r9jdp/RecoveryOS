@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -20,24 +22,41 @@ from .models import (
 )
 from .service import CustomerAgentService, TaskConflictError, TaskNotFoundError
 from .signing import MandateSigner
-from .store import InMemoryTaskStore
+from .store import TaskStore, create_task_store
 
 
-def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
+def create_app(
+    settings: CustomerAgentSettings | None = None,
+    *,
+    task_store: TaskStore | None = None,
+) -> FastAPI:
     active_settings = settings or CustomerAgentSettings()
     signer = MandateSigner.from_seed(
         signer_key_id=active_settings.signer_key_id,
         seed=active_settings.signing_seed(),
     )
+    store = task_store or create_task_store(
+        mode=active_settings.task_store,
+        database_url=(
+            active_settings.durable_database_url() if active_settings.task_store == "sql" else None
+        ),
+    )
     service = CustomerAgentService(
-        store=InMemoryTaskStore(),
+        store=store,
         signer=signer,
         mandate_ttl_seconds=active_settings.request_ttl_seconds,
     )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        await store.close()
+
     app = FastAPI(
         title="RecoveryOS Customer Authorization Agent",
         version="0.1.0",
         description="A2A service for explicit, exact-surface customer authorization.",
+        lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -47,15 +66,22 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "A2A-Version", "A2A-Extensions"],
     )
     app.state.customer_agent_service = service
+    app.state.customer_agent_store = store
 
     @app.get("/health/live", tags=["health"])
     async def live() -> dict[str, str]:
         return {"status": "live", "service": "recoveryos-customer-agent"}
 
     @app.get("/health/ready", tags=["health"])
-    async def ready() -> dict[str, str]:
+    async def ready() -> JSONResponse:
         mode = "real" if active_settings.real_signing_enabled else "mock"
-        return {"status": "ready", "mode": mode}
+        available = await store.is_ready()
+        content = {
+            "status": "ready" if available else "not_ready",
+            "mode": mode,
+            "store": store.kind,
+        }
+        return JSONResponse(content, status_code=200 if available else 503)
 
     @app.get("/.well-known/agent-card.json", tags=["a2a"])
     async def agent_card() -> dict[str, object]:
@@ -67,10 +93,28 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
 
     @app.post("/rpc", tags=["a2a"])
     async def json_rpc(
-        request: JsonRpcRequest,
+        http_request: Request,
         a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
         a2a_extensions: Annotated[str | None, Header(alias="A2A-Extensions")] = None,
     ) -> JSONResponse:
+        try:
+            raw_request = await http_request.json()
+        except ValueError:
+            return _rpc_error(None, -32700, "Parse error")
+        try:
+            request = JsonRpcRequest.model_validate(raw_request)
+        except ValidationError as exc:
+            request_id = (
+                raw_request.get("id")
+                if isinstance(raw_request, dict) and isinstance(raw_request.get("id"), (str, int))
+                else None
+            )
+            return _rpc_error(
+                request_id,
+                -32600,
+                "Invalid Request",
+                exc.errors(include_url=False),
+            )
         if a2a_version != "1.0":
             return _rpc_error(
                 request.id,
@@ -88,6 +132,8 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
                 "Recovery mandate extension support is required",
                 [{"uri": RECOVERY_MANDATE_EXTENSION_URI}],
             )
+        if request.method not in {"SendMessage", "GetTask", "CancelTask"}:
+            return _rpc_error(request.id, -32601, "Method not found")
         try:
             if request.method == "SendMessage":
                 send_params = SendMessageParams.model_validate(request.params)
@@ -97,10 +143,12 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
                 get_params = GetTaskParams.model_validate(request.params)
                 task = await service.get_task(get_params.id)
                 result = task.public_dict(history_length=get_params.history_length)
-            else:
+            elif request.method == "CancelTask":
                 cancel_params = CancelTaskParams.model_validate(request.params)
                 task = await service.cancel_task(cancel_params.id, reason=cancel_params.reason)
                 result = task.public_dict()
+            else:  # Defensive guard for future dispatch edits.
+                return _rpc_error(request.id, -32601, "Method not found")
         except ValidationError as exc:
             return _rpc_error(request.id, -32602, "Invalid params", exc.errors(include_url=False))
         except TaskNotFoundError:
@@ -131,7 +179,7 @@ def create_app(settings: CustomerAgentSettings | None = None) -> FastAPI:
 
 
 def _rpc_error(
-    request_id: str | int,
+    request_id: str | int | None,
     code: int,
     message: str,
     data: object | None = None,
