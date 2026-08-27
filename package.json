@@ -12,7 +12,7 @@
     "dev:web": "pnpm --filter @recovery-os/web dev",
     "dev:api": "uv run uvicorn services.api.app.main:app --reload --host 0.0.0.0 --port 8000",
     "dev:worker": "uv run python -m services.worker.app.main",
-    "dev:customer-agent": "uv run uvicorn services.customer_agent.app.main:app --reload --host 0.0.0.0 --port 8010",
+    "dev:customer-agent": "uv run uvicorn app.main:app --app-dir services/customer-agent --reload --host 0.0.0.0 --port 8010",
     "infra": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "migrate": "uv run alembic upgrade head",
@@ -34,4 +34,3 @@
     "evaluate": "uv run python -m ml.evaluation.evaluate"
   }
 }
-
