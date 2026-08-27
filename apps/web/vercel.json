@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && pnpm --filter @recovery-os/web build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "regions": ["sin1"]
+}
+

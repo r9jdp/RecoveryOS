@@ -1,0 +1,44 @@
+{
+  "entity": "event",
+  "account_id": "acc_fitbox_test",
+  "event": "payment_link.paid",
+  "contains": ["payment_link", "payment"],
+  "payload": {
+    "payment_link": {
+      "entity": {
+        "id": "plink_fitbox_fallback_001",
+        "entity": "payment_link",
+        "accept_partial": false,
+        "amount": 149900,
+        "amount_paid": 149900,
+        "currency": "INR",
+        "status": "paid",
+        "reference_id": "rc_fitbox_aug_2026",
+        "notify": {"sms": false, "email": false},
+        "notes": {
+          "case_id": "case_fitbox_aug_2026",
+          "invoice_id": "inv_fitbox_aug_2026",
+          "subscription_id": "sub_fitbox_annual_001"
+        },
+        "expire_by": 1788084000
+      }
+    },
+    "payment": {
+      "entity": {
+        "id": "pay_fitbox_fallback_001",
+        "entity": "payment",
+        "amount": 149900,
+        "currency": "INR",
+        "status": "captured",
+        "method": "upi",
+        "captured": true,
+        "notes": {
+          "case_id": "case_fitbox_aug_2026",
+          "invoice_id": "inv_fitbox_aug_2026"
+        },
+        "created_at": 1787998000
+      }
+    }
+  },
+  "created_at": 1787998001
+}

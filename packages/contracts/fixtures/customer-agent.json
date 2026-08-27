@@ -1,0 +1,36 @@
+{
+  "fixture_version": "screens.v1",
+  "screen": "/agent/tasks/task_fitbox_001",
+  "protocol": "A2A",
+  "data_part_type": "recovery.request.v1",
+  "task": {
+    "id": "task_fitbox_001",
+    "state": "AUTH_REQUIRED",
+    "case_id": "case_fitbox_aug_2026",
+    "merchant_id": "merchant_fitbox",
+    "merchant_display_name": "FitBox",
+    "merchant_support_email": "support@fitbox.example",
+    "customer_id": "customer_fitbox_001",
+    "exact_amount_paise": 149900,
+    "currency": "INR",
+    "reason": "Your August FitBox Annual subscription invoice is unpaid after an incorrect OTP.",
+    "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
+    "expires_at": "2026-08-27T10:10:00Z"
+  },
+  "approval": {
+    "allowed": true,
+    "requires_exact_amount_confirmation": true,
+    "mandate_issued": false
+  },
+  "trace": [
+    {
+      "type": "TASK_SUBMITTED",
+      "data_part_type": "recovery.request.v1",
+      "occurred_at": "2026-08-27T10:02:00Z"
+    },
+    {
+      "type": "AUTH_REQUIRED",
+      "occurred_at": "2026-08-27T10:02:01Z"
+    }
+  ]
+}

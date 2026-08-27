@@ -1,0 +1,109 @@
+"""Stable domain vocabulary shared by API, workflow, and adapters.
+
+These values are persisted and exposed over OpenAPI.  Additive changes are safe;
+renaming a value requires an explicit compatibility migration.
+"""
+
+from enum import StrEnum
+
+
+class StringEnum(StrEnum):
+    """JSON-friendly enum base compatible with Python 3.12 and Pydantic."""
+
+
+class CaseOutcome(StringEnum):
+    OPEN = "OPEN"
+    RECOVERED = "RECOVERED"
+    PARTIALLY_RECOVERED = "PARTIALLY_RECOVERED"
+    ESCALATED = "ESCALATED"
+    DISPUTED = "DISPUTED"
+    STOPPED = "STOPPED"
+    EXPIRED = "EXPIRED"
+
+
+class PaymentState(StringEnum):
+    UNKNOWN = "UNKNOWN"
+    FAILED = "FAILED"
+    PENDING = "PENDING"
+    AUTHORIZED = "AUTHORIZED"
+    CAPTURED = "CAPTURED"
+    REFUNDED = "REFUNDED"
+
+
+class SubscriptionState(StringEnum):
+    UNKNOWN = "UNKNOWN"
+    CREATED = "CREATED"
+    AUTHENTICATED = "AUTHENTICATED"
+    ACTIVE = "ACTIVE"
+    PENDING = "PENDING"
+    HALTED = "HALTED"
+    PAUSED = "PAUSED"
+    CANCELLED = "CANCELLED"
+    COMPLETED = "COMPLETED"
+
+
+class ContactDisposition(StringEnum):
+    NOT_CONTACTED = "NOT_CONTACTED"
+    CONTACT_SCHEDULED = "CONTACT_SCHEDULED"
+    NO_ANSWER = "NO_ANSWER"
+    BUSY = "BUSY"
+    ENGAGED = "ENGAGED"
+    PROMISE_TO_PAY = "PROMISE_TO_PAY"
+    OPTED_OUT = "OPTED_OUT"
+    WRONG_PERSON = "WRONG_PERSON"
+    DISPUTE = "DISPUTE"
+    ALREADY_PAID = "ALREADY_PAID"
+
+
+class RevenueAttribution(StringEnum):
+    NONE = "NONE"
+    SIMULATED = "SIMULATED"
+    RAZORPAY_TEST_VERIFIED = "RAZORPAY_TEST_VERIFIED"
+    VERIFIED_EXTERNAL = "VERIFIED_EXTERNAL"
+
+
+class RecoveryActionType(StringEnum):
+    WAIT_FOR_GATEWAY_RETRY = "WAIT_FOR_GATEWAY_RETRY"
+    OPEN_CUSTOMER_PAYMENT_SURFACE = "OPEN_CUSTOMER_PAYMENT_SURFACE"
+    START_VOICE = "START_VOICE"
+    SEND_TO_CUSTOMER_AGENT = "SEND_TO_CUSTOMER_AGENT"
+    ESCALATE_TO_HUMAN = "ESCALATE_TO_HUMAN"
+    STOP = "STOP"
+
+
+class PaymentSurfaceType(StringEnum):
+    SUBSCRIPTION_CARD_UPDATE = "SUBSCRIPTION_CARD_UPDATE"
+    SUBSCRIPTION_INVOICE_LINK = "SUBSCRIPTION_INVOICE_LINK"
+    STANDARD_PAYMENT_LINK = "STANDARD_PAYMENT_LINK"
+
+
+class Diagnosis(StringEnum):
+    TRANSIENT_RETRYABLE = "TRANSIENT_RETRYABLE"
+    INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS"
+    AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+    INSTRUMENT_INVALID = "INSTRUMENT_INVALID"
+    MERCHANT_ERROR = "MERCHANT_ERROR"
+    RISK_OR_COMPLIANCE_BLOCK = "RISK_OR_COMPLIANCE_BLOCK"
+    UNKNOWN = "UNKNOWN"
+
+
+class EvidenceKind(StringEnum):
+    SIMULATED = "SIMULATED"
+    RAZORPAY_TEST_VERIFIED = "RAZORPAY_TEST_VERIFIED"
+
+
+class PolicyDisposition(StringEnum):
+    ALLOW = "ALLOW"
+    BLOCK = "BLOCK"
+    DELAY = "DELAY"
+    REQUIRE_MANUAL_APPROVAL = "REQUIRE_MANUAL_APPROVAL"
+
+
+class ActionStatus(StringEnum):
+    PROPOSED = "PROPOSED"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    SCHEDULED = "SCHEDULED"
+    EXECUTING = "EXECUTING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"

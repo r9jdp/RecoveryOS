@@ -1,0 +1,28 @@
+{
+  "entity": "event",
+  "account_id": "acc_fitbox_test",
+  "event": "payment.captured",
+  "contains": ["payment"],
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_fitbox_recovered_001",
+        "entity": "payment",
+        "amount": 149900,
+        "currency": "INR",
+        "status": "captured",
+        "order_id": "order_fitbox_recovery_001",
+        "invoice_id": "inv_fitbox_aug_2026",
+        "method": "card",
+        "captured": true,
+        "notes": {
+          "case_id": "case_fitbox_aug_2026",
+          "merchant_id": "merchant_fitbox",
+          "subscription_id": "sub_fitbox_annual_001"
+        },
+        "created_at": 1787826000
+      }
+    }
+  },
+  "created_at": 1787826002
+}

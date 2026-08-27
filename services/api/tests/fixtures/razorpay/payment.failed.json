@@ -1,0 +1,32 @@
+{
+  "entity": "event",
+  "account_id": "acc_fitbox_test",
+  "event": "payment.failed",
+  "contains": ["payment"],
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_fitbox_failed_001",
+        "entity": "payment",
+        "amount": 149900,
+        "currency": "INR",
+        "status": "failed",
+        "order_id": "order_fitbox_001",
+        "invoice_id": "inv_fitbox_aug_2026",
+        "method": "card",
+        "captured": false,
+        "error_code": "BAD_REQUEST_ERROR",
+        "error_description": "Payment processing failed because of incorrect OTP",
+        "error_source": "customer",
+        "error_step": "payment_authentication",
+        "error_reason": "incorrect_otp",
+        "notes": {
+          "merchant_id": "merchant_fitbox",
+          "subscription_id": "sub_fitbox_annual_001"
+        },
+        "created_at": 1787824800
+      }
+    }
+  },
+  "created_at": 1787824801
+}

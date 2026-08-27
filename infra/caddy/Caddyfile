@@ -1,0 +1,44 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+
+	log {
+		format json
+		level INFO
+	}
+}
+
+(recovery_service) {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy {args[0]} {
+		health_uri /health/live
+		health_interval 30s
+		health_timeout 3s
+		fail_duration 10s
+	}
+}
+
+{$PRODUCTION_API_DOMAIN} {
+	import recovery_service recoveryos-production-api:8000
+}
+
+{$PRODUCTION_AGENT_DOMAIN} {
+	import recovery_service recoveryos-production-customer-agent:8010
+}
+
+{$STAGING_API_DOMAIN} {
+	import recovery_service recoveryos-staging-api:8000
+}
+
+{$STAGING_AGENT_DOMAIN} {
+	import recovery_service recoveryos-staging-customer-agent:8010
+}

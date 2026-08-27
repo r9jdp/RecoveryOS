@@ -1,0 +1,8 @@
+tenancy_ocid      = "ocid1.tenancy.oc1..replace-me"
+compartment_ocid  = "ocid1.compartment.oc1..replace-me"
+region            = "ap-hyderabad-1"
+ssh_public_key    = "ssh-ed25519 AAAA... recoveryos-deploy"
+ssh_ingress_cidr  = "203.0.113.10/32"
+
+# The defaults request a 2 OCPU / 12 GiB VM.Standard.A1.Flex instance.
+# Confirm current Always Free eligibility in your tenancy before applying.

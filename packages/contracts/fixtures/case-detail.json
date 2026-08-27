@@ -1,0 +1,144 @@
+{
+  "fixture_version": "screens.v1",
+  "screen": "/cases/case_fitbox_aug_2026",
+  "case": {
+    "id": "case_fitbox_aug_2026",
+    "key": {
+      "merchant_id": "merchant_fitbox",
+      "failed_invoice_id": "inv_fitbox_aug_2026",
+      "billing_cycle_key": "2026-08"
+    },
+    "customer_id": "customer_fitbox_001",
+    "subscription_id": "sub_fitbox_annual_001",
+    "failed_payment_id": "pay_fitbox_failed_001",
+    "case_outcome": "OPEN",
+    "payment_state": "FAILED",
+    "subscription_state": "PENDING",
+    "contact_disposition": "NOT_CONTACTED",
+    "revenue_attribution": "NONE",
+    "case_recovered": false,
+    "arrears_collected_paise": 0,
+    "subscription_reactivated": false,
+    "diagnosis": "AUTHENTICATION_REQUIRED",
+    "amount_at_risk_paise": 149900,
+    "opened_at": "2026-08-27T10:00:01Z",
+    "recovery_deadline": "2026-08-30T10:00:01Z"
+  },
+  "customer": {
+    "id": "customer_fitbox_001",
+    "display_name": "Aarav Sharma",
+    "preferred_language": "Hinglish",
+    "voice_consent": true,
+    "opted_out_at": null,
+    "customer_agent_available": true
+  },
+  "subscription": {
+    "id": "sub_fitbox_annual_001",
+    "plan_name": "FitBox Annual",
+    "amount_paise": 149900,
+    "currency": "INR",
+    "subscription_state": "PENDING"
+  },
+  "payment_failure": {
+    "payment_id": "pay_fitbox_failed_001",
+    "invoice_id": "inv_fitbox_aug_2026",
+    "method": "card",
+    "error_source": "customer",
+    "error_step": "payment_authentication",
+    "error_reason": "incorrect_otp",
+    "occurred_at": "2026-08-27T10:00:00Z"
+  },
+  "evidence": [
+    {
+      "kind": "SIMULATED",
+      "field": "error_reason",
+      "value": "incorrect_otp",
+      "source_event": "payment.failed"
+    }
+  ],
+  "recommendation": {
+    "action": "OPEN_CUSTOMER_PAYMENT_SURFACE",
+    "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
+    "predicted_recovery_probability": 0.71,
+    "expected_recovered_paise": 106429,
+    "expected_utility_paise": 104929,
+    "confidence": 0.84,
+    "reason_codes": ["CUSTOMER_AUTHENTICATION_REQUIRED", "NATIVE_SURFACE_AVAILABLE"],
+    "reasons": [
+      "Customer-present authentication is required",
+      "A subscription-native card update keeps the recovery tied to the subscription"
+    ],
+    "rejected_alternatives": [
+      {
+        "action": "WAIT_FOR_GATEWAY_RETRY",
+        "reason_code": "AUTHENTICATION_WILL_PERSIST",
+        "reason": "A silent gateway retry cannot resolve an incorrect OTP"
+      },
+      {
+        "action": "OPEN_CUSTOMER_PAYMENT_SURFACE",
+        "payment_surface_type": "STANDARD_PAYMENT_LINK",
+        "reason_code": "SUBSCRIPTION_PENDING",
+        "reason": "Standalone collection is blocked while gateway retries are active"
+      }
+    ]
+  },
+  "policy": {
+    "disposition": "ALLOW",
+    "decision_code": "POLICY_ALLOWED",
+    "reason_codes": ["WITHIN_RECOVERY_WINDOW", "NO_SUPPRESSION"],
+    "reasons": ["Case is within its recovery window", "Customer has no suppression"],
+    "policy_version": "fitbox-demo.v1"
+  },
+  "payment_surface": {
+    "type": "SUBSCRIPTION_CARD_UPDATE",
+    "status": "NOT_OPENED",
+    "provider_reference": null,
+    "customer_url": null,
+    "authoritative_payment_state": "FAILED",
+    "arrears_collected_paise": 0,
+    "subscription_reactivated": false
+  },
+  "voice": {
+    "contact_attempt_id": null,
+    "status": "NOT_STARTED",
+    "transcript": null,
+    "detected_intent": null,
+    "confidence": null
+  },
+  "a2a_trace": {
+    "task_id": null,
+    "state": "NOT_STARTED",
+    "messages": []
+  },
+  "mandate_verification": {
+    "state": "NOT_PRESENT",
+    "signer_key_id": null,
+    "nonce_consumed": false
+  },
+  "available_commands": [
+    "APPROVE",
+    "REJECT",
+    "WAIT_FOR_GATEWAY_RETRY",
+    "STOP",
+    "ESCALATE_TO_HUMAN",
+    "MARK_DISPUTE"
+  ],
+  "timeline": [
+    {
+      "id": "event_001",
+      "event_type": "PAYMENT_FAILED",
+      "source": "simulator",
+      "evidence_kind": "SIMULATED",
+      "occurred_at": "2026-08-27T10:00:00Z",
+      "correlation_id": "corr_fitbox_001"
+    },
+    {
+      "id": "event_002",
+      "event_type": "ACTION_RECOMMENDED",
+      "source": "decision-engine",
+      "evidence_kind": "SIMULATED",
+      "occurred_at": "2026-08-27T10:00:02Z",
+      "correlation_id": "corr_fitbox_001"
+    }
+  ]
+}

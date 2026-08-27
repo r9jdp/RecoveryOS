@@ -1,0 +1,103 @@
+name: ${STACK_SLUG:?Set STACK_SLUG in the Compose environment file}
+
+x-python-service: &python-service
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  networks:
+    - backend
+    - edge
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  api:
+    <<: *python-service
+    image: ghcr.io/${GHCR_OWNER:?Set GHCR_OWNER}/${GHCR_REPOSITORY:-recoveryos}-api:${IMAGE_TAG:?Set IMAGE_TAG}
+    env_file:
+      - ${API_ENV_FILE:?Set API_ENV_FILE to the protected API environment file}
+    environment:
+      APP_ENV: ${DEPLOYMENT_ENV}
+      APP_VERSION: ${IMAGE_TAG}
+      SERVICE_NAME: recoveryos-api
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 30s
+    networks:
+      backend: {}
+      edge:
+        aliases:
+          - ${STACK_SLUG}-api
+
+  worker:
+    <<: *python-service
+    image: ghcr.io/${GHCR_OWNER:?Set GHCR_OWNER}/${GHCR_REPOSITORY:-recoveryos}-worker:${IMAGE_TAG:?Set IMAGE_TAG}
+    env_file:
+      - ${WORKER_ENV_FILE:?Set WORKER_ENV_FILE to the protected worker environment file}
+    environment:
+      APP_ENV: ${DEPLOYMENT_ENV}
+      APP_VERSION: ${IMAGE_TAG}
+      SERVICE_NAME: recoveryos-worker
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; os.kill(1, 0)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 90s
+    networks:
+      backend: {}
+
+  customer-agent:
+    <<: *python-service
+    image: ghcr.io/${GHCR_OWNER:?Set GHCR_OWNER}/${GHCR_REPOSITORY:-recoveryos}-customer-agent:${IMAGE_TAG:?Set IMAGE_TAG}
+    env_file:
+      - ${CUSTOMER_AGENT_ENV_FILE:?Set CUSTOMER_AGENT_ENV_FILE to the protected customer-agent environment file}
+    environment:
+      APP_ENV: ${DEPLOYMENT_ENV}
+      APP_VERSION: ${IMAGE_TAG}
+      SERVICE_NAME: recoveryos-customer-agent
+    expose:
+      - "8010"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health/live', timeout=3).read()
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 30s
+    networks:
+      backend: {}
+      edge:
+        aliases:
+          - ${STACK_SLUG}-customer-agent
+
+networks:
+  backend:
+    internal: true
+  edge:
+    name: recoveryos-edge
+    external: true

@@ -1,0 +1,35 @@
+{
+  "fixture_version": "screens.v1",
+  "screen": "/recover/case_fitbox_aug_2026/voice",
+  "mode": "BROWSER_FALLBACK",
+  "case_id": "case_fitbox_aug_2026",
+  "merchant_display_name": "FitBox",
+  "amount_paise": 149900,
+  "currency": "INR",
+  "preferred_language": "Hinglish",
+  "recording_state": "IDLE",
+  "transcript": null,
+  "detected_language": null,
+  "detected_intent": null,
+  "confidence": null,
+  "promise_to_pay_date": null,
+  "disclosure": "I am an AI assistant contacting you about a FitBox payment issue.",
+  "supported_intents": [
+    "PAY_NOW",
+    "SEND_TO_CUSTOMER_AGENT",
+    "PROMISE_TO_PAY",
+    "ALREADY_PAID",
+    "DISPUTE",
+    "OPT_OUT",
+    "WRONG_PERSON",
+    "REQUEST_HUMAN"
+  ],
+  "contact_disposition": "NOT_CONTACTED",
+  "safe_actions": [
+    "OPEN_CUSTOMER_PAYMENT_SURFACE",
+    "SEND_TO_CUSTOMER_AGENT",
+    "ESCALATE_TO_HUMAN",
+    "STOP"
+  ],
+  "real_call_enabled": false
+}

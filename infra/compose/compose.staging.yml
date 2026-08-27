@@ -1,0 +1,22 @@
+services:
+  api:
+    environment:
+      APP_ENV: staging
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+  worker:
+    environment:
+      APP_ENV: staging
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+  customer-agent:
+    environment:
+      APP_ENV: staging
+    deploy:
+      resources:
+        limits:
+          memory: 512m

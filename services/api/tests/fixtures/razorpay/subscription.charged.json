@@ -1,0 +1,41 @@
+{
+  "entity": "event",
+  "account_id": "acc_fitbox_test",
+  "event": "subscription.charged",
+  "contains": ["subscription", "payment"],
+  "payload": {
+    "subscription": {
+      "entity": {
+        "id": "sub_fitbox_annual_001",
+        "entity": "subscription",
+        "plan_id": "plan_fitbox_annual",
+        "customer_id": "cust_fitbox_001",
+        "status": "active",
+        "current_start": 1787826000,
+        "current_end": 1790504400,
+        "remaining_count": 7,
+        "notes": {
+          "merchant_id": "merchant_fitbox"
+        }
+      }
+    },
+    "payment": {
+      "entity": {
+        "id": "pay_fitbox_recovered_001",
+        "entity": "payment",
+        "amount": 149900,
+        "currency": "INR",
+        "status": "captured",
+        "invoice_id": "inv_fitbox_aug_2026",
+        "method": "card",
+        "captured": true,
+        "notes": {
+          "case_id": "case_fitbox_aug_2026",
+          "subscription_id": "sub_fitbox_annual_001"
+        },
+        "created_at": 1787826000
+      }
+    }
+  },
+  "created_at": 1787826001
+}

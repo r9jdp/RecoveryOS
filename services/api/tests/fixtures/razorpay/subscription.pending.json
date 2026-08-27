@@ -1,0 +1,25 @@
+{
+  "entity": "event",
+  "account_id": "acc_fitbox_test",
+  "event": "subscription.pending",
+  "contains": ["subscription"],
+  "payload": {
+    "subscription": {
+      "entity": {
+        "id": "sub_fitbox_annual_001",
+        "entity": "subscription",
+        "plan_id": "plan_fitbox_annual",
+        "customer_id": "cust_fitbox_001",
+        "status": "pending",
+        "current_start": 1785542400,
+        "current_end": 1788220800,
+        "charge_at": 1787824800,
+        "remaining_count": 8,
+        "notes": {
+          "merchant_id": "merchant_fitbox"
+        }
+      }
+    }
+  },
+  "created_at": 1787824810
+}

@@ -1,0 +1,61 @@
+{
+  "fixture_version": "screens.v1",
+  "screen": "/dashboard",
+  "evidence_kind": "SIMULATED",
+  "currency": "INR",
+  "metrics": {
+    "revenue_at_risk_paise": 149900,
+    "verified_recovered_revenue_paise": 0,
+    "simulated_incremental_recovery_paise": 0,
+    "net_recovered_value_paise": 0,
+    "active_cases": 1,
+    "recovery_rate_basis_points": 0,
+    "human_review_count": 0,
+    "policy_blocked_actions": 1
+  },
+  "diagnosis_distribution": [
+    {"diagnosis": "AUTHENTICATION_REQUIRED", "case_count": 1}
+  ],
+  "recovery_by_channel": [
+    {"channel": "SUBSCRIPTION_CARD_UPDATE", "recovered_paise": 0, "case_count": 1},
+    {"channel": "VOICE", "recovered_paise": 0, "case_count": 0},
+    {"channel": "CUSTOMER_AGENT", "recovered_paise": 0, "case_count": 0}
+  ],
+  "policy_settings": {
+    "timezone": "Asia/Kolkata",
+    "quiet_hours_start": "20:00",
+    "quiet_hours_end": "09:00",
+    "max_contacts_per_7_days": 2,
+    "require_approval_above_paise": 500000,
+    "recovery_kill_switch": false
+  },
+  "cases": [
+    {
+      "id": "case_fitbox_aug_2026",
+      "merchant_id": "merchant_fitbox",
+      "failed_invoice_id": "inv_fitbox_aug_2026",
+      "billing_cycle_key": "2026-08",
+      "customer_display_name": "Aarav Sharma",
+      "plan_name": "FitBox Annual",
+      "amount_at_risk_paise": 149900,
+      "case_outcome": "OPEN",
+      "payment_state": "FAILED",
+      "subscription_state": "PENDING",
+      "contact_disposition": "NOT_CONTACTED",
+      "revenue_attribution": "NONE",
+      "diagnosis": "AUTHENTICATION_REQUIRED",
+      "recommended_action": "OPEN_CUSTOMER_PAYMENT_SURFACE",
+      "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
+      "updated_at": "2026-08-27T10:01:00Z"
+    }
+  ],
+  "recent_events": [
+    {
+      "id": "event_001",
+      "case_id": "case_fitbox_aug_2026",
+      "event_type": "CASE_OPENED",
+      "occurred_at": "2026-08-27T10:00:01Z",
+      "correlation_id": "corr_fitbox_001"
+    }
+  ]
+}

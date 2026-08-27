@@ -1,0 +1,54 @@
+{
+  "schema_version": "razorpay-webhook-fixtures.v1",
+  "merchant_id": "merchant_fitbox",
+  "fixtures": [
+    {
+      "file": "payment.failed.json",
+      "event": "payment.failed",
+      "provider_event_id": "evt_payment_failed_001",
+      "expected_payment_state": "FAILED",
+      "expected_subscription_state": "UNKNOWN",
+      "correlation": "invoice_and_subscription_from_payment"
+    },
+    {
+      "file": "subscription.pending.json",
+      "event": "subscription.pending",
+      "provider_event_id": "evt_subscription_pending_001",
+      "expected_payment_state": "UNKNOWN",
+      "expected_subscription_state": "PENDING",
+      "correlation": "subscription_only_do_not_invent_invoice_or_payment"
+    },
+    {
+      "file": "subscription.halted.json",
+      "event": "subscription.halted",
+      "provider_event_id": "evt_subscription_halted_001",
+      "expected_payment_state": "UNKNOWN",
+      "expected_subscription_state": "HALTED",
+      "correlation": "subscription_only_existing_case_lookup"
+    },
+    {
+      "file": "subscription.charged.json",
+      "event": "subscription.charged",
+      "provider_event_id": "evt_subscription_charged_001",
+      "expected_payment_state": "CAPTURED",
+      "expected_subscription_state": "ACTIVE",
+      "correlation": "invoice_and_subscription_from_payment"
+    },
+    {
+      "file": "payment.captured.json",
+      "event": "payment.captured",
+      "provider_event_id": "evt_payment_captured_001",
+      "expected_payment_state": "CAPTURED",
+      "expected_subscription_state": "UNKNOWN",
+      "correlation": "invoice_and_subscription_from_payment"
+    },
+    {
+      "file": "payment_link.paid.json",
+      "event": "payment_link.paid",
+      "provider_event_id": "evt_payment_link_paid_001",
+      "expected_payment_state": "CAPTURED",
+      "expected_subscription_state": "UNKNOWN",
+      "correlation": "case_and_invoice_from_notes_requires_reconciliation"
+    }
+  ]
+}
