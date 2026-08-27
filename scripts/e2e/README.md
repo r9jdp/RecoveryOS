@@ -22,9 +22,15 @@ interception:
   workflow received it;
 - executes only the mock payment provider, then verifies database/workflow
   convergence and one revenue row after a duplicate success;
-- checks the customer-agent SQL-backed readiness endpoint and published Agent Card.
+- checks the customer-agent SQL-backed readiness endpoint and published Agent Card;
+- drives a second Temporal workflow through a real hosted A2A request, exact-scope
+  customer approval, Ed25519 verification with a pinned test key, atomic SQL nonce
+  consumption, mock payment-surface execution, fresh-client task retrieval, and
+  deterministic replay rejection.
 
-All real-provider flags are forced off. Set
+The A2A path uses the repository's deterministic mock signing key and mock
+payment provider; no real payment or telephony action is enabled. All
+real-provider flags are forced off. Set
 `RECOVERYOS_SERVICE_E2E_KEEP_STACK=1` only for local diagnosis; the unique
 Compose project name is printed so it can be removed explicitly afterward.
 

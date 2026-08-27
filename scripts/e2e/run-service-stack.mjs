@@ -161,9 +161,11 @@ async function main() {
   };
   const serviceEnv = {
     ...stackEnv,
-    A2A_ENABLED: "false",
+    A2A_ENABLED: "true",
     CUSTOMER_AGENT_DATABASE_URL: databaseUrl,
     CUSTOMER_AGENT_ORIGIN: agentOrigin,
+    CUSTOMER_AGENT_PUBLIC_KEYS_JSON:
+      '{"recoveryos-mock-2026-01":"GZhk5ii3Y-XZtVknHF4iUqsxcW0qeeldrXgdEe9u34E"}',
     CUSTOMER_AGENT_TASK_STORE: "sql",
     CUSTOMER_AGENT_WEB_ORIGIN: webOrigin,
     DATABASE_URL: databaseUrl,
