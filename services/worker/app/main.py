@@ -11,6 +11,7 @@ from .a2a_runtime import (
     create_live_a2a_services_from_env,
 )
 from .activities import RecoveryActivities
+from .health import WorkerHealthServer
 from .outbox import run_worker_services
 from .runtime import create_activity_services_from_env
 from .workflow import RecoveryCaseWorkflow
@@ -38,7 +39,12 @@ async def run() -> None:
         workflows=[RecoveryCaseWorkflow],
         activities=activities.registrations(),
     )
-    await run_worker_services(worker.run(), client, task_queue=task_queue)
+    health_server = WorkerHealthServer(client, worker)
+    await health_server.start()
+    try:
+        await run_worker_services(worker.run(), client, task_queue=task_queue)
+    finally:
+        await health_server.close()
 
 
 if __name__ == "__main__":
