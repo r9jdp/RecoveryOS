@@ -62,7 +62,13 @@ elif assertion == "agent-live":
     assert payload.get("service") == "recoveryos-customer-agent"
 elif assertion == "agent-card":
     assert payload.get("name")
-    assert payload.get("url", "").startswith("https://")
+    interfaces = payload.get("supportedInterfaces", [])
+    assert isinstance(interfaces, list) and interfaces
+    assert any(
+        isinstance(interface, dict)
+        and interface.get("url", "").startswith("https://")
+        for interface in interfaces
+    )
     assert payload.get("skills")
 else:
     raise AssertionError(f"unknown assertion: {assertion}")

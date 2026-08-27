@@ -191,7 +191,17 @@ class RazorpayClient:
 
     async def _open_card_update(self, request: OpenPaymentSurfaceRequest) -> PaymentSurfaceResult:
         self.build_subscription_card_update_checkout(request)
-        query = urlencode({"case_id": request.case_id, "subscription_id": request.subscription_id})
+        # The key id is designed to be exposed to Checkout. The secret remains
+        # server-only. Keeping the exact subscription and case in the generated
+        # URL makes the customer surface self-contained without trusting a
+        # browser callback as proof of recovery.
+        query = urlencode(
+            {
+                "case_id": request.case_id,
+                "subscription_id": request.subscription_id,
+                "key_id": self.config.key_id,
+            }
+        )
         customer_url = (
             f"{self.config.checkout_origin.rstrip('/')}/payments/razorpay/card-update?{query}"
         )

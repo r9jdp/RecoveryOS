@@ -68,6 +68,9 @@ async def test_card_update_checkout_contains_no_secret_and_opens_local_surface()
     }
     assert "test_secret" not in str(checkout)
     assert result.customer_url.startswith("https://staging.recovery.test/")
+    assert "key_id=rzp_test_key" in result.customer_url
+    assert "subscription_id=sub_fitbox_annual_001" in result.customer_url
+    assert "test_secret" not in result.customer_url
     await client._client.aclose()  # noqa: SLF001 - injected test client
 
 
