@@ -17,9 +17,9 @@ data "oci_core_images" "ubuntu_arm" {
 
 resource "oci_core_vcn" "recoveryos" {
   compartment_id = var.compartment_ocid
-  cidr_blocks     = [var.vcn_cidr]
-  display_name    = "${var.instance_display_name}-vcn"
-  dns_label       = "recoveryos"
+  cidr_blocks    = [var.vcn_cidr]
+  display_name   = "${var.instance_display_name}-vcn"
+  dns_label      = "recoveryos"
 }
 
 resource "oci_core_internet_gateway" "recoveryos" {
