@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "e2e": "playwright test",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
     "generate:client": "openapi-typescript ../../packages/contracts/openapi.json -o src/lib/api/schema.d.ts && prettier --write src/lib/api/schema.d.ts"
   },
   "dependencies": {
