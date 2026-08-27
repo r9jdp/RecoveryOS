@@ -1,5 +1,6 @@
 """SQLAlchemy persistence models."""
 
+from .a2a import A2AMandateNonceConsumption
 from .entities import (
     Customer,
     Invoice,
@@ -17,6 +18,7 @@ from .entities import (
 )
 
 __all__ = [
+    "A2AMandateNonceConsumption",
     "Customer",
     "Invoice",
     "Merchant",
