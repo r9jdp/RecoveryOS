@@ -7,6 +7,7 @@ from services.api.app.voice.models import (
 )
 
 from .a2a import A2AMandateNonceConsumption
+from .customer_agent import CustomerAgentTaskRecord
 from .entities import (
     Customer,
     Invoice,
@@ -26,6 +27,7 @@ from .entities import (
 __all__ = [
     "A2AMandateNonceConsumption",
     "Customer",
+    "CustomerAgentTaskRecord",
     "Invoice",
     "Merchant",
     "MerchantPolicySetting",
