@@ -22,6 +22,7 @@ const items = [
     label: "Active case",
   },
   { href: "/dashboard#audit", icon: "activity" as const, label: "Audit trail" },
+  { href: "/lab", icon: "lab" as const, label: "Recovery Lab" },
   { href: "/settings", icon: "settings" as const, label: "Policy settings" },
 ];
 
@@ -114,9 +115,11 @@ export function MerchantShell({ children }: MerchantShellProps) {
                   ? "Case workspace"
                   : pathname === "/approvals"
                     ? "Approval queue"
-                    : pathname === "/settings"
-                      ? "Policy settings"
-                      : "Control Tower"}
+                    : pathname === "/lab"
+                      ? "Recovery Lab"
+                      : pathname === "/settings"
+                        ? "Policy settings"
+                        : "Control Tower"}
               </p>
             </div>
             <div className={styles.topbarEnd}>
