@@ -35,7 +35,7 @@ def upgrade() -> None:
         sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "version >= 1",
-            name="ck_customer_agent_tasks_version_positive",
+            name=op.f("ck_customer_agent_tasks_version_positive"),
         ),
         sa.PrimaryKeyConstraint("task_id", name=op.f("pk_customer_agent_tasks")),
         sa.UniqueConstraint(
