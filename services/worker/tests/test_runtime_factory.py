@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from services.api.app.services.mock_payment import MockPaymentProvider
 from services.worker.app.activities import MockRecoveryActivityServices
 from services.worker.app.runtime import (
     ActivityConfigurationError,
@@ -42,3 +43,12 @@ def test_razorpay_wiring_is_guarded_before_credentials_are_loaded(
     monkeypatch.setenv("RAZORPAY_TEST_MODE_REQUIRED", "false")
     with pytest.raises(ActivityConfigurationError, match="production-mode keys"):
         create_activity_services_from_env()
+
+    selected: list[str] = []
+    monkeypatch.setenv("RAZORPAY_TEST_MODE_REQUIRED", "true")
+    monkeypatch.setattr(
+        "services.worker.app.runtime.create_razorpay_client_from_env",
+        lambda: selected.append("razorpay") or MockPaymentProvider(),
+    )
+    assert isinstance(create_activity_services_from_env(), ProductionRecoveryActivityServices)
+    assert selected == ["razorpay"]
