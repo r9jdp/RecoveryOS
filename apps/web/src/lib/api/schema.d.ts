@@ -24,6 +24,61 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/webhooks/razorpay": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Ingest Razorpay Webhook
+     * @description Verify the untouched body and atomically enqueue provider processing.
+     */
+    post: operations["ingest_razorpay_webhook_v1_webhooks_razorpay_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/policy-settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Policy Settings */
+    get: operations["get_policy_settings_v1_policy_settings_get"];
+    /** Update Policy Settings */
+    put: operations["update_policy_settings_v1_policy_settings_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/simulations/failure-injection": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Generate Failure Simulation */
+    post: operations["generate_failure_simulation_v1_simulations_failure_injection_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/dashboard/metrics": {
     parameters: {
       query?: never;
@@ -106,6 +161,23 @@ export interface paths {
      * @description Stable UI command façade over action-specific recovery endpoints.
      */
     post: operations["execute_operator_command_v1_recovery_cases__case_id__commands_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/recovery-cases/{case_id}/safety-dispositions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Record Safety Disposition */
+    post: operations["record_safety_disposition_v1_recovery_cases__case_id__safety_dispositions_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -451,6 +523,48 @@ export interface components {
      * @enum {string}
      */
     EvidenceKind: "SIMULATED" | "RAZORPAY_TEST_VERIFIED";
+    /** FailureSimulationRequest */
+    FailureSimulationRequest: {
+      /**
+       * Scenario
+       * @enum {string}
+       */
+      scenario:
+        | "DUPLICATE_WEBHOOK"
+        | "OUT_OF_ORDER_WEBHOOK"
+        | "LATE_SUCCESS"
+        | "CHANGED_AUTHORITATIVE_PAYMENT_STATE";
+      /**
+       * Seed
+       * @default 20260827
+       */
+      seed: number;
+      /**
+       * Amount Paise
+       * @default 149900
+       */
+      amount_paise: number;
+      /** @default SIMULATED */
+      evidence_kind: components["schemas"]["EvidenceKind"];
+    };
+    /** FailureSimulationResponse */
+    FailureSimulationResponse: {
+      /** Scenario */
+      scenario: string;
+      /** Seed */
+      seed: number;
+      /** Case Id */
+      case_id: string;
+      /** Payment Id */
+      payment_id: string;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Deliveries */
+      deliveries: components["schemas"]["SimulatedDeliveryResponse"][];
+      expected_final_payment_state: components["schemas"]["PaymentState"];
+      /** Expected Revenue Entries */
+      expected_revenue_entries: number;
+    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
@@ -606,6 +720,64 @@ export interface components {
        */
       created_at: string;
     };
+    /** PolicySettingsResponse */
+    PolicySettingsResponse: {
+      /** Timezone */
+      timezone: string;
+      /** Quiet Hours Start */
+      quiet_hours_start?: string | null;
+      /** Quiet Hours End */
+      quiet_hours_end?: string | null;
+      /** Max Contacts Per 7 Days */
+      max_contacts_per_7_days?: number | null;
+      /** Require Approval Above Paise */
+      require_approval_above_paise?: number | null;
+      /** Require Approval Actions */
+      require_approval_actions?: components["schemas"]["RecoveryActionType"][];
+      /** Recovery Kill Switch */
+      recovery_kill_switch: boolean;
+      /** Version */
+      version: number;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
+    /** PolicySettingsUpdate */
+    PolicySettingsUpdate: {
+      /** Timezone */
+      timezone: string;
+      /** Quiet Hours Start */
+      quiet_hours_start?: string | null;
+      /** Quiet Hours End */
+      quiet_hours_end?: string | null;
+      /** Max Contacts Per 7 Days */
+      max_contacts_per_7_days?: number | null;
+      /** Require Approval Above Paise */
+      require_approval_above_paise?: number | null;
+      /** Require Approval Actions */
+      require_approval_actions?: components["schemas"]["RecoveryActionType"][];
+      /** Recovery Kill Switch */
+      recovery_kill_switch: boolean;
+    };
+    /** RazorpayWebhookAckResponse */
+    RazorpayWebhookAckResponse: {
+      /** Provider Event Id */
+      provider_event_id: string;
+      /** Inbox Id */
+      inbox_id: string;
+      /** Outbox Id */
+      outbox_id: string;
+      /** Accepted */
+      accepted: boolean;
+      /** Duplicate */
+      duplicate: boolean;
+      /** Acknowledge Elapsed Ms */
+      acknowledge_elapsed_ms: number;
+      /** Acknowledge Within Sla */
+      acknowledge_within_sla: boolean;
+    };
     /** RecentEventResponse */
     RecentEventResponse: {
       /** Id */
@@ -699,6 +871,70 @@ export interface components {
      */
     RevenueAttribution:
       "NONE" | "SIMULATED" | "RAZORPAY_TEST_VERIFIED" | "VERIFIED_EXTERNAL";
+    /** SafetyDispositionRequest */
+    SafetyDispositionRequest: {
+      /**
+       * Disposition
+       * @enum {string}
+       */
+      disposition:
+        | "MARK_DISPUTE"
+        | "MARK_OPT_OUT"
+        | "MARK_ALREADY_PAID"
+        | "MARK_WRONG_PERSON"
+        | "ESCALATE_TO_HUMAN";
+    };
+    /** SafetyDispositionResponse */
+    SafetyDispositionResponse: {
+      /** Disposition */
+      disposition: string;
+      /** Message */
+      message: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      case: components["schemas"]["RecoveryCaseResponse"];
+      /**
+       * Source
+       * @default api
+       * @constant
+       */
+      source: "api";
+      /**
+       * Status
+       * @default ACCEPTED
+       * @constant
+       */
+      status: "ACCEPTED";
+    };
+    /** SimulatedDeliveryResponse */
+    SimulatedDeliveryResponse: {
+      /** Delivery Id */
+      delivery_id: string;
+      /** Provider Event Id */
+      provider_event_id: string;
+      /** Event Type */
+      event_type: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /**
+       * Delivered At
+       * Format: date-time
+       */
+      delivered_at: string;
+      observed_payment_state: components["schemas"]["PaymentState"];
+      authoritative_payment_state: components["schemas"]["PaymentState"];
+      evidence_kind: components["schemas"]["EvidenceKind"];
+      /** Payload */
+      payload: {
+        [key: string]: unknown;
+      };
+    };
     /** SubscriptionResponse */
     SubscriptionResponse: {
       /** Id */
@@ -807,6 +1043,124 @@ export interface operations {
           "application/json": {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  ingest_razorpay_webhook_v1_webhooks_razorpay_post: {
+    parameters: {
+      query?: never;
+      header: {
+        "X-Razorpay-Signature": string;
+        "X-Razorpay-Event-Id": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RazorpayWebhookAckResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_policy_settings_v1_policy_settings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicySettingsResponse"];
+        };
+      };
+    };
+  };
+  update_policy_settings_v1_policy_settings_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PolicySettingsUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PolicySettingsResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  generate_failure_simulation_v1_simulations_failure_injection_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FailureSimulationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FailureSimulationResponse"];
         };
       };
       /** @description Validation Error */
@@ -962,6 +1316,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["OperatorCommandResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  record_safety_disposition_v1_recovery_cases__case_id__safety_dispositions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SafetyDispositionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SafetyDispositionResponse"];
         };
       };
       /** @description Validation Error */

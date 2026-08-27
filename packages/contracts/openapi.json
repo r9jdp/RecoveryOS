@@ -58,6 +58,165 @@
         }
       }
     },
+    "/v1/webhooks/razorpay": {
+      "post": {
+        "tags": [
+          "recovery",
+          "razorpay"
+        ],
+        "summary": "Ingest Razorpay Webhook",
+        "description": "Verify the untouched body and atomically enqueue provider processing.",
+        "operationId": "ingest_razorpay_webhook_v1_webhooks_razorpay_post",
+        "parameters": [
+          {
+            "name": "X-Razorpay-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "X-Razorpay-Signature"
+            }
+          },
+          {
+            "name": "X-Razorpay-Event-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "X-Razorpay-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RazorpayWebhookAckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/policy-settings": {
+      "get": {
+        "tags": [
+          "recovery",
+          "policy"
+        ],
+        "summary": "Get Policy Settings",
+        "operationId": "get_policy_settings_v1_policy_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicySettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "recovery",
+          "policy"
+        ],
+        "summary": "Update Policy Settings",
+        "operationId": "update_policy_settings_v1_policy_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicySettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicySettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/simulations/failure-injection": {
+      "post": {
+        "tags": [
+          "recovery",
+          "simulation"
+        ],
+        "summary": "Generate Failure Simulation",
+        "operationId": "generate_failure_simulation_v1_simulations_failure_injection_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureSimulationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/dashboard/metrics": {
       "get": {
         "tags": [
@@ -351,6 +510,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OperatorCommandResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recovery-cases/{case_id}/safety-dispositions": {
+      "post": {
+        "tags": [
+          "recovery",
+          "policy"
+        ],
+        "summary": "Record Safety Disposition",
+        "operationId": "record_safety_disposition_v1_recovery_cases__case_id__safety_dispositions_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SafetyDispositionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafetyDispositionResponse"
                 }
               }
             }
@@ -1343,6 +1555,93 @@
         ],
         "title": "EvidenceKind"
       },
+      "FailureSimulationRequest": {
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "enum": [
+              "DUPLICATE_WEBHOOK",
+              "OUT_OF_ORDER_WEBHOOK",
+              "LATE_SUCCESS",
+              "CHANGED_AUTHORITATIVE_PAYMENT_STATE"
+            ],
+            "title": "Scenario"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed",
+            "default": 20260827
+          },
+          "amount_paise": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Paise",
+            "default": 149900
+          },
+          "evidence_kind": {
+            "$ref": "#/components/schemas/EvidenceKind",
+            "default": "SIMULATED"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenario"
+        ],
+        "title": "FailureSimulationRequest"
+      },
+      "FailureSimulationResponse": {
+        "properties": {
+          "scenario": {
+            "type": "string",
+            "title": "Scenario"
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "payment_id": {
+            "type": "string",
+            "title": "Payment Id"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "title": "Amount Paise"
+          },
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/SimulatedDeliveryResponse"
+            },
+            "type": "array",
+            "title": "Deliveries"
+          },
+          "expected_final_payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "expected_revenue_entries": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Revenue Entries"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scenario",
+          "seed",
+          "case_id",
+          "payment_id",
+          "amount_paise",
+          "deliveries",
+          "expected_final_payment_state",
+          "expected_revenue_entries"
+        ],
+        "title": "FailureSimulationResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1767,6 +2066,215 @@
         ],
         "title": "PolicyResponse"
       },
+      "PolicySettingsResponse": {
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Timezone"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "max_contacts_per_7_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Contacts Per 7 Days"
+          },
+          "require_approval_above_paise": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Approval Above Paise"
+          },
+          "require_approval_actions": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryActionType"
+            },
+            "type": "array",
+            "title": "Require Approval Actions"
+          },
+          "recovery_kill_switch": {
+            "type": "boolean",
+            "title": "Recovery Kill Switch"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "timezone",
+          "recovery_kill_switch",
+          "version",
+          "updated_at"
+        ],
+        "title": "PolicySettingsResponse"
+      },
+      "PolicySettingsUpdate": {
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Timezone"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "max_contacts_per_7_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Contacts Per 7 Days"
+          },
+          "require_approval_above_paise": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Approval Above Paise"
+          },
+          "require_approval_actions": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryActionType"
+            },
+            "type": "array",
+            "title": "Require Approval Actions"
+          },
+          "recovery_kill_switch": {
+            "type": "boolean",
+            "title": "Recovery Kill Switch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "timezone",
+          "recovery_kill_switch"
+        ],
+        "title": "PolicySettingsUpdate"
+      },
+      "RazorpayWebhookAckResponse": {
+        "properties": {
+          "provider_event_id": {
+            "type": "string",
+            "title": "Provider Event Id"
+          },
+          "inbox_id": {
+            "type": "string",
+            "title": "Inbox Id"
+          },
+          "outbox_id": {
+            "type": "string",
+            "title": "Outbox Id"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          },
+          "acknowledge_elapsed_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Acknowledge Elapsed Ms"
+          },
+          "acknowledge_within_sla": {
+            "type": "boolean",
+            "title": "Acknowledge Within Sla"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider_event_id",
+          "inbox_id",
+          "outbox_id",
+          "accepted",
+          "duplicate",
+          "acknowledge_elapsed_ms",
+          "acknowledge_within_sla"
+        ],
+        "title": "RazorpayWebhookAckResponse"
+      },
       "RecentEventResponse": {
         "properties": {
           "id": {
@@ -2011,6 +2519,122 @@
           "VERIFIED_EXTERNAL"
         ],
         "title": "RevenueAttribution"
+      },
+      "SafetyDispositionRequest": {
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "MARK_DISPUTE",
+              "MARK_OPT_OUT",
+              "MARK_ALREADY_PAID",
+              "MARK_WRONG_PERSON",
+              "ESCALATE_TO_HUMAN"
+            ],
+            "title": "Disposition"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "disposition"
+        ],
+        "title": "SafetyDispositionRequest"
+      },
+      "SafetyDispositionResponse": {
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "title": "Disposition"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "case": {
+            "$ref": "#/components/schemas/RecoveryCaseResponse"
+          },
+          "source": {
+            "type": "string",
+            "const": "api",
+            "title": "Source",
+            "default": "api"
+          },
+          "status": {
+            "type": "string",
+            "const": "ACCEPTED",
+            "title": "Status",
+            "default": "ACCEPTED"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "disposition",
+          "message",
+          "occurred_at",
+          "case"
+        ],
+        "title": "SafetyDispositionResponse"
+      },
+      "SimulatedDeliveryResponse": {
+        "properties": {
+          "delivery_id": {
+            "type": "string",
+            "title": "Delivery Id"
+          },
+          "provider_event_id": {
+            "type": "string",
+            "title": "Provider Event Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "delivered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Delivered At"
+          },
+          "observed_payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "authoritative_payment_state": {
+            "$ref": "#/components/schemas/PaymentState"
+          },
+          "evidence_kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "delivery_id",
+          "provider_event_id",
+          "event_type",
+          "occurred_at",
+          "delivered_at",
+          "observed_payment_state",
+          "authoritative_payment_state",
+          "evidence_kind",
+          "payload"
+        ],
+        "title": "SimulatedDeliveryResponse"
       },
       "SubscriptionResponse": {
         "properties": {
