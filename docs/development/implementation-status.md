@@ -10,8 +10,10 @@ provider credentials. Dates use Asia/Kolkata time.
 | Phase 0 foundation | `83366ea` / `phase-0-code-complete` | contracts, design system, containers, Terraform validation | OCI capacity, Neon branches, Temporal Cloud, DNS, Vercel |
 | Phase 1 vertical slice | `17fe5f7` / `phase-1-code-complete` | API, migration, PostgreSQL, Temporal replay, browser flow, duplicate-revenue gate | hosted Playwright run |
 | Phase 2 payment integration | `1e83c04` / `phase-2-code-complete` | Razorpay inbox/outbox, reconciliation, safety policy, merchant UX, live browser flow | hosted Razorpay test-mode webhook/payment smoke |
+| Phase 3 hero features | `04e250a` / `phase-3-code-complete` | RecoveryBench, signed A2A authorization, guarded voice, combined browser and container gate | hosted A2A origin plus one credentialed allowlisted Twilio/ElevenLabs call |
 
-Phase 3 worktrees start only from `phase-2-code-complete`:
+Phase 3 worktrees started only from `phase-2-code-complete` and were merged through their frozen
+provider interfaces:
 
 - `codex/p3-recoverybench` — deterministic evaluation and ML Lab.
 - `codex/p3-a2a` — signed A2A customer-agent mandates.
@@ -51,9 +53,36 @@ Phase 3 worktrees start only from `phase-2-code-complete`:
 - PostgreSQL migration downgrade/upgrade/drift checks, 121 Python tests, 17 web tests, strict lint,
   formatting and type checks, the production frontend build, and API/worker Docker builds pass.
 
+## Verified Phase 3 code gate
+
+- RecoveryBench generates 1,200 fixed-seed paired cases and publishes a versioned, checksummed
+  CatBoost/isotonic artifact plus PR-AUC, Brier, calibration, top-decile, amount-weighted, and
+  action-level reports. All evaluation revenue is labelled simulated and cannot mutate merchant
+  revenue; production scoring safely falls back when the artifact is absent.
+- The separate customer-agent service implements A2A 1.0 Agent Cards and PascalCase JSON-RPC
+  lifecycle methods. Exact customer approval returns an Ed25519 `recovery.mandate.v1` artifact;
+  pinned-key verification rejects tampering, expiry, scope changes, and replay. PostgreSQL nonce
+  consumption uses one `INSERT ... ON CONFLICT DO NOTHING RETURNING` serialization point.
+- The recovery-agent origin exposes a fail-closed delegation endpoint. A2A remains disabled by
+  default, and mandate-verifier construction is activity-side so signature verification and nonce
+  writes never enter deterministic workflow code.
+- Browser voice rehearsal detects safety intents with opt-out precedence. Real Twilio calls require
+  the explicit server flag, operator token, pre-consented allowlist, HTTPS origin, and complete
+  credentials. Recording stays disabled, one active call and ten calls/day are enforced, duration
+  is capped at 180 seconds, and uncertain submission is never automatically retried.
+- Voice attempts, callback receipts, suppressions, and A2A nonce consumption are covered by a
+  reversible migration chain with a clean Alembic drift check. Persisted Twilio call SIDs are used
+  to end calls after process restarts when an opt-out arrives.
+- The combined live browser gate passed for API connectivity, `/lab`, `/voice`, and an actual local
+  A2A authorization task at desktop and 390×844 mobile sizes. It verified exact-scope approval
+  gating, safety-first transcript analysis, no horizontal overflow, labelled controls, and zero
+  browser console errors without placing a call or payment.
+- Strict Ruff/Mypy/format checks, 175 Python tests, 27 web tests, the production Next.js build,
+  PostgreSQL downgrade/upgrade/reset, and Phase 3 API/worker/customer-agent Docker builds pass.
+
 ## External prerequisites
 
-As of 2026-08-27, the installed Vercel token is invalid, and OCI CLI credentials are unavailable.
+As of 2026-08-28, the installed Vercel token is invalid, and OCI CLI credentials are unavailable.
 Neon, Temporal Cloud, DNS, Razorpay test credentials, Twilio, and ElevenLabs credentials are not
 present in the workspace. Mock mode therefore remains the safe default, and no real payment or call
 action is enabled.
