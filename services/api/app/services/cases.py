@@ -27,7 +27,6 @@ from services.api.app.models import (
     RecoveryEventRecord,
     RevenueRecognitionRecord,
 )
-from services.api.app.providers.contracts import OpenPaymentSurfaceRequest
 from services.api.app.providers.interfaces import PaymentProvider
 from services.api.app.repositories import CaseFilters, CaseRepository
 from services.api.app.repositories.cases import CaseAggregate, CasePage
@@ -302,63 +301,37 @@ class RecoveryCaseService:
             raise CaseNotFoundError(
                 "Recovery action was not found.", metadata={"action_id": action_id}
             )
+        if action.status in {
+            ActionStatus.SCHEDULED,
+            ActionStatus.EXECUTING,
+            ActionStatus.SUCCEEDED,
+        }:
+            return action
         if action.status not in {ActionStatus.PROPOSED, ActionStatus.AWAITING_APPROVAL}:
             raise CaseConflictError(
                 "Only a proposed or approval-pending action can be approved.",
                 metadata={"action_id": action_id, "status": action.status.value},
             )
         completed_at = now or datetime.now(UTC)
-        action_evidence = EvidenceKind.SIMULATED
-        provider_name = "none"
-        if action.action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE:
-            if action.payment_surface_type is None or aggregate.invoice is None:
-                raise CaseConflictError("The recovery case has no payable failed invoice.")
-            reference_id: str | None = None
-            expires_at: datetime | None = None
-            notes: dict[str, str] = {}
-            if action.payment_surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
-                reference_id = (
-                    "rec_" + hashlib.sha256(action.idempotency_key.encode()).hexdigest()[:32]
-                )
-                expires_at = aggregate.recovery_case.recovery_deadline
-                notes = {
-                    "case_id": case_id,
-                    "invoice_id": aggregate.invoice.provider_invoice_id,
-                }
-            result = await self.payment_provider.open_customer_payment_surface(
-                OpenPaymentSurfaceRequest(
-                    idempotency_key=action.idempotency_key,
-                    case_id=case_id,
-                    merchant_id=merchant_id,
-                    customer_id=aggregate.customer.id,
-                    subscription_id=aggregate.subscription.provider_subscription_id,
-                    failed_invoice_id=aggregate.invoice.provider_invoice_id,
-                    surface_type=action.payment_surface_type,
-                    exact_amount_paise=aggregate.recovery_case.amount_at_risk_paise,
-                    currency=aggregate.invoice.currency,
-                    recovery_deadline=aggregate.recovery_case.recovery_deadline,
-                    expires_at=expires_at,
-                    reference_id=reference_id,
-                    notes=notes,
-                )
-            )
-            action.external_reference = result.provider_reference
-            action.customer_url = result.customer_url
-            provider_name = result.provider
-            if result.provider == "razorpay":
-                action_evidence = EvidenceKind.RAZORPAY_TEST_VERIFIED
-        action.status = ActionStatus.SUCCEEDED
-        action.completed_at = completed_at
+        if (
+            action.action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
+            and (action.payment_surface_type is None or aggregate.invoice is None)
+        ):
+            raise CaseConflictError("The recovery case has no payable failed invoice.")
+        # Provider execution belongs to the owning Temporal workflow activity.
+        # This transaction only records the operator's durable authorization.
+        action.status = ActionStatus.SCHEDULED
+        action.completed_at = None
         await self.repository.add_event(
             RecoveryEventRecord(
                 case_id=case_id,
                 event_type="ACTION_APPROVED",
                 source="operator",
-                evidence_kind=action_evidence,
+                evidence_kind=EvidenceKind.SIMULATED,
                 payload={
                     "action_id": action.id,
                     "action_type": action.action_type.value,
-                    "provider": provider_name,
+                    "execution_owner": "temporal",
                 },
                 occurred_at=completed_at,
                 correlation_id=f"corr_{case_id}",
@@ -385,6 +358,8 @@ class RecoveryCaseService:
             raise CaseNotFoundError(
                 "Recovery action was not found.", metadata={"action_id": action_id}
             )
+        if action.status == ActionStatus.CANCELLED:
+            return action
         if action.status not in {
             ActionStatus.PROPOSED,
             ActionStatus.AWAITING_APPROVAL,
@@ -417,6 +392,8 @@ class RecoveryCaseService:
         )
         if recovery_case is None:
             raise CaseNotFoundError("Recovery case was not found.", metadata={"case_id": case_id})
+        if recovery_case.case_outcome == CaseOutcome.STOPPED:
+            return recovery_case
         if recovery_case.case_outcome != CaseOutcome.OPEN:
             raise CaseConflictError("The recovery case is already terminal.")
         stopped_at = now or datetime.now(UTC)
@@ -446,6 +423,8 @@ class RecoveryCaseService:
         )
         if recovery_case is None:
             raise CaseNotFoundError("Recovery case was not found.", metadata={"case_id": case_id})
+        if recovery_case.case_outcome == CaseOutcome.ESCALATED:
+            return recovery_case
         if recovery_case.case_outcome != CaseOutcome.OPEN:
             raise CaseConflictError("The recovery case is already terminal.")
         escalated_at = now or datetime.now(UTC)

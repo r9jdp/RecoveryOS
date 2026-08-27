@@ -10,8 +10,9 @@ from .a2a_runtime import (
     MockA2AMandateActivityServices,
     create_live_a2a_services_from_env,
 )
-from .activities import MockRecoveryActivityServices, RecoveryActivities
+from .activities import RecoveryActivities
 from .outbox import run_worker_services
+from .runtime import create_activity_services_from_env
 from .workflow import RecoveryCaseWorkflow
 
 
@@ -24,7 +25,7 @@ async def run() -> None:
     namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
     task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "recovery-os")
     client = await Client.connect(address, namespace=namespace)
-    activity_services = MockRecoveryActivityServices()
+    activity_services = create_activity_services_from_env()
     a2a_services = (
         create_live_a2a_services_from_env()
         if _truthy(os.getenv("A2A_ENABLED"))

@@ -266,6 +266,13 @@ class CancellationSignal:
 
 
 @dataclass(frozen=True)
+class OperatorEscalationSignal:
+    signal_id: str
+    reason: str
+    requested_by: str
+
+
+@dataclass(frozen=True)
 class A2AUpdateSignal:
     signal_id: str
     remote_task_id: str

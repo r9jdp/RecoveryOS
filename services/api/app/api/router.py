@@ -35,6 +35,10 @@ from services.api.app.services.mock_payment import MockPaymentProvider
 from services.api.app.simulator import FailureScenario, build_failure_scenario
 from services.api.app.webhooks.razorpay import RazorpayWebhookIngestionService
 from services.api.app.webhooks.repository import InboxOutboxStore
+from services.api.app.workflows import (
+    RecoveryWorkflowCommander,
+    get_recovery_workflow_commander,
+)
 
 from .schemas import (
     ActionDecisionResponse,
@@ -110,6 +114,9 @@ def get_case_service(
 Service = Annotated[RecoveryCaseService, Depends(get_case_service)]
 MerchantScope = Annotated[str, Depends(get_merchant_scope)]
 Session = Annotated[AsyncSession, Depends(get_async_session)]
+WorkflowCommander = Annotated[
+    RecoveryWorkflowCommander, Depends(get_recovery_workflow_commander)
+]
 
 
 def get_razorpay_webhook_secret() -> str:
@@ -430,6 +437,7 @@ async def execute_operator_command(
     request: OperatorCommandRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> OperatorCommandResponse:
     """Stable UI command façade over action-specific recovery endpoints."""
 
@@ -444,6 +452,12 @@ async def execute_operator_command(
                 now=occurred_at,
             )
         if request.command == "APPROVE":
+            await workflow_commander.approval(
+                case_id=case_id,
+                action_id=action.id,
+                approved=True,
+                reason=None,
+            )
             await service.approve_action(
                 merchant_id=merchant_id,
                 case_id=case_id,
@@ -452,6 +466,12 @@ async def execute_operator_command(
             )
             message = "Recovery action approved."
         else:
+            await workflow_commander.approval(
+                case_id=case_id,
+                action_id=action.id,
+                approved=False,
+                reason="Rejected by the merchant operator.",
+            )
             await service.reject_action(
                 merchant_id=merchant_id,
                 case_id=case_id,
@@ -461,6 +481,10 @@ async def execute_operator_command(
             )
             message = "Recovery action rejected."
     elif request.command == "STOP":
+        await workflow_commander.stop(
+            case_id=case_id,
+            reason="Stopped by the merchant operator.",
+        )
         await service.stop_case(
             merchant_id=merchant_id,
             case_id=case_id,
@@ -469,6 +493,10 @@ async def execute_operator_command(
         )
         message = "Recovery case stopped."
     else:
+        await workflow_commander.escalate(
+            case_id=case_id,
+            reason="Escalated by the merchant operator.",
+        )
         await service.escalate_case(
             merchant_id=merchant_id,
             case_id=case_id,
@@ -491,9 +519,14 @@ async def record_safety_disposition(
     request: SafetyDispositionRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> SafetyDispositionResponse:
     occurred_at = datetime.now(UTC)
     if request.disposition == "ESCALATE_TO_HUMAN":
+        await workflow_commander.escalate(
+            case_id=case_id,
+            reason="Escalated by the merchant operator from the safety controls.",
+        )
         recovery_case = await service.escalate_case(
             merchant_id=merchant_id,
             case_id=case_id,
@@ -563,7 +596,14 @@ async def approve_recovery_action(
     action_id: str,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> ActionResponse:
+    await workflow_commander.approval(
+        case_id=case_id,
+        action_id=action_id,
+        approved=True,
+        reason=None,
+    )
     action = await service.approve_action(
         merchant_id=merchant_id, case_id=case_id, action_id=action_id
     )
@@ -580,7 +620,14 @@ async def reject_recovery_action(
     request: RejectActionRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> ActionResponse:
+    await workflow_commander.approval(
+        case_id=case_id,
+        action_id=action_id,
+        approved=False,
+        reason=request.reason,
+    )
     action = await service.reject_action(
         merchant_id=merchant_id,
         case_id=case_id,
@@ -596,7 +643,9 @@ async def stop_recovery_case(
     request: CaseCommandRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> RecoveryCaseResponse:
+    await workflow_commander.stop(case_id=case_id, reason=request.reason)
     recovery_case = await service.stop_case(
         merchant_id=merchant_id, case_id=case_id, reason=request.reason
     )
@@ -609,7 +658,9 @@ async def escalate_recovery_case(
     request: CaseCommandRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> RecoveryCaseResponse:
+    await workflow_commander.escalate(case_id=case_id, reason=request.reason)
     recovery_case = await service.escalate_case(
         merchant_id=merchant_id, case_id=case_id, reason=request.reason
     )
@@ -625,9 +676,16 @@ async def open_mock_payment_surface(
     request: MockPaymentSurfaceRequest,
     service: Service,
     merchant_id: MerchantScope,
+    workflow_commander: WorkflowCommander,
 ) -> ActionResponse:
     """Explicit mock endpoint mirroring approval-triggered surface creation."""
 
+    await workflow_commander.approval(
+        case_id=case_id,
+        action_id=request.action_id,
+        approved=True,
+        reason=None,
+    )
     action = await service.approve_action(
         merchant_id=merchant_id,
         case_id=case_id,

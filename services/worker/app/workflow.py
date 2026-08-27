@@ -41,6 +41,7 @@ from .contracts import (
     MandateSignal,
     NormalizedFailure,
     NormalizeFailureInput,
+    OperatorEscalationSignal,
     OptOutSignal,
     PaymentEventSignal,
     PolicyInput,
@@ -258,6 +259,10 @@ class RecoveryCaseWorkflow:
     async def cancel(self, signal: CancellationSignal) -> None:
         self._enqueue("CANCELLATION", signal.signal_id, asdict(signal))
 
+    @workflow.signal(name="operator_escalation")
+    async def operator_escalation(self, signal: OperatorEscalationSignal) -> None:
+        self._enqueue("OPERATOR_ESCALATION", signal.signal_id, asdict(signal))
+
     @workflow.signal(name="a2a_update")
     async def a2a_update(self, signal: A2AUpdateSignal) -> None:
         self._enqueue("A2A_UPDATE", signal.signal_id, asdict(signal))
@@ -345,6 +350,8 @@ class RecoveryCaseWorkflow:
                 await self._handle_opt_out(signal)
             elif signal.kind == "CANCELLATION":
                 await self._handle_cancellation(signal)
+            elif signal.kind == "OPERATOR_ESCALATION":
+                await self._handle_operator_escalation(signal)
             elif signal.kind == "A2A_UPDATE":
                 await self._handle_a2a_update(signal)
             elif signal.kind == "MANDATE":
@@ -453,6 +460,18 @@ class RecoveryCaseWorkflow:
         )
         await self._cancel_active_action(str(signal.payload["reason"]))
         self._finish("STOPPED", "CANCELLED")
+
+    async def _handle_operator_escalation(self, signal: QueuedSignal) -> None:
+        await self._audit(
+            "RECOVERY_ESCALATED",
+            signal.signal_id,
+            {
+                "reason": signal.payload["reason"],
+                "requested_by": signal.payload["requested_by"],
+            },
+        )
+        await self._cancel_active_action("OPERATOR_ESCALATION")
+        self._finish("ESCALATED", "OPERATOR_ESCALATION")
 
     async def _handle_a2a_update(self, signal: QueuedSignal) -> None:
         remote_task_id = str(signal.payload["remote_task_id"])
@@ -668,7 +687,9 @@ class RecoveryCaseWorkflow:
         return None
 
     async def _cancel_active_action(self, reason: str) -> None:
-        if self._action_status in {None, "CANCELLED", "FAILED", "REJECTED"}:
+        if self._action_status in {"CANCELLED", "FAILED", "REJECTED"}:
+            return
+        if self._action_status is None and reason != "AUTHORITATIVE_PAYMENT_SUCCESS":
             return
         result = await self._activity(
             CANCEL_RECOVERY_ACTION,
