@@ -20,6 +20,7 @@ services:
   customer-agent:
     environment:
       APP_ENV: staging
+      CUSTOMER_AGENT_TASK_STORE: sql
     deploy:
       resources:
         limits:
