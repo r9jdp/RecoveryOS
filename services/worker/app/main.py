@@ -7,6 +7,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from .activities import MockRecoveryActivityServices, RecoveryActivities
+from .outbox import run_worker_services
 from .workflow import RecoveryCaseWorkflow
 
 
@@ -23,7 +24,7 @@ async def run() -> None:
         workflows=[RecoveryCaseWorkflow],
         activities=activities.registrations(),
     )
-    await worker.run()
+    await run_worker_services(worker.run(), client, task_queue=task_queue)
 
 
 if __name__ == "__main__":

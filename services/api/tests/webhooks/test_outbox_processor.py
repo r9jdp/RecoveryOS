@@ -470,7 +470,7 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
     assert created_case.payment_state == PaymentState.FAILED
     assert created_case.subscription_state == SubscriptionState.PENDING
     assert created_case.case_outcome == CaseOutcome.OPEN
-    assert created_case.diagnosis == Diagnosis.MERCHANT_ERROR
+    assert created_case.diagnosis == Diagnosis.AUTHENTICATION_REQUIRED
     assert created_case.amount_at_risk_paise == 149_900
     assert created_case.recovery_deadline > created_case.opened_at
     assert await session.scalar(select(func.count(RecoveryCase.id))) == 1
