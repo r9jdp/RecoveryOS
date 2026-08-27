@@ -10,6 +10,8 @@ from typing import Any
 from temporalio import activity
 
 from .contracts import (
+    A2AAuthorizationResult,
+    A2AMandatePollResult,
     ActionExecutionResult,
     AuditInput,
     AuditResult,
@@ -22,12 +24,14 @@ from .contracts import (
     NormalizeFailureInput,
     PolicyInput,
     PolicyResult,
+    PollA2AMandateInput,
     ReconciliationInput,
     ReconciliationResult,
     ScoreInput,
     ScoreResult,
+    StartA2AAuthorizationInput,
 )
-from .ports import RecoveryActivityServices
+from .ports import A2AMandateActivityServices, RecoveryActivityServices
 
 NORMALIZE_FAILURE = "recovery.normalize_failure"
 DIAGNOSE_FAILURE = "recovery.diagnose_failure"
@@ -37,13 +41,20 @@ EXECUTE_RECOVERY_ACTION = "recovery.execute_recovery_action"
 RECONCILE_CASE = "recovery.reconcile_case"
 RECORD_AUDIT_EVENT = "recovery.record_audit_event"
 CANCEL_RECOVERY_ACTION = "recovery.cancel_recovery_action"
+START_A2A_AUTHORIZATION = "recovery.start_a2a_authorization"
+POLL_A2A_MANDATE = "recovery.poll_a2a_mandate"
 
 
 class RecoveryActivities:
     """Thin activity boundary around injectable application services."""
 
-    def __init__(self, services: RecoveryActivityServices) -> None:
+    def __init__(
+        self,
+        services: RecoveryActivityServices,
+        a2a_services: A2AMandateActivityServices | None = None,
+    ) -> None:
         self._services = services
+        self._a2a_services = a2a_services or DisabledA2AMandateActivityServices()
 
     @activity.defn(name=NORMALIZE_FAILURE)
     async def normalize_failure(self, command: NormalizeFailureInput) -> NormalizedFailure:
@@ -77,6 +88,16 @@ class RecoveryActivities:
     async def cancel_recovery_action(self, command: CancelActionInput) -> CancelActionResult:
         return await self._services.cancel_recovery_action(command)
 
+    @activity.defn(name=START_A2A_AUTHORIZATION)
+    async def start_a2a_authorization(
+        self, command: StartA2AAuthorizationInput
+    ) -> A2AAuthorizationResult:
+        return await self._a2a_services.start_authorization(command)
+
+    @activity.defn(name=POLL_A2A_MANDATE)
+    async def poll_a2a_mandate(self, command: PollA2AMandateInput) -> A2AMandatePollResult:
+        return await self._a2a_services.poll_and_verify_mandate(command)
+
     def registrations(self) -> list[Callable[..., Any]]:
         return [
             self.normalize_failure,
@@ -87,6 +108,8 @@ class RecoveryActivities:
             self.reconcile_case,
             self.record_audit_event,
             self.cancel_recovery_action,
+            self.start_a2a_authorization,
+            self.poll_a2a_mandate,
         ]
 
 
@@ -97,6 +120,7 @@ class MockRecoveryActivityServices:
     require_manual_approval: bool = True
     audits: list[AuditInput] = field(default_factory=list)
     executed_actions: dict[str, ActionExecutionResult] = field(default_factory=dict)
+    executed_commands: list[ExecuteActionInput] = field(default_factory=list)
     cancelled_keys: set[str] = field(default_factory=set)
 
     async def normalize_failure(self, command: NormalizeFailureInput) -> NormalizedFailure:
@@ -177,6 +201,7 @@ class MockRecoveryActivityServices:
         existing = self.executed_actions.get(command.idempotency_key)
         if existing is not None:
             return existing
+        self.executed_commands.append(command)
         result = ActionExecutionResult(
             status="SUCCEEDED",
             provider="mock",
@@ -211,3 +236,22 @@ class MockRecoveryActivityServices:
             return CancelActionResult(cancelled=True, reason_code="ALREADY_CANCELLED")
         self.cancelled_keys.add(command.idempotency_key)
         return CancelActionResult(cancelled=True)
+
+
+class DisabledA2AMandateActivityServices:
+    """Credential-free default that never manufactures customer authorization."""
+
+    async def start_authorization(
+        self, command: StartA2AAuthorizationInput
+    ) -> A2AAuthorizationResult:
+        return A2AAuthorizationResult(
+            remote_task_id=f"mock-a2a:{command.case_id}",
+            state="AUTH_REQUIRED",
+        )
+
+    async def poll_and_verify_mandate(self, command: PollA2AMandateInput) -> A2AMandatePollResult:
+        return A2AMandatePollResult(
+            remote_task_id=command.remote_task_id,
+            task_state="AUTH_REQUIRED",
+            verification_status="PENDING",
+        )

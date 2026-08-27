@@ -33,6 +33,7 @@ class RecoveryWorkflowInput:
     failure_event: ProviderEvent
     candidate_action: str = "OPEN_CUSTOMER_PAYMENT_SURFACE"
     payment_surface_type: str | None = "SUBSCRIPTION_INVOICE_LINK"
+    payment_surface_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,48 @@ class ActionExecutionResult:
     provider: str
     provider_reference: str | None = None
     customer_url: str | None = None
+    reason_code: str | None = None
+
+
+@dataclass(frozen=True)
+class StartA2AAuthorizationInput:
+    case_id: str
+    merchant_id: str
+    customer_id: str
+    exact_amount_paise: int
+    currency: str
+    payment_surface_type: str
+    payment_surface_reference: str
+    recovery_deadline: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True)
+class A2AAuthorizationResult:
+    remote_task_id: str
+    state: str
+
+
+@dataclass(frozen=True)
+class PollA2AMandateInput:
+    remote_task_id: str
+    case_id: str
+    merchant_id: str
+    customer_id: str
+    exact_amount_paise: int
+    currency: str
+    payment_surface_type: str
+    payment_surface_reference: str
+    recovery_deadline: str
+
+
+@dataclass(frozen=True)
+class A2AMandatePollResult:
+    remote_task_id: str
+    task_state: str
+    verification_status: str
+    mandate_id: str | None = None
+    verified_artifact: dict[str, Any] | None = None
     reason_code: str | None = None
 
 

@@ -7,8 +7,10 @@ import pytest
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, Worker
 
+from services.worker.app.a2a_runtime import MockA2AMandateActivityServices
 from services.worker.app.activities import MockRecoveryActivityServices, RecoveryActivities
 from services.worker.app.contracts import (
+    A2AMandatePollResult,
     A2AUpdateSignal,
     ApprovalSignal,
     CancellationSignal,
@@ -231,7 +233,21 @@ async def test_authoritative_payment_can_recover_after_opt_out() -> None:
 async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
     async with await WorkflowEnvironment.start_time_skipping() as env:
         services = MockRecoveryActivityServices(require_manual_approval=False)
-        activities = RecoveryActivities(services)
+        a2a_services = MockA2AMandateActivityServices(
+            poll_results=[
+                A2AMandatePollResult(
+                    remote_task_id="mock-a2a:a2a",
+                    task_state="WORKING",
+                    verification_status="VERIFIED",
+                    mandate_id="mandate-activity-verified",
+                    verified_artifact={
+                        "protocol_version": "recovery.mandate.v1",
+                        "source": "verified-activity-result",
+                    },
+                )
+            ]
+        )
+        activities = RecoveryActivities(services, a2a_services)
         task_queue = "recovery-a2a"
         async with Worker(
             env.client,
@@ -252,21 +268,38 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
                 id=recovery_workflow_id(command.case_id),
                 task_queue=task_queue,
             )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if status.provider_reference == "mock-a2a:a2a":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("workflow did not start the customer authorization task")
             await handle.signal(
                 "a2a_update",
                 A2AUpdateSignal(
                     signal_id="a2a-update-1",
-                    remote_task_id="remote-task-1",
+                    remote_task_id="mock-a2a:a2a",
                     state="AUTH_REQUIRED",
                 ),
             )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if (
+                    status.action == "OPEN_CUSTOMER_PAYMENT_SURFACE"
+                    and status.action_status == "SUCCEEDED"
+                ):
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("verified activity result did not open the exact payment surface")
             await handle.signal(
                 "mandate",
                 MandateSignal(
                     signal_id="mandate-1",
-                    mandate_id="mandate-demo",
+                    mandate_id="caller-controlled-mandate",
                     verified=True,
-                    payment_surface_reference="surface-demo",
+                    payment_surface_reference="wrong-surface",
                     exact_amount_paise=149_900,
                     expires_at=(datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
                     artifact={"protocol_version": "recovery.mandate.v1"},
@@ -289,15 +322,79 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
                 ),
             )
             result = await handle.result()
+            history = await handle.fetch_history()
 
         assert result.outcome == "STOPPED"
         assert result.contact_disposition == "PROMISE_TO_PAY"
         assert result.processed_signal_count == 4
-        assert len(services.executed_actions) == 2
+        assert len(services.executed_actions) == 1
+        assert services.executed_commands[0].mandate == {
+            "protocol_version": "recovery.mandate.v1",
+            "source": "verified-activity-result",
+        }
+        assert a2a_services.polls
         event_types = {event.event_type for event in services.audits}
         assert {
             "A2A_TASK_UPDATED",
-            "MANDATE_RECEIVED",
+            "MANDATE_SIGNAL_IGNORED",
+            "MANDATE_VERIFICATION_COMPLETED",
             "CUSTOMER_INTENT_RECORDED",
             "RECOVERY_CANCELLED",
         } <= event_types
+
+        replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
+        assert replay_result.replay_failure is None
+
+
+@pytest.mark.asyncio
+async def test_caller_controlled_mandate_signal_cannot_bypass_activity_verification() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=False)
+        a2a_services = MockA2AMandateActivityServices()
+        activities = RecoveryActivities(services, a2a_services)
+        task_queue = "recovery-a2a-untrusted-signal"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            base = workflow_input("a2a-untrusted")
+            command = RecoveryWorkflowInput(
+                **{
+                    **base.__dict__,
+                    "candidate_action": "SEND_TO_CUSTOMER_AGENT",
+                }
+            )
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            await handle.signal(
+                "mandate",
+                MandateSignal(
+                    signal_id="forged-mandate",
+                    mandate_id="forged",
+                    verified=True,
+                    payment_surface_reference=f"inv-{command.case_id}",
+                    exact_amount_paise=command.amount_at_risk_paise,
+                    expires_at=(datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+                    artifact={"algorithm": "none", "trusted": True},
+                ),
+            )
+            await handle.signal(
+                "cancel",
+                CancellationSignal(
+                    signal_id="cancel-forged-test",
+                    reason="test complete",
+                    requested_by="operator-1",
+                ),
+            )
+            result = await handle.result()
+
+        assert result.outcome == "STOPPED"
+        assert services.executed_actions == {}
+        assert a2a_services.started
+        assert any(event.event_type == "MANDATE_SIGNAL_IGNORED" for event in services.audits)

@@ -6,9 +6,17 @@ import os
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from .a2a_runtime import (
+    MockA2AMandateActivityServices,
+    create_live_a2a_services_from_env,
+)
 from .activities import MockRecoveryActivityServices, RecoveryActivities
 from .outbox import run_worker_services
 from .workflow import RecoveryCaseWorkflow
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 async def run() -> None:
@@ -17,7 +25,12 @@ async def run() -> None:
     task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "recovery-os")
     client = await Client.connect(address, namespace=namespace)
     activity_services = MockRecoveryActivityServices()
-    activities = RecoveryActivities(activity_services)
+    a2a_services = (
+        create_live_a2a_services_from_env()
+        if _truthy(os.getenv("A2A_ENABLED"))
+        else MockA2AMandateActivityServices()
+    )
+    activities = RecoveryActivities(activity_services, a2a_services)
     worker = Worker(
         client,
         task_queue=task_queue,

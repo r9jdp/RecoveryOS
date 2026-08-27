@@ -17,11 +17,15 @@ from .activities import (
     EVALUATE_POLICY,
     EXECUTE_RECOVERY_ACTION,
     NORMALIZE_FAILURE,
+    POLL_A2A_MANDATE,
     RECONCILE_CASE,
     RECORD_AUDIT_EVENT,
     SCORE_RECOVERY,
+    START_A2A_AUTHORIZATION,
 )
 from .contracts import (
+    A2AAuthorizationResult,
+    A2AMandatePollResult,
     A2AUpdateSignal,
     ActionExecutionResult,
     ApprovalSignal,
@@ -41,6 +45,7 @@ from .contracts import (
     PaymentEventSignal,
     PolicyInput,
     PolicyResult,
+    PollA2AMandateInput,
     QueuedSignal,
     ReconciliationInput,
     ReconciliationResult,
@@ -49,6 +54,7 @@ from .contracts import (
     RecoveryWorkflowStatus,
     ScoreInput,
     ScoreResult,
+    StartA2AAuthorizationInput,
 )
 
 
@@ -66,6 +72,7 @@ _STANDARD_RETRY = RetryPolicy(
 )
 _PROVIDER_SUBMISSION_RETRY = RetryPolicy(maximum_attempts=1)
 _ACTIVITY_TIMEOUT = timedelta(seconds=30)
+_A2A_POLL_INTERVAL = timedelta(seconds=5)
 
 
 @workflow.defn(name="recovery.case.v1")
@@ -89,6 +96,8 @@ class RecoveryCaseWorkflow:
         self._approval_received: bool | None = None
         self._outreach_suppressed = False
         self._a2a_state: str | None = None
+        self._a2a_task_id: str | None = None
+        self._next_a2a_poll_at: datetime | None = None
         self._mandate_received = False
         self._deadline: datetime | None = None
         self._signals: list[QueuedSignal] = []
@@ -211,11 +220,18 @@ class RecoveryCaseWorkflow:
         else:
             self._action_status = "SCHEDULED"
 
-        self._phase = "AWAITING_RECOVERY"
+        self._phase = (
+            "AWAITING_CUSTOMER_AUTHORIZATION"
+            if self._a2a_task_id is not None
+            else "AWAITING_RECOVERY"
+        )
         while not self._terminal:
             if self._deadline is not None and workflow.now() >= self._deadline:
                 await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")
                 self._finish(self._deadline_outcome(), "DEADLINE_EXPIRED")
+                break
+            await self._poll_a2a_if_due()
+            if self._terminal:
                 break
             await self._wait_for_signal_or_deadline()
             await self._drain_signals()
@@ -306,7 +322,10 @@ class RecoveryCaseWorkflow:
     async def _wait_for_signal_or_deadline(self) -> None:
         if self._deadline is None:
             return
-        remaining = self._deadline - workflow.now()
+        wake_at = self._deadline
+        if self._next_a2a_poll_at is not None:
+            wake_at = min(wake_at, self._next_a2a_poll_at)
+        remaining = wake_at - workflow.now()
         if remaining.total_seconds() <= 0:
             return
         with suppress(TimeoutError):
@@ -436,47 +455,38 @@ class RecoveryCaseWorkflow:
         self._finish("STOPPED", "CANCELLED")
 
     async def _handle_a2a_update(self, signal: QueuedSignal) -> None:
+        remote_task_id = str(signal.payload["remote_task_id"])
+        if self._a2a_task_id is None or remote_task_id != self._a2a_task_id:
+            await self._audit(
+                "A2A_UPDATE_IGNORED",
+                signal.signal_id,
+                {"reason": "TASK_ID_MISMATCH"},
+            )
+            return
         self._a2a_state = str(signal.payload["state"])
         await self._audit(
             "A2A_TASK_UPDATED",
             signal.signal_id,
             {
-                "remote_task_id": signal.payload["remote_task_id"],
+                "remote_task_id": remote_task_id,
                 "state": self._a2a_state,
             },
         )
-        if self._a2a_state in {"FAILED", "CANCELED"}:
-            self._phase = "AWAITING_RECOVERY"
+        # A signal is only a low-latency wake-up hint. The activity fetches the
+        # authoritative task and verifies any artifact before the workflow acts.
+        self._next_a2a_poll_at = workflow.now()
 
     async def _handle_mandate(self, signal: QueuedSignal) -> None:
-        command = self._require_input()
-        verified = bool(signal.payload["verified"])
-        exact_amount = int(signal.payload["exact_amount_paise"])
-        expires_at = self._parse_instant(str(signal.payload["expires_at"]))
-        deadline = self._deadline
-        valid = (
-            verified
-            and exact_amount == command.amount_at_risk_paise
-            and expires_at > workflow.now()
-            and deadline is not None
-            and expires_at <= deadline
-        )
         await self._audit(
-            "MANDATE_RECEIVED",
+            "MANDATE_SIGNAL_IGNORED",
             signal.signal_id,
-            {"mandate_id": signal.payload["mandate_id"], "accepted": valid},
+            {
+                "mandate_id": signal.payload["mandate_id"],
+                "reason": "ACTIVITY_VERIFICATION_REQUIRED",
+            },
         )
-        if not valid:
-            return
-        self._mandate_received = True
-        if self._action == "SEND_TO_CUSTOMER_AGENT":
-            policy = PolicyResult(
-                disposition="ALLOW",
-                decision_code="VERIFIED_MANDATE",
-                action="OPEN_CUSTOMER_PAYMENT_SURFACE",
-                payment_surface_type=command.payment_surface_type,
-            )
-            await self._execute_action(policy, mandate=dict(signal.payload["artifact"]))
+        if self._a2a_task_id is not None:
+            self._next_a2a_poll_at = workflow.now()
 
     async def _suppress_outreach(self, signal_id: str, disposition: str) -> None:
         self._outreach_suppressed = True
@@ -491,9 +501,120 @@ class RecoveryCaseWorkflow:
         self._outcome = "STOPPED"
         self._phase = "OUTREACH_SUPPRESSED"
 
+    async def _start_a2a_authorization(self) -> None:
+        command = self._require_input()
+        surface_type = command.payment_surface_type
+        surface_reference = self._expected_payment_surface_reference(command)
+        if surface_type is None or surface_reference is None:
+            await self._audit(
+                "A2A_AUTHORIZATION_REJECTED",
+                "a2a-start",
+                {"reason_code": "EXACT_PAYMENT_SURFACE_REQUIRED"},
+            )
+            self._action_status = "REJECTED"
+            self._finish("ESCALATED", "EXACT_PAYMENT_SURFACE_REQUIRED")
+            return
+
+        result = await self._activity(
+            START_A2A_AUTHORIZATION,
+            StartA2AAuthorizationInput(
+                case_id=command.case_id,
+                merchant_id=command.merchant_id,
+                customer_id=command.customer_id,
+                exact_amount_paise=command.amount_at_risk_paise,
+                currency=command.currency,
+                payment_surface_type=surface_type,
+                payment_surface_reference=surface_reference,
+                recovery_deadline=command.recovery_deadline,
+                idempotency_key=f"{command.case_id}:SEND_TO_CUSTOMER_AGENT:1",
+            ),
+            A2AAuthorizationResult,
+            provider_submission=True,
+        )
+        self._action = "SEND_TO_CUSTOMER_AGENT"
+        self._action_status = result.state
+        self._provider_reference = result.remote_task_id
+        self._a2a_task_id = result.remote_task_id
+        self._a2a_state = result.state
+        self._next_a2a_poll_at = (
+            workflow.now() if result.state == "WORKING" else workflow.now() + _A2A_POLL_INTERVAL
+        )
+        self._phase = "AWAITING_CUSTOMER_AUTHORIZATION"
+        await self._audit(
+            "A2A_AUTHORIZATION_STARTED",
+            "a2a-start",
+            {"remote_task_id": result.remote_task_id, "state": result.state},
+        )
+
+    async def _poll_a2a_if_due(self) -> None:
+        if (
+            self._a2a_task_id is None
+            or self._next_a2a_poll_at is None
+            or workflow.now() < self._next_a2a_poll_at
+        ):
+            return
+        command = self._require_input()
+        surface_type = command.payment_surface_type
+        surface_reference = self._expected_payment_surface_reference(command)
+        if surface_type is None or surface_reference is None:
+            self._next_a2a_poll_at = None
+            self._action_status = "REJECTED"
+            self._finish("ESCALATED", "EXACT_PAYMENT_SURFACE_REQUIRED")
+            return
+        result = await self._activity(
+            POLL_A2A_MANDATE,
+            PollA2AMandateInput(
+                remote_task_id=self._a2a_task_id,
+                case_id=command.case_id,
+                merchant_id=command.merchant_id,
+                customer_id=command.customer_id,
+                exact_amount_paise=command.amount_at_risk_paise,
+                currency=command.currency,
+                payment_surface_type=surface_type,
+                payment_surface_reference=surface_reference,
+                recovery_deadline=command.recovery_deadline,
+            ),
+            A2AMandatePollResult,
+        )
+        self._a2a_state = result.task_state
+        if result.verification_status == "PENDING":
+            self._next_a2a_poll_at = workflow.now() + _A2A_POLL_INTERVAL
+            return
+        self._next_a2a_poll_at = None
+        accepted = (
+            result.verification_status == "VERIFIED"
+            and result.mandate_id is not None
+            and result.verified_artifact is not None
+        )
+        await self._audit(
+            "MANDATE_VERIFICATION_COMPLETED",
+            result.mandate_id or f"a2a:{self._a2a_task_id}",
+            {
+                "accepted": accepted,
+                "reason_code": result.reason_code,
+                "task_state": result.task_state,
+            },
+        )
+        if not accepted:
+            self._action_status = "REJECTED"
+            self._finish("ESCALATED", result.reason_code or "MANDATE_REJECTED")
+            return
+
+        self._mandate_received = True
+        policy = PolicyResult(
+            disposition="ALLOW",
+            decision_code="VERIFIED_MANDATE",
+            action="OPEN_CUSTOMER_PAYMENT_SURFACE",
+            payment_surface_type=surface_type,
+        )
+        await self._execute_action(policy, mandate=dict(result.verified_artifact))
+
     async def _execute_action(
         self, policy: PolicyResult, mandate: dict[str, Any] | None = None
     ) -> None:
+        if policy.action == "SEND_TO_CUSTOMER_AGENT" and mandate is None:
+            await self._start_a2a_authorization()
+            return
         command = self._require_input()
         self._phase = "EXECUTING_ACTION"
         self._action_status = "EXECUTING"
@@ -533,6 +654,18 @@ class RecoveryCaseWorkflow:
             self._finish("ESCALATED", "PROVIDER_REJECTED")
         elif result.status == "UNCERTAIN":
             self._phase = "RECONCILIATION_REQUIRED"
+
+    @staticmethod
+    def _expected_payment_surface_reference(command: RecoveryWorkflowInput) -> str | None:
+        if command.payment_surface_reference:
+            return command.payment_surface_reference
+        if command.payment_surface_type == "SUBSCRIPTION_INVOICE_LINK":
+            return command.failed_invoice_id
+        if command.payment_surface_type == "SUBSCRIPTION_CARD_UPDATE":
+            return command.subscription_id
+        # A standard Payment Link must already exist before it can be authorized.
+        # Its provider reference cannot be safely invented by the workflow.
+        return None
 
     async def _cancel_active_action(self, reason: str) -> None:
         if self._action_status in {None, "CANCELLED", "FAILED", "REJECTED"}:
