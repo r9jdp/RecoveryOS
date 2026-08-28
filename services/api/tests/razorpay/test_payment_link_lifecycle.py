@@ -10,9 +10,11 @@ from services.api.app.domain.enums import PaymentSurfaceType
 from services.api.app.integrations.razorpay.client import RazorpayClient, RazorpayConfig
 from services.api.app.integrations.razorpay.errors import (
     RazorpayContractError,
+    RazorpayRequestError,
     RazorpayUncertainSubmissionError,
 )
 from services.api.app.providers.contracts import OpenPaymentSurfaceRequest
+from services.api.app.reliability.registry import CircuitBreakerRegistry
 
 
 def _client(handler: Any) -> RazorpayClient:
@@ -26,6 +28,7 @@ def _client(handler: Any) -> RazorpayClient:
             base_url="https://api.razorpay.test",
         ),
         client=http_client,
+        breaker_registry=CircuitBreakerRegistry(),
     )
 
 
@@ -175,4 +178,81 @@ async def test_uncertain_create_requires_reference_lookup_before_retry() -> None
 
     assert result.provider_reference == "plink_after_lookup"
     assert create_attempts == 2
+    await client._client.aclose()  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    "ambiguous_response",
+    [
+        httpx.Response(503, json={"error": {"code": "SERVER_ERROR"}}),
+        httpx.Response(200, content=b"not-json"),
+        httpx.Response(200, json=[{"id": "plink_unusable"}]),
+        httpx.Response(200, json={"id": "plink_missing_url"}),
+    ],
+    ids=["server-5xx", "invalid-json-2xx", "non-object-2xx", "incomplete-object-2xx"],
+)
+async def test_ambiguous_create_responses_require_reference_reconciliation(
+    ambiguous_response: httpx.Response,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"status": "halted"})
+        return ambiguous_response
+
+    client = _client(handler)
+    with pytest.raises(RazorpayUncertainSubmissionError) as caught:
+        await client.open_customer_payment_surface(
+            OpenPaymentSurfaceRequest(
+                idempotency_key="case:ambiguous:surface:v1",
+                case_id="case_ambiguous",
+                merchant_id="merchant_test",
+                customer_id="customer_test",
+                subscription_id="sub_test",
+                failed_invoice_id="inv_test",
+                surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+                exact_amount_paise=10_000,
+                currency="INR",
+                recovery_deadline=datetime(2026, 8, 30, tzinfo=UTC),
+                expires_at=datetime(2026, 8, 30, tzinfo=UTC),
+                reference_id="rec_ambiguous",
+                notes={"case_id": "case_ambiguous", "invoice_id": "inv_test"},
+            )
+        )
+
+    assert caught.value.metadata == {"reference_id": "rec_ambiguous"}
+    assert client._payment_link_breaker.uncertain_submission is True  # noqa: SLF001
+    await client._client.aclose()  # noqa: SLF001
+
+
+async def test_definite_create_4xx_remains_a_provider_rejection() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"status": "halted"})
+        return httpx.Response(400, json={"error": {"code": "BAD_REQUEST_ERROR"}})
+
+    client = _client(handler)
+    with pytest.raises(RazorpayRequestError) as caught:
+        await client.open_customer_payment_surface(
+            OpenPaymentSurfaceRequest(
+                idempotency_key="case:definite-rejection:surface:v1",
+                case_id="case_definite_rejection",
+                merchant_id="merchant_test",
+                customer_id="customer_test",
+                subscription_id="sub_test",
+                failed_invoice_id="inv_test",
+                surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+                exact_amount_paise=10_000,
+                currency="INR",
+                recovery_deadline=datetime(2026, 8, 30, tzinfo=UTC),
+                expires_at=datetime(2026, 8, 30, tzinfo=UTC),
+                reference_id="rec_definite_rejection",
+                notes={
+                    "case_id": "case_definite_rejection",
+                    "invoice_id": "inv_test",
+                },
+            )
+        )
+
+    assert caught.value.status_code == 400
+    assert client._payment_link_breaker.uncertain_submission is False  # noqa: SLF001
     await client._client.aclose()  # noqa: SLF001

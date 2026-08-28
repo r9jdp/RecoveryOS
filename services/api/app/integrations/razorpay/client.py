@@ -153,6 +153,11 @@ class RazorpayClient:
                 retriable=True,
             ) from error
         if response.is_error:
+            if uncertain_reference_id is not None and response.status_code >= 500:
+                # The provider may have committed the write before its upstream
+                # failed to produce a response.  Only a reference lookup can
+                # distinguish an accepted create from a safe retry.
+                raise RazorpayUncertainSubmissionError(reference_id=uncertain_reference_id)
             try:
                 body = response.json()
             except ValueError:
@@ -168,7 +173,13 @@ class RazorpayClient:
             )
         try:
             return _as_object(response.json(), code="RAZORPAY_RESPONSE_INVALID")
-        except ValueError as error:
+        except (ValueError, RazorpayContractError) as error:
+            if uncertain_reference_id is not None:
+                # A successful HTTP status does not prove the create was absent.
+                # Invalid JSON or a non-object body is therefore ambiguous.
+                raise RazorpayUncertainSubmissionError(
+                    reference_id=uncertain_reference_id
+                ) from error
             raise RazorpayContractError(
                 "RAZORPAY_RESPONSE_INVALID", "Razorpay returned invalid JSON."
             ) from error
@@ -311,14 +322,14 @@ class RazorpayClient:
             if reason is not None:
                 error.metadata.update(_fallback_metadata(reason))
             raise
-        self._payment_link_breaker.record_success()
         link_id = _text(link.get("id"))
         short_url = _text(link.get("short_url"))
         if link_id is None or short_url is None:
-            raise RazorpayContractError(
-                "RAZORPAY_PAYMENT_LINK_RESPONSE_INVALID",
-                "Created Payment Link has no id or short_url.",
+            self._payment_link_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
+            raise RazorpayUncertainSubmissionError(
+                reference_id=request.reference_id,
             )
+        self._payment_link_breaker.record_success()
         return PaymentSurfaceResult(
             provider="razorpay",
             provider_reference=link_id,
