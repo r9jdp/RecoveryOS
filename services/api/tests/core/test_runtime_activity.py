@@ -157,7 +157,7 @@ async def action_and_policy(
     return action, policy
 
 
-async def test_persisted_allow_policy_authorizes_once_without_synthetic_manual_policy(
+async def test_persisted_manual_policy_requires_schedule_then_authorizes_once(
     session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async with session_factory() as session:
@@ -171,11 +171,18 @@ async def test_persisted_allow_policy_authorizes_once_without_synthetic_manual_p
     )
 
     policy = await services.evaluate_policy(policy_command())
+    blocked = await services.execute_recovery_action(payment_command())
+    async with session_factory() as session:
+        action, _ = await action_and_policy(session)
+        action.status = ActionStatus.SCHEDULED
+        await session.commit()
     submitted = await services.execute_recovery_action(payment_command())
     duplicate = await services.execute_recovery_action(payment_command())
 
-    assert policy.disposition == "ALLOW"
-    assert policy.decision_code == "POLICY_ALLOWED"
+    assert policy.disposition == "REQUIRE_MANUAL_APPROVAL"
+    assert policy.decision_code == "FITBOX_DEMO_APPROVAL_REQUIRED"
+    assert blocked.status == "REJECTED"
+    assert blocked.reason_code == "ACTION_NOT_AUTHORIZED"
     assert submitted.status == duplicate.status == "SUCCEEDED"
     assert submitted.provider_reference == duplicate.provider_reference == "surface-authorized"
     assert len(provider.requests) == 1
@@ -348,6 +355,9 @@ async def test_concurrent_claims_submit_provider_work_exactly_once(
 ) -> None:
     async with session_factory() as session:
         await seed_fitbox(session)
+        action, _ = await action_and_policy(session)
+        action.status = ActionStatus.SCHEDULED
+        await session.commit()
     monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
     provider = BlockingPaymentProvider()
     services = ProductionRecoveryActivityServices(
