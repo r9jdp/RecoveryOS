@@ -78,9 +78,7 @@ def _deterministic_model_metadata(*, seed: int, case_count: int) -> dict[str, st
     format after training.
     """
 
-    digest = hashlib.sha256(
-        f"{ARTIFACT_VERSION}:{seed}:{case_count}".encode()
-    ).hexdigest()
+    digest = hashlib.sha256(f"{ARTIFACT_VERSION}:{seed}:{case_count}".encode()).hexdigest()
     return {
         "model_guid": "-".join(digest[index : index + 8] for index in range(0, 32, 8)),
         "train_finish_time": _DETERMINISTIC_TRAIN_FINISH_TIME,
