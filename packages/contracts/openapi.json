@@ -1548,7 +1548,7 @@
         "operationId": "start_voice_contact_v1_voice_contacts_post",
         "parameters": [
           {
-            "name": "x-recovery-operator-token",
+            "name": "X-Recovery-Operator-Token",
             "in": "header",
             "required": false,
             "schema": {
@@ -1561,6 +1561,54 @@
                 }
               ],
               "title": "X-Recovery-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],

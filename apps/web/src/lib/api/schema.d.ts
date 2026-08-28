@@ -2135,10 +2135,14 @@ export interface operations {
     parameters: {
       query?: never;
       header?: {
-        "x-recovery-operator-token"?: string | null;
+        "X-Recovery-Operator-Token"?: string | null;
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path?: never;
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
