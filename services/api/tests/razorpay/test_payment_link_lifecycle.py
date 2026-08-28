@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import pytest
 
+from services.api.app.domain.enums import PaymentSurfaceType
 from services.api.app.integrations.razorpay.client import RazorpayClient, RazorpayConfig
-from services.api.app.integrations.razorpay.errors import RazorpayContractError
+from services.api.app.integrations.razorpay.errors import (
+    RazorpayContractError,
+    RazorpayUncertainSubmissionError,
+)
+from services.api.app.providers.contracts import OpenPaymentSurfaceRequest
 
 
 def _client(handler: Any) -> RazorpayClient:
@@ -120,4 +126,53 @@ async def test_revoke_refetches_a_payment_race_instead_of_masking_it() -> None:
 
     assert result == "PAYMENT_PRESENT"
     assert responses == []
+    await client._client.aclose()  # noqa: SLF001
+
+
+async def test_uncertain_create_requires_reference_lookup_before_retry() -> None:
+    create_attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal create_attempts
+        if request.url.path == "/v1/subscriptions/sub_test":
+            return httpx.Response(200, json={"status": "halted"})
+        if request.method == "GET" and request.url.path == "/v1/payment_links":
+            assert request.url.params["reference_id"] == "rec_initial_uncertain"
+            return httpx.Response(200, json={"payment_links": []})
+        create_attempts += 1
+        if create_attempts == 1:
+            raise httpx.ReadTimeout("unknown create outcome", request=request)
+        return httpx.Response(
+            200,
+            json={"id": "plink_after_lookup", "short_url": "https://rzp.test/i/retried"},
+        )
+
+    request = OpenPaymentSurfaceRequest(
+        idempotency_key="case:initial-uncertain:surface:v1",
+        case_id="case_initial_uncertain",
+        merchant_id="merchant_test",
+        customer_id="customer_test",
+        subscription_id="sub_test",
+        failed_invoice_id="inv_test",
+        surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+        exact_amount_paise=10_000,
+        currency="INR",
+        recovery_deadline=datetime(2026, 8, 30, tzinfo=UTC),
+        expires_at=datetime(2026, 8, 30, tzinfo=UTC),
+        reference_id="rec_initial_uncertain",
+        notes={"case_id": "case_initial_uncertain", "invoice_id": "inv_test"},
+    )
+    client = _client(handler)
+
+    with pytest.raises(RazorpayUncertainSubmissionError):
+        await client.open_customer_payment_surface(request)
+    assert create_attempts == 1
+    assert (
+        await client.reconcile_payment_link_by_reference(reference_id="rec_initial_uncertain")
+        is None
+    )
+    result = await client.open_customer_payment_surface(request)
+
+    assert result.provider_reference == "plink_after_lookup"
+    assert create_attempts == 2
     await client._client.aclose()  # noqa: SLF001

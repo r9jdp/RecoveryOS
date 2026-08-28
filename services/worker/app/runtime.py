@@ -23,7 +23,10 @@ from services.api.app.domain.enums import (
     RevenueAttribution,
 )
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
-from services.api.app.integrations.razorpay.errors import RazorpayIntegrationError
+from services.api.app.integrations.razorpay.errors import (
+    RazorpayIntegrationError,
+    RazorpayUncertainSubmissionError,
+)
 from services.api.app.integrations.razorpay.normalizer import normalize_webhook
 from services.api.app.lab.scorer import create_recovery_scorer
 from services.api.app.models import (
@@ -313,6 +316,24 @@ class ProductionRecoveryActivityServices:
         self._payment_submissions_in_flight.add(action.id)
         try:
             result = await self._payment_provider.open_customer_payment_surface(request)
+        except RazorpayUncertainSubmissionError as error:
+            # Convert the first transport-uncertain create into a durable result
+            # in this activity invocation.  The only permitted next write is
+            # behind the provider's authoritative reference lookup.
+            if (
+                surface_type != PaymentSurfaceType.STANDARD_PAYMENT_LINK
+                or request.reference_id is None
+                or error.metadata.get("reference_id") != request.reference_id
+            ):
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="razorpay",
+                    reason_code="SUBMISSION_REFERENCE_MISMATCH",
+                )
+            return await self._reconcile_or_resume_standard_payment_link(
+                action_id=action.id,
+                request=request,
+            )
         except Exception:
             # Submission may be uncertain. The EXECUTING claim deliberately
             # prevents an automatic second provider call on activity replay.

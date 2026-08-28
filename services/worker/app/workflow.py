@@ -221,11 +221,12 @@ class RecoveryCaseWorkflow:
         else:
             self._action_status = "SCHEDULED"
 
-        self._phase = (
-            "AWAITING_CUSTOMER_AUTHORIZATION"
-            if self._a2a_task_id is not None
-            else "AWAITING_RECOVERY"
-        )
+        if self._action_status != "UNCERTAIN":
+            self._phase = (
+                "AWAITING_CUSTOMER_AUTHORIZATION"
+                if self._a2a_task_id is not None
+                else "AWAITING_RECOVERY"
+            )
         while not self._terminal:
             if self._deadline is not None and workflow.now() >= self._deadline:
                 await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")

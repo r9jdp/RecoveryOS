@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
@@ -16,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 
 from services.api.app.db import Base
 from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType
+from services.api.app.integrations.razorpay.errors import RazorpayUncertainSubmissionError
 from services.api.app.models import Merchant, RecoveryActionRecord  # noqa: F401
 from services.api.app.providers.contracts import (
     OpenPaymentSurfaceRequest,
@@ -67,10 +69,12 @@ class LifecyclePaymentProvider:
         lookup: PaymentSurfaceResult | None = None,
         lookup_error: Exception | None = None,
         revocation: str = "CANCELLED",
+        open_errors: list[Exception] | None = None,
     ) -> None:
         self.lookup = lookup
         self.lookup_error = lookup_error
         self.revocation = revocation
+        self.open_errors = list(open_errors or [])
         self.lookups: list[str] = []
         self.opens: list[OpenPaymentSurfaceRequest] = []
         self.revocations: list[str] = []
@@ -82,6 +86,8 @@ class LifecyclePaymentProvider:
         self, request: OpenPaymentSurfaceRequest
     ) -> PaymentSurfaceResult:
         self.opens.append(request)
+        if self.open_errors:
+            raise self.open_errors.pop(0)
         if self.block_open:
             self.open_started.set()
             await self.open_release.wait()
@@ -160,6 +166,81 @@ def _services(provider: LifecyclePaymentProvider) -> ProductionRecoveryActivityS
         scorer=FixedScorer(),
         clock=lambda: NOW,
     )
+
+
+def _reference_id() -> str:
+    digest = hashlib.sha256(_command().idempotency_key.encode()).hexdigest()[:32]
+    return f"rec_{digest}"
+
+
+async def test_initial_uncertain_create_reconciles_existing_without_activity_failure(
+    runtime_sessions: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed_standard_action(runtime_sessions, status=ActionStatus.PROPOSED)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: runtime_sessions)
+    provider = LifecyclePaymentProvider(
+        lookup=_surface(),
+        open_errors=[RazorpayUncertainSubmissionError(reference_id=_reference_id())],
+    )
+
+    result = await _services(provider).execute_recovery_action(_command())
+
+    assert result.status == "SUCCEEDED"
+    assert result.reason_code == "SUBMISSION_RECONCILED"
+    assert len(provider.opens) == len(provider.lookups) == 1
+
+
+async def test_initial_uncertain_create_resubmits_only_after_confirmed_absence(
+    runtime_sessions: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed_standard_action(runtime_sessions, status=ActionStatus.PROPOSED)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: runtime_sessions)
+    provider = LifecyclePaymentProvider(
+        lookup=None,
+        open_errors=[RazorpayUncertainSubmissionError(reference_id=_reference_id())],
+    )
+
+    result = await _services(provider).execute_recovery_action(_command())
+
+    assert result.status == "SUCCEEDED"
+    assert result.reason_code == "CONFIRMED_ABSENT_RESUBMITTED"
+    assert len(provider.opens) == 2
+    assert len(provider.lookups) == 1
+
+
+async def test_initial_uncertain_create_returns_uncertain_when_lookup_is_unresolved(
+    runtime_sessions: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed_standard_action(runtime_sessions, status=ActionStatus.PROPOSED)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: runtime_sessions)
+    provider = LifecyclePaymentProvider(
+        lookup_error=RuntimeError("reference lookup unavailable"),
+        open_errors=[RazorpayUncertainSubmissionError(reference_id=_reference_id())],
+    )
+
+    result = await _services(provider).execute_recovery_action(_command())
+
+    assert result.status == "UNCERTAIN"
+    assert result.reason_code == "PAYMENT_LINK_RECONCILIATION_UNRESOLVED"
+    assert len(provider.opens) == len(provider.lookups) == 1
+
+
+async def test_initial_uncertain_create_rejects_a_mismatched_reference_without_lookup(
+    runtime_sessions: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed_standard_action(runtime_sessions, status=ActionStatus.PROPOSED)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: runtime_sessions)
+    provider = LifecyclePaymentProvider(
+        lookup=_surface(),
+        open_errors=[RazorpayUncertainSubmissionError(reference_id="rec_wrong_action")],
+    )
+
+    result = await _services(provider).execute_recovery_action(_command())
+
+    assert result.status == "UNCERTAIN"
+    assert result.reason_code == "SUBMISSION_REFERENCE_MISMATCH"
+    assert len(provider.opens) == 1
+    assert provider.lookups == []
 
 
 async def test_executing_link_reconciles_existing_once_without_resubmit(
