@@ -79,7 +79,7 @@ def _deterministic_model_metadata(*, seed: int, case_count: int) -> dict[str, st
     """
 
     digest = hashlib.sha256(
-        f"{ARTIFACT_VERSION}:{seed}:{case_count}".encode("utf-8")
+        f"{ARTIFACT_VERSION}:{seed}:{case_count}".encode()
     ).hexdigest()
     return {
         "model_guid": "-".join(digest[index : index + 8] for index in range(0, 32, 8)),
