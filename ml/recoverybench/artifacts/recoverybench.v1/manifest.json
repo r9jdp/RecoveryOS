@@ -1,5 +1,5 @@
 {
-  "artifact_checksum": "f20ccfe34e35101e0a62eb91299d40b8501cfc88652d7bd25261c7b3cb20cbf8",
+  "artifact_checksum": "6e32c34262eb8a6daac10d6109c6beb0de68cad5e8d85be3dd8a91e56e9f5183",
   "artifact_version": "recoverybench.v1",
   "categorical_features": [
     "diagnosis",

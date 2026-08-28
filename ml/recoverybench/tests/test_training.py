@@ -35,3 +35,13 @@ def test_training_report_is_reproducible(tmp_path: Path) -> None:
     assert first["dataset"] == second["dataset"]
     assert first["artifact"]["artifact_checksum"] == artifact_checksum(tmp_path / "first")
     assert second["artifact"]["artifact_checksum"] == artifact_checksum(tmp_path / "second")
+    assert first["artifact"]["artifact_checksum"] == second["artifact"]["artifact_checksum"]
+    for filename in (
+        "model.cbm",
+        "calibration.json",
+        "manifest.json",
+        "report.json",
+    ):
+        assert (tmp_path / "first" / filename).read_bytes() == (
+            tmp_path / "second" / filename
+        ).read_bytes()

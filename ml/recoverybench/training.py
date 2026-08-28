@@ -31,6 +31,7 @@ FEATURE_COLUMNS = [
     "is_quiet_hours",
 ]
 CATEGORICAL_FEATURES = ["diagnosis", "candidate_action"]
+_DETERMINISTIC_TRAIN_FINISH_TIME = "1970-01-01T00:00:00Z"
 
 
 def _frame(cases: Sequence[SyntheticCase]) -> pd.DataFrame:
@@ -66,6 +67,26 @@ def artifact_checksum(artifact_dir: Path) -> str:
     ).hexdigest()
 
 
+def _deterministic_model_metadata(*, seed: int, case_count: int) -> dict[str, str]:
+    """Replace CatBoost's wall-clock and random model metadata.
+
+    CatBoost otherwise writes a random ``model_guid`` and the current training
+    completion time into every CBM file. Those values do not affect inference,
+    but they make a fixed-seed build produce different artifact bytes and a
+    different checksum. Supplying the reserved metadata keys at construction
+    time makes the serialized model reproducible without rewriting its binary
+    format after training.
+    """
+
+    digest = hashlib.sha256(
+        f"{ARTIFACT_VERSION}:{seed}:{case_count}".encode("utf-8")
+    ).hexdigest()
+    return {
+        "model_guid": "-".join(digest[index : index + 8] for index in range(0, 32, 8)),
+        "train_finish_time": _DETERMINISTIC_TRAIN_FINISH_TIME,
+    }
+
+
 def train_artifact(
     artifact_dir: Path,
     *,
@@ -94,6 +115,7 @@ def train_artifact(
         thread_count=1,
         verbose=False,
         allow_writing_files=False,
+        metadata=_deterministic_model_metadata(seed=seed, case_count=case_count),
     )
     model.fit(
         _frame(training_cases),
