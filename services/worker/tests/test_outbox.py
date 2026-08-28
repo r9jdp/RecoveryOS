@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from temporalio.client import Client
 
 from services.api.app.db import Base
+from services.api.app.domain.enums import (
+    ActionStatus,
+    PolicyDisposition,
+    RecoveryActionType,
+)
 from services.api.app.integrations.razorpay.normalizer import normalize_webhook
+from services.api.app.models import PolicyDecisionRecord, RecoveryActionRecord
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
 from services.api.app.webhooks import RazorpayDownstreamSignal
 from services.worker.app.contracts import PaymentEventSignal, RecoveryWorkflowInput
@@ -53,6 +59,26 @@ async def test_captured_outbox_starts_invoice_workflow_and_signals_payment() -> 
             await seed_fitbox(session)
             raw = json.loads((FIXTURES / "payment.captured.json").read_text(encoding="utf-8"))
             event = normalize_webhook(provider_event_id="evt_worker_capture", payload=raw)
+            reconciliation_action = RecoveryActionRecord(
+                id="action_worker_reconciliation",
+                case_id=FITBOX_CASE_ID,
+                action_type=RecoveryActionType.WAIT_FOR_GATEWAY_RETRY,
+                payment_surface_type=None,
+                status=ActionStatus.SCHEDULED,
+                idempotency_key="case:worker:authoritative-success-reconciliation",
+            )
+            reconciliation_policy = PolicyDecisionRecord(
+                id="policy_worker_reconciliation",
+                case_id=FITBOX_CASE_ID,
+                action_id=reconciliation_action.id,
+                disposition=PolicyDisposition.ALLOW,
+                decision_code="AUTHORITATIVE_PAYMENT_RECONCILIATION_ONLY",
+                reason_codes=["AUTHORITATIVE_PAYMENT_RECONCILIATION_ONLY"],
+                reasons=["Authoritative success must converge before workflow cleanup."],
+                policy_version="recovery-reconciliation.v1",
+            )
+            session.add_all([reconciliation_action, reconciliation_policy])
+            await session.commit()
             fake_client = FakeTemporalClient()
             dispatcher = TemporalRazorpaySignalDispatcher(
                 session,
@@ -68,7 +94,12 @@ async def test_captured_outbox_starts_invoice_workflow_and_signals_payment() -> 
                     event_type=event.event_type,
                     case_id=FITBOX_CASE_ID,
                     normalized_event=event,
-                    effects={"newly_recognized": True, "case_recovered": True},
+                    effects={
+                        "newly_recognized": True,
+                        "dispatch_required": True,
+                        "case_recovered": True,
+                        "reconciliation_action_id": reconciliation_action.id,
+                    },
                 )
             )
 

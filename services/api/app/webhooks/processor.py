@@ -163,6 +163,7 @@ class RazorpayOutboxProcessor:
             correlation = await self._correlate(payload)
             effects = await self._apply_event(payload, correlation)
             case_id = correlation.recovery_case.id if correlation.recovery_case else None
+            authorization_persisted = False
             if payload.event.event_type == "payment.failed":
                 if correlation.recovery_case is None:
                     raise RazorpayContractError(
@@ -184,7 +185,29 @@ class RazorpayOutboxProcessor:
                         ),
                     }
                 )
-                # The Temporal start is an external dispatch. Commit the domain
+                authorization_persisted = True
+            elif (
+                payload.event.payment_state == PaymentState.CAPTURED
+                and effects.get("dispatch_required") is True
+            ):
+                if correlation.recovery_case is None:
+                    raise RazorpayContractError(
+                        "RAZORPAY_CAPTURE_CASE_NOT_CORRELATED",
+                        "Authoritative payment success has no recovery case.",
+                    )
+                action = await self._ensure_reconciliation_authorization(
+                    recovery_case=correlation.recovery_case,
+                )
+                effects.update(
+                    {
+                        "reconciliation_action_id": action.id,
+                        "recommended_action_type": action.action_type.value,
+                        "recommended_payment_surface_type": None,
+                    }
+                )
+                authorization_persisted = True
+            if authorization_persisted:
+                # A Temporal start is an external dispatch. Commit the domain
                 # state and exact durable authorization first so an activity on
                 # another worker connection cannot race an uncommitted policy.
                 # Leasing the row prevents a second poller from dispatching it
@@ -396,6 +419,103 @@ class RazorpayOutboxProcessor:
             reasons=decision.reasons,
             policy_version=decision.policy_version,
             delay_until=decision.delay_until,
+            created_at=evaluated_at,
+        )
+        self.session.add_all([action, policy])
+        await self.session.flush()
+        return action
+
+    async def _ensure_reconciliation_authorization(
+        self,
+        *,
+        recovery_case: RecoveryCase,
+    ) -> RecoveryActionRecord:
+        """Authorize only a no-provider WAIT while authoritative success converges."""
+
+        action_type = RecoveryActionType.WAIT_FOR_GATEWAY_RETRY
+        idempotency_key = (
+            f"case:{recovery_case.id}:action:{action_type.value}:surface:none:"
+            "purpose:authoritative-success-reconciliation"
+        )
+        existing_action = cast(
+            RecoveryActionRecord | None,
+            await self.session.scalar(
+                select(RecoveryActionRecord)
+                .where(RecoveryActionRecord.idempotency_key == idempotency_key)
+                .with_for_update()
+            ),
+        )
+        if existing_action is not None:
+            existing_policies = list(
+                (
+                    await self.session.scalars(
+                        select(PolicyDecisionRecord)
+                        .where(
+                            PolicyDecisionRecord.case_id == recovery_case.id,
+                            PolicyDecisionRecord.action_id == existing_action.id,
+                        )
+                        .limit(2)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if (
+                existing_action.case_id != recovery_case.id
+                or existing_action.action_type != action_type
+                or existing_action.payment_surface_type is not None
+                or len(existing_policies) != 1
+                or existing_policies[0].disposition != PolicyDisposition.ALLOW
+            ):
+                raise RazorpayContractError(
+                    "RAZORPAY_RECONCILIATION_POLICY_SCOPE_INVALID",
+                    "Authoritative success has no exact reconciliation-only authorization.",
+                )
+            existing_action.status = ActionStatus.SCHEDULED
+            existing_action.scheduled_for = None
+            existing_action.completed_at = None
+            return existing_action
+
+        evaluated_at = self.clock()
+        latest_wait_created_at = await self.session.scalar(
+            select(RecoveryActionRecord.created_at)
+            .where(
+                RecoveryActionRecord.case_id == recovery_case.id,
+                RecoveryActionRecord.action_type == action_type,
+                RecoveryActionRecord.payment_surface_type.is_(None),
+            )
+            .order_by(RecoveryActionRecord.created_at.desc(), RecoveryActionRecord.id.desc())
+            .limit(1)
+        )
+        if latest_wait_created_at is not None and evaluated_at <= latest_wait_created_at:
+            evaluated_at = latest_wait_created_at + timedelta(microseconds=1)
+        scope_digest = hashlib.sha256(idempotency_key.encode()).hexdigest()[:40]
+        action = RecoveryActionRecord(
+            id=f"action_rzp_{scope_digest}",
+            case_id=recovery_case.id,
+            action_type=action_type,
+            payment_surface_type=None,
+            status=ActionStatus.SCHEDULED,
+            idempotency_key=idempotency_key,
+            scheduled_for=None,
+            created_at=evaluated_at,
+            updated_at=evaluated_at,
+        )
+        policy = PolicyDecisionRecord(
+            id=f"policy_rzp_{scope_digest}",
+            case_id=recovery_case.id,
+            action_id=action.id,
+            disposition=PolicyDisposition.ALLOW,
+            decision_code="AUTHORITATIVE_PAYMENT_RECONCILIATION_ONLY",
+            reason_codes=[
+                "AUTHORITATIVE_PAYMENT_RECONCILIATION_ONLY",
+                "NO_CUSTOMER_FACING_ACTION",
+            ],
+            reasons=[
+                "Authoritative payment success must converge before workflow cleanup.",
+                "The WAIT action performs no payment or customer-facing provider call.",
+            ],
+            policy_version="recovery-reconciliation.v1",
+            delay_until=None,
             created_at=evaluated_at,
         )
         self.session.add_all([action, policy])
@@ -924,6 +1044,10 @@ class RazorpayOutboxProcessor:
             ),
         )
         newly_recognized = existing_recognition is None
+        dispatch_required = newly_recognized or (
+            existing_recognition is not None
+            and existing_recognition.provider_event_id == event.provider_event_id
+        )
         amount_collected = 0
         secondary_case_change = (
             recovery_case.payment_state != PaymentState.CAPTURED
@@ -1022,6 +1146,7 @@ class RazorpayOutboxProcessor:
             "arrears_collected_paise": amount_collected,
             "subscription_reactivated": outcome.subscription_reactivated,
             "case_recovered": recovery_case.case_recovered,
+            "dispatch_required": dispatch_required,
         }
 
     async def _newer_processed_subscription_event_exists(

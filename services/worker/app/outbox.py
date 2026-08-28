@@ -64,11 +64,12 @@ class TemporalRazorpaySignalDispatcher:
 
         # A second success event for the same provider payment is already reflected in
         # the database and must not try to signal a workflow that may be terminal.
-        if (
-            signal.event_type != "payment.failed"
-            and signal.effects.get("newly_recognized") is False
-        ):
-            return
+        if signal.event_type != "payment.failed":
+            dispatch_required = signal.effects.get("dispatch_required")
+            if dispatch_required is False or (
+                dispatch_required is None and signal.effects.get("newly_recognized") is False
+            ):
+                return
         if signal.event_type == "payment.failed" and signal.effects.get("state_applied") is False:
             return
 
@@ -111,9 +112,22 @@ class TemporalRazorpaySignalDispatcher:
         candidate_action = "OPEN_CUSTOMER_PAYMENT_SURFACE"
         payment_surface_type: str | None = "SUBSCRIPTION_INVOICE_LINK"
         if signal.event_type == "payment.failed":
-            recommended_action_id = signal.effects.get("recommended_action_id")
-            if not isinstance(recommended_action_id, str):
+            action_id = signal.effects.get("recommended_action_id")
+            if not isinstance(action_id, str):
                 raise RuntimeError("Razorpay failure signal has no durable recommended action")
+        elif signal.normalized_event.payment_state.value == "CAPTURED":
+            action_id = signal.effects.get("reconciliation_action_id")
+            if not isinstance(action_id, str):
+                raise RuntimeError(
+                    "Razorpay success signal has no reconciliation-only authorization"
+                )
+        else:
+            # A subscription-only event may wake an existing workflow, but if it
+            # becomes the start event it remains a no-provider wait and will fail
+            # closed unless a normal durable policy already exists.
+            action_id = None
+
+        if action_id is not None:
             action = await self.session.scalar(
                 select(RecoveryActionRecord)
                 .join(
@@ -121,7 +135,7 @@ class TemporalRazorpaySignalDispatcher:
                     PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
                 )
                 .where(
-                    RecoveryActionRecord.id == recommended_action_id,
+                    RecoveryActionRecord.id == action_id,
                     RecoveryActionRecord.case_id == recovery_case.id,
                     PolicyDecisionRecord.case_id == recovery_case.id,
                 )
@@ -135,7 +149,12 @@ class TemporalRazorpaySignalDispatcher:
             payment_surface_type = (
                 action.payment_surface_type.value if action.payment_surface_type else None
             )
-        else:
+            if signal.event_type != "payment.failed" and (
+                action.action_type.value != "WAIT_FOR_GATEWAY_RETRY"
+                or action.payment_surface_type is not None
+            ):
+                raise RuntimeError("Razorpay success authorization is not reconciliation-only")
+        elif signal.event_type != "payment.failed":
             # A workflow started by a late success must reconcile before it can
             # submit any customer-facing action.
             candidate_action = "WAIT_FOR_GATEWAY_RETRY"
