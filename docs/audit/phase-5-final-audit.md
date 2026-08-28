@@ -36,25 +36,25 @@ external blockers do not excuse the code-level findings below.
 
 ## Ranked findings
 
-| ID | Rank | Finding | Gate impact |
-| --- | --- | --- | --- |
-| F-01 | P0 | API/provider state and Temporal state are split; deployed activities are always mocks | Core recovery orchestration |
-| F-02 | P0 | A2A verifier/nonce consumer is orphaned and the workflow trusts `verified` input | Mandate authorization and replay safety |
-| F-03 | P1 | Razorpay card-update surface returns a frontend route that does not exist | Preferred pending-subscription recovery |
-| F-04 | P1 | Demo login is cosmetic and Razorpay test payment actions have no operator authorization | Anonymous-action safety contract |
-| F-05 | P1 | Dashboard gross, incremental, net, and at-risk accounting formulas are incorrect | Revenue claims and judging evidence |
-| F-06 | P1 | Authoritative payment success does not end an active Twilio call | Telephony stopping rule |
-| F-07 | P1 | Deployment smoke checks the wrong Agent Card field and deterministically rolls back | Hosted staging/production deploy |
-| F-08 | P1 | All three documented RecoveryBench root commands fail | Batch evaluation and fresh setup |
-| F-09 | P1 | Playwright is UI-only and mocks every API/A2A/voice boundary | Hosted E2E confidence |
-| F-10 | P2 | Public root is a stale Phase 0 page with no demo-login path | Five-minute judge entry |
-| F-11 | P2 | Customer-agent task state is process-local and invalid JSON-RPC methods become HTTP 422 | A2A durability/protocol behavior |
-| F-12 | P2 | Handwritten frontend policy types reject backend-supported nullable controls | Cross-service schema consistency |
-| F-13 | P2 | README API/setup/license content is stale relative to the built application | Submission documentation |
-| F-14 | P2 | Windows checkout line endings break the format and Bash security/deploy gates | Fresh Windows setup |
-| F-15 | P2 | Failure injection is not exposed as the promised complete one-click lab/demo surface | Failure demonstration |
-| F-16 | P3 | Worker health checks only PID 1, not Temporal polling/activity readiness | Deployment observability |
-| F-17 | P3 | Test suite emits a Starlette `httpx` deprecation warning | Dependency maintenance |
+| ID   | Rank | Finding                                                                                 | Gate impact                             |
+| ---- | ---- | --------------------------------------------------------------------------------------- | --------------------------------------- |
+| F-01 | P0   | API/provider state and Temporal state are split; deployed activities are always mocks   | Core recovery orchestration             |
+| F-02 | P0   | A2A verifier/nonce consumer is orphaned and the workflow trusts `verified` input        | Mandate authorization and replay safety |
+| F-03 | P1   | Razorpay card-update surface returns a frontend route that does not exist               | Preferred pending-subscription recovery |
+| F-04 | P1   | Demo login is cosmetic and Razorpay test payment actions have no operator authorization | Anonymous-action safety contract        |
+| F-05 | P1   | Dashboard gross, incremental, net, and at-risk accounting formulas are incorrect        | Revenue claims and judging evidence     |
+| F-06 | P1   | Authoritative payment success does not end an active Twilio call                        | Telephony stopping rule                 |
+| F-07 | P1   | Deployment smoke checks the wrong Agent Card field and deterministically rolls back     | Hosted staging/production deploy        |
+| F-08 | P1   | All three documented RecoveryBench root commands fail                                   | Batch evaluation and fresh setup        |
+| F-09 | P1   | Playwright is UI-only and mocks every API/A2A/voice boundary                            | Hosted E2E confidence                   |
+| F-10 | P2   | Public root is a stale Phase 0 page with no demo-login path                             | Five-minute judge entry                 |
+| F-11 | P2   | Customer-agent task state is process-local and invalid JSON-RPC methods become HTTP 422 | A2A durability/protocol behavior        |
+| F-12 | P2   | Handwritten frontend policy types reject backend-supported nullable controls            | Cross-service schema consistency        |
+| F-13 | P2   | README API/setup/license content is stale relative to the built application             | Submission documentation                |
+| F-14 | P2   | Windows checkout line endings break the format and Bash security/deploy gates           | Fresh Windows setup                     |
+| F-15 | P2   | Failure injection is not exposed as the promised complete one-click lab/demo surface    | Failure demonstration                   |
+| F-16 | P3   | Worker health checks only PID 1, not Temporal polling/activity readiness                | Deployment observability                |
+| F-17 | P3   | Test suite emits a Starlette `httpx` deprecation warning                                | Dependency maintenance                  |
 
 ## Detailed findings and required fixes
 
@@ -295,26 +295,26 @@ deprecated. Track the compatible FastAPI/Starlette migration before it becomes a
 
 ## Acceptance-criteria audit
 
-| Criterion | Status | Evidence / reason |
-| --- | --- | --- |
-| Failure creates exactly one invoice-scoped case | Pass in isolation | Webhook dedupe/outbox and case constraints/tests pass |
-| Explainable diagnosis and bounded action | Pass in isolation | Domain/API tests and UI render the fixed enums/reasons |
-| Policy allow/block/delay/approval | Pass in isolation | Policy suites pass; merchant settings persist |
-| Subscription-native payment surface | **Fail** | Invoice-link adapter is covered; preferred card-update URL is missing (F-03) |
-| Verified success recovers once | Pass at SQL webhook layer | Authoritative fetch and immutable recognition dedupe pass |
-| Success cancels all pending work | **Partial** | DB action rows cancel; active voice/provider work does not (F-06) |
-| Control Tower and Case Workspace | Pass | Unit, desktop/mobile Playwright, build routes pass |
-| Complete audit timeline | **Partial** | API actions persist; Temporal mock audit events are process memory under F-01 |
-| At least 100 deterministic synthetic cases | Pass in code | 100-case repeat hash matched; checked-in report uses 1,200 total / 240 evaluation |
-| Batch commands work from README | **Fail** | All three root commands fail (F-08) |
-| Baseline/treatment comparison | Pass in Lab artifact | Paired simulated metrics/checksum present; dashboard formulas still fail F-05 |
-| Browser voice intents | Pass in mock/browser mode | Safety precedence and UI tests pass |
-| Real guarded call | External gate plus code gap | Credentials absent; success cancellation is missing (F-06) |
-| Separate A2A approval/rejection | Pass only within process | Customer-agent tests pass; store is volatile (F-11) |
-| Signed mandate verified and replay-safe | **Fail end to end** | Verifier unit tests pass; runtime is absent (F-02) |
-| Complete failure demo | **Partial** | Deterministic suites pass; no complete one-click demo surface (F-15) |
-| Incremental/net recovered value is correct | **Fail** | Dashboard formulas violate their definitions (F-05) |
-| Single reset-and-seed demo | Partial | `pnpm reset` has coverage; root entry and service-backed judge E2E are missing |
+| Criterion                                       | Status                      | Evidence / reason                                                                 |
+| ----------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------- |
+| Failure creates exactly one invoice-scoped case | Pass in isolation           | Webhook dedupe/outbox and case constraints/tests pass                             |
+| Explainable diagnosis and bounded action        | Pass in isolation           | Domain/API tests and UI render the fixed enums/reasons                            |
+| Policy allow/block/delay/approval               | Pass in isolation           | Policy suites pass; merchant settings persist                                     |
+| Subscription-native payment surface             | **Fail**                    | Invoice-link adapter is covered; preferred card-update URL is missing (F-03)      |
+| Verified success recovers once                  | Pass at SQL webhook layer   | Authoritative fetch and immutable recognition dedupe pass                         |
+| Success cancels all pending work                | **Partial**                 | DB action rows cancel; active voice/provider work does not (F-06)                 |
+| Control Tower and Case Workspace                | Pass                        | Unit, desktop/mobile Playwright, build routes pass                                |
+| Complete audit timeline                         | **Partial**                 | API actions persist; Temporal mock audit events are process memory under F-01     |
+| At least 100 deterministic synthetic cases      | Pass in code                | 100-case repeat hash matched; checked-in report uses 1,200 total / 240 evaluation |
+| Batch commands work from README                 | **Fail**                    | All three root commands fail (F-08)                                               |
+| Baseline/treatment comparison                   | Pass in Lab artifact        | Paired simulated metrics/checksum present; dashboard formulas still fail F-05     |
+| Browser voice intents                           | Pass in mock/browser mode   | Safety precedence and UI tests pass                                               |
+| Real guarded call                               | External gate plus code gap | Credentials absent; success cancellation is missing (F-06)                        |
+| Separate A2A approval/rejection                 | Pass only within process    | Customer-agent tests pass; store is volatile (F-11)                               |
+| Signed mandate verified and replay-safe         | **Fail end to end**         | Verifier unit tests pass; runtime is absent (F-02)                                |
+| Complete failure demo                           | **Partial**                 | Deterministic suites pass; no complete one-click demo surface (F-15)              |
+| Incremental/net recovered value is correct      | **Fail**                    | Dashboard formulas violate their definitions (F-05)                               |
+| Single reset-and-seed demo                      | Partial                     | `pnpm reset` has coverage; root entry and service-backed judge E2E are missing    |
 
 ## Cross-service and protocol review
 
@@ -405,27 +405,27 @@ Gaps:
 
 Toolchain observed: Node `v22.18.0`, pnpm `10.15.1`, Python `3.12.10`, uv `0.8.15`.
 
-| Command/check | Result |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | Pass; 527 packages from locked graph |
-| `uv sync --frozen --all-groups` | Pass |
-| `pnpm lint` | Pass; ESLint and Ruff |
-| `pnpm format:check` | **Fail on Windows checkout**; 104 web files due CRLF (F-14) |
-| `pnpm typecheck` | Pass; TypeScript and 173 Mypy source files |
-| `pnpm test` | Pass; 27 web tests and 205 Python tests, one warning |
-| `pnpm build` | Pass; 11 application routes |
-| `pnpm e2e` | Pass; 24 desktop/mobile mocked Playwright checks (F-09 caveat) |
-| OpenAPI export + generated client | Pass; no semantic drift |
-| Migration safety/head/current/check | Pass; 4 migrations, one head, no drift |
-| Repository/browser secret scan | Pass |
-| Gitleaks history scan | Pass; 62 commits, no leaks |
-| `pnpm audit --prod --audit-level high` | Pass; no known vulnerabilities |
-| 100-case deterministic generation | Pass; repeated hash `5208ce90ffde9c466eae6cb2d5902c3016ee1dcb22061f4366f97a9b53e34e23` |
-| RecoveryBench artifact checksum | Pass; manifest and files match `f20ccfe...cb20cbf8` |
-| `pnpm generate:data` | **Fail**; nonexistent module (F-08) |
-| `pnpm train` | **Fail**; nonexistent module (F-08) |
-| `pnpm evaluate` | **Fail**; nonexistent module (F-08) |
-| Bash dependency gate on Windows | **Fail before scan**; CRLF (F-14); Node audit run separately |
+| Command/check                          | Result                                                                                 |
+| -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `pnpm install --frozen-lockfile`       | Pass; 527 packages from locked graph                                                   |
+| `uv sync --frozen --all-groups`        | Pass                                                                                   |
+| `pnpm lint`                            | Pass; ESLint and Ruff                                                                  |
+| `pnpm format:check`                    | **Fail on Windows checkout**; 104 web files due CRLF (F-14)                            |
+| `pnpm typecheck`                       | Pass; TypeScript and 173 Mypy source files                                             |
+| `pnpm test`                            | Pass; 27 web tests and 205 Python tests, one warning                                   |
+| `pnpm build`                           | Pass; 11 application routes                                                            |
+| `pnpm e2e`                             | Pass; 24 desktop/mobile mocked Playwright checks (F-09 caveat)                         |
+| OpenAPI export + generated client      | Pass; no semantic drift                                                                |
+| Migration safety/head/current/check    | Pass; 4 migrations, one head, no drift                                                 |
+| Repository/browser secret scan         | Pass                                                                                   |
+| Gitleaks history scan                  | Pass; 62 commits, no leaks                                                             |
+| `pnpm audit --prod --audit-level high` | Pass; no known vulnerabilities                                                         |
+| 100-case deterministic generation      | Pass; repeated hash `5208ce90ffde9c466eae6cb2d5902c3016ee1dcb22061f4366f97a9b53e34e23` |
+| RecoveryBench artifact checksum        | Pass; manifest and files match `f20ccfe...cb20cbf8`                                    |
+| `pnpm generate:data`                   | **Fail**; nonexistent module (F-08)                                                    |
+| `pnpm train`                           | **Fail**; nonexistent module (F-08)                                                    |
+| `pnpm evaluate`                        | **Fail**; nonexistent module (F-08)                                                    |
+| Bash dependency gate on Windows        | **Fail before scan**; CRLF (F-14); Node audit run separately                           |
 
 The worktree was clean after all mutating generators/build tools were restored byte-for-byte. Test
 caches, virtual environments, Node modules, `.next`, and Playwright diagnostics are ignored and are
@@ -471,31 +471,36 @@ the audited `phase-5-start` baseline. The statuses below describe the continuati
 listed remediation work; a clean, combined final gate still has to be recorded after all branches are
 integrated.
 
-| Finding | Continuation status              | Remediation evidence                                                                                                                                                                                                      |
-| ------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F-01    | Remediated in code               | `956c0c4` routes merchant commands through the case workflow; `196d4bc` binds provider submission to the durable action; production mode composes SQL/provider activities while mock remains default.                     |
-| F-02    | Remediated in code               | `5b0cae0` replaces the trusted boolean with activity verification and atomic nonce consumption; `bd19a74` adds exact authoritative `recovery.receipt.v1` delivery.                                                        |
-| F-03    | Remediated in code               | `e50f532` adds the card-update Checkout route/configuration and safe test-mode path.                                                                                                                                      |
-| F-04    | Remediated for hosted demo scope | `bba3e89` adds the server guard; `9df3e7d` and `ac15233` add a signed HttpOnly operator session, matching CSRF token, hosted enforcement, and malformed-cookie rejection. Production identity/multi-tenancy remains open. |
-| F-05    | Remediated in code               | `56650eb` separates verified and simulated recovery; `1d53555` derives verified gross and remaining at risk from immutable recognition records using integer paise.                                                       |
-| F-06    | Remediated in code               | `35987e1`, `2377b9f`, and `fbeb6be` cancel outreach after authoritative recovery and preserve an uncertain/fail-closed result when cancellation cannot be confirmed.                                                      |
-| F-07    | Remediated in code               | `87c080b` validates the actual A2A Agent Card interface in deployment smoke.                                                                                                                                              |
-| F-08    | Remediated in code               | `3d90100` points the root RecoveryBench commands at the existing generator, trainer, and evaluator modules.                                                                                                               |
+| Finding | Continuation status              | Remediation evidence                                                                                                                                                                                                        |
+| ------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-01    | Remediated in code               | `956c0c4` routes merchant commands through the case workflow; `196d4bc` binds provider submission to the durable action; production mode composes SQL/provider activities while mock remains default.                       |
+| F-02    | Remediated in code               | `5b0cae0` replaces the trusted boolean with activity verification and atomic nonce consumption; `bd19a74` adds exact authoritative `recovery.receipt.v1` delivery.                                                          |
+| F-03    | Remediated in code               | `e50f532` adds the card-update Checkout route/configuration and safe test-mode path.                                                                                                                                        |
+| F-04    | Remediated for hosted demo scope | `bba3e89` adds the server guard; `9df3e7d` and `ac15233` add a signed HttpOnly operator session, matching CSRF token, hosted enforcement, and malformed-cookie rejection. Production identity/multi-tenancy remains open.   |
+| F-05    | Remediated in code               | `56650eb` separates verified and simulated recovery; `1d53555` derives verified gross and remaining at risk from immutable recognition records using integer paise.                                                         |
+| F-06    | Remediated in code               | `35987e1`, `2377b9f`, and `fbeb6be` cancel outreach after authoritative recovery and preserve an uncertain/fail-closed result when cancellation cannot be confirmed.                                                        |
+| F-07    | Remediated in code               | `87c080b` validates the actual A2A Agent Card interface in deployment smoke.                                                                                                                                                |
+| F-08    | Remediated in code               | `3d90100` points the root RecoveryBench commands at the existing generator, trainer, and evaluator modules.                                                                                                                 |
 | F-09    | Core concern remediated          | `7146ff1` and `cf16886` add the Compose-backed real-service Playwright gate; `ce9111d` and `df81d73` exercise persisted policy, SQL-backed A2A mandate, and receipt lifecycle. Credentialed hosted paths remain unexecuted. |
-| F-10    | Remediated in code               | `5688e27` replaces the stale root with a judge-oriented entry and seeded demo guide.                                                                                                                                      |
-| F-11    | Remediated in code               | `9adf351` and `8cf7bdc` add the SQL task store and migration; invalid methods use JSON-RPC errors and hosted modes select durable storage.                                                                                |
-| F-12    | Remediated in code               | `9aac1f1` aligns nullable disabled policy controls across the web/API contract.                                                                                                                                           |
-| F-13    | Remediated in documentation      | `ae9d37a` replaces the stale README; this documentation continuation aligns architecture, operations, product, security, and release evidence with the integrated runtime.                                                |
-| F-14    | Remediated in repository policy  | `e50f532` adds explicit LF normalization for source/deployment files; the final frozen Windows/Linux gates must confirm the checkout.                                                                                     |
-| F-15    | Remediated in product            | `8a742b2` adds the deterministic Failure Lab route for duplicate, out-of-order, late-success, and changed-state scenarios.                                                                                                |
-| F-16    | Remediated in code/deployment    | `b884b29` and `e4dde57` add loopback worker readiness based on active polling plus Temporal health and use it in Docker/Compose.                                                                                          |
-| F-17    | Recheck at final gate            | No release claim depends on the warning; the final combined test record must state whether it remains.                                                                                                                    |
+| F-10    | Remediated in code               | `5688e27` replaces the stale root with a judge-oriented entry and seeded demo guide.                                                                                                                                        |
+| F-11    | Remediated in code               | `9adf351` and `8cf7bdc` add the SQL task store and migration; invalid methods use JSON-RPC errors and hosted modes select durable storage.                                                                                  |
+| F-12    | Remediated in code               | `9aac1f1` aligns nullable disabled policy controls across the web/API contract.                                                                                                                                             |
+| F-13    | Remediated in documentation      | `ae9d37a` replaces the stale README; this documentation continuation aligns architecture, operations, product, security, and release evidence with the integrated runtime.                                                  |
+| F-14    | Remediated in repository policy  | `e50f532` adds explicit LF normalization for source/deployment files; the final frozen Windows/Linux gates must confirm the checkout.                                                                                       |
+| F-15    | Remediated in product            | `8a742b2` adds the deterministic Failure Lab route for duplicate, out-of-order, late-success, and changed-state scenarios.                                                                                                  |
+| F-16    | Remediated in code/deployment    | `b884b29` and `e4dde57` add loopback worker readiness based on active polling plus Temporal health and use it in Docker/Compose.                                                                                            |
+| F-17    | Recheck at final gate            | No release claim depends on the warning; the final combined test record must state whether it remains.                                                                                                                      |
 
 Additional post-audit payment hardening persists action/policy authorization before Temporal
 dispatch (`752d457`, `28a092b`), reconciles replacement captures without reusing a failed payment ID
 (`cab15a2`), and converges uncertain standard Payment Link submission by unique reference without a
-blind retry (`dde510c`, `d2dec75`). RecoveryBench is composed through the production worker scorer,
-and hosted customer-agent task state is SQL-backed.
+blind retry (`dde510c`, `d2dec75`). `ba7ac69` classifies ambiguous transport, 5xx, malformed, and
+incomplete provider responses as uncertain. `d3e6cfc` signs authoritative A2A receipts and verifies
+the pinned recovery-agent key before task completion. `c8fd446` proves the hosted cross-origin
+operator cookie/CSRF session in the real-service browser gate. `8769ff3` requires SQL-backed
+customer-agent readiness through Compose, edge routing, deploy smoke, and monitoring. `2b6bff1`
+makes the fixed-seed RecoveryBench CatBoost artifact byte-reproducible. RecoveryBench is composed
+through the production worker scorer, and hosted customer-agent task state is SQL-backed.
 
 The original external-gate conclusion is unchanged: no public URL or credentialed OCI, Neon,
 Temporal Cloud, Razorpay, Twilio, or ElevenLabs success is claimed. The continuation can only be

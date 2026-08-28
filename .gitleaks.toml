@@ -4,3 +4,11 @@ useDefault = true
 [[allowlists]]
 description = "Synthetic token is assembled and exercised only by the secret-scanner unit test"
 paths = ['''tests/deployment/test_deployment_hardening\.py''']
+
+[[allowlists]]
+description = "Synthetic A2A idempotency key used by receipt authentication tests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+regexes = ['''idempotency_key=''', '''receipt-auth:a2a''']
+paths = ['''services/customer-agent/tests/test_protocol\.py''']

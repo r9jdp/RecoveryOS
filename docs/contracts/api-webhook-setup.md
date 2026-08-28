@@ -57,8 +57,8 @@ PAYMENT_PROVIDER=razorpay
 RECOVERY_ACTIVITY_MODE=production
 RECOVERY_ALLOW_REAL_PAYMENT_ACTIONS=true
 RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_SECRET=...
-RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_KEY_SECRET=<redacted>
+RAZORPAY_WEBHOOK_SECRET=<redacted>
 RAZORPAY_TEST_MODE_REQUIRED=true
 ```
 
@@ -69,7 +69,9 @@ returns the CSRF token and sets the signed `recoveryos_operator_session` HttpOnl
 consequential requests send the cookie plus `X-RecoveryOS-CSRF-Token`. The raw credential is never
 stored in browser-accessible state.
 
-Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true` and `OPERATOR_COOKIE_SECURE=true`.
+Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true`, `OPERATOR_COOKIE_SECURE=true`, and
+`OPERATOR_COOKIE_SAMESITE=none`. `WEB_ORIGIN` must be the exact HTTPS frontend origin so credentialed
+CORS never falls back to a wildcard. Local same-site development uses the safer `lax` default.
 Non-mock payment mode also turns authorization on regardless of that explicit flag. Use non-default,
 server-only values for `OPERATOR_DEMO_TOKEN` and `OPERATOR_SESSION_SECRET`; session/action guards
 reject the checked-in local defaults in real-action mode. The current session represents a shared
@@ -100,7 +102,12 @@ by their Agent Cards. Enable delegation only after pinning the customer-agent pu
 server-only `CUSTOMER_AGENT_DATABASE_URL`; memory is the local default. Never share the
 customer-agent Ed25519 private seed with the API or worker. The recovery worker verifies and
 atomically consumes the exact mandate, then sends an idempotent `recovery.receipt.v1` only after
-authoritative payment recovery.
+authoritative payment recovery. Hosted workers set `RECOVERY_AGENT_RECEIPT_SIGNING_MODE=configured`
+and provide `RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID` plus the server-only
+`RECOVERY_AGENT_RECEIPT_ED25519_PRIVATE_KEY`. The customer agent sets
+`CUSTOMER_AGENT_RECEIPT_VERIFICATION_MODE=pinned` and pins the matching public key in
+`CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON`; an unsigned, unknown-key, replayed, or
+scope-mismatched receipt cannot complete a task.
 
 ## Contract validation
 

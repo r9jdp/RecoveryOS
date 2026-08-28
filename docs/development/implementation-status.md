@@ -5,13 +5,13 @@ provider credentials. Dates use Asia/Kolkata time.
 
 ## Frozen baselines
 
-| Milestone | Commit/tag | Local gate | External gate |
-| --- | --- | --- | --- |
-| Phase 0 foundation | `83366ea` / `phase-0-code-complete` | contracts, design system, containers, Terraform validation | OCI capacity, Neon branches, Temporal Cloud, DNS, Vercel |
-| Phase 1 vertical slice | `17fe5f7` / `phase-1-code-complete` | API, migration, PostgreSQL, Temporal replay, browser flow, duplicate-revenue gate | hosted Playwright run |
-| Phase 2 payment integration | `1e83c04` / `phase-2-code-complete` | Razorpay inbox/outbox, reconciliation, safety policy, merchant UX, live browser flow | hosted Razorpay test-mode webhook/payment smoke |
-| Phase 3 hero features | `04e250a` / `phase-3-code-complete` | RecoveryBench, signed A2A authorization, guarded voice, combined browser and container gate | hosted A2A origin plus one credentialed allowlisted Twilio/ElevenLabs call |
-| Phase 4 hardening | `00191bb` / `phase-4-code-complete` | deterministic failure injection, 24-check browser QA, backup/restore, edge limits, security and staged-deploy gates | credentialed staging/production deploy, public monitoring, and Trivy registry scan |
+| Milestone                   | Commit/tag                          | Local gate                                                                                                          | External gate                                                                      |
+| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Phase 0 foundation          | `83366ea` / `phase-0-code-complete` | contracts, design system, containers, Terraform validation                                                          | OCI capacity, Neon branches, Temporal Cloud, DNS, Vercel                           |
+| Phase 1 vertical slice      | `17fe5f7` / `phase-1-code-complete` | API, migration, PostgreSQL, Temporal replay, browser flow, duplicate-revenue gate                                   | hosted Playwright run                                                              |
+| Phase 2 payment integration | `1e83c04` / `phase-2-code-complete` | Razorpay inbox/outbox, reconciliation, safety policy, merchant UX, live browser flow                                | hosted Razorpay test-mode webhook/payment smoke                                    |
+| Phase 3 hero features       | `04e250a` / `phase-3-code-complete` | RecoveryBench, signed A2A authorization, guarded voice, combined browser and container gate                         | hosted A2A origin plus one credentialed allowlisted Twilio/ElevenLabs call         |
+| Phase 4 hardening           | `00191bb` / `phase-4-code-complete` | deterministic failure injection, 24-check browser QA, backup/restore, edge limits, security and staged-deploy gates | credentialed staging/production deploy, public monitoring, and Trivy registry scan |
 
 Phase 3 worktrees started only from `phase-2-code-complete` and were merged through their frozen
 provider interfaces:
@@ -124,14 +124,23 @@ final combined gate is recorded separately only after the continuation branch is
   replacement captures reconcile against authoritative evidence without charging a failed payment
   ID or recognizing revenue twice.
 - Standard Payment Link submission persists before create. An uncertain response converges through a
-  bounded lookup by unique reference, never a blind create retry, and unpaid standalone links are
-  cancelled on stop/deadline.
+  bounded lookup by unique reference, never a blind create retry. Transport errors, provider 5xx,
+  malformed success bodies, and incomplete success bodies all remain uncertain until reconciliation;
+  only confirmed absence permits one guarded resubmission. Unpaid standalone links are cancelled on
+  stop/deadline.
 - Hosted operator login issues a signed HttpOnly session and requires its matching CSRF token for
-  consequential requests. Hosted Compose forces operator authentication and secure cookies; the
-  shared demo identity is not production multi-tenant authorization.
+  consequential requests. Hosted Compose forces operator authentication, an exact credentialed
+  frontend origin, and `Secure; SameSite=None` cookies across the web/API origins; the shared demo
+  identity is not production multi-tenant authorization.
 - Hosted customer-agent tasks use SQL. The live A2A bridge verifies exact signed scope, atomically
-  consumes the nonce, and completes the task with an idempotent `recovery.receipt.v1` only after
-  authoritative recovery.
+  consumes the nonce, and completes the task with an idempotent, pinned-key Ed25519
+  `recovery.receipt.v1` only after authoritative recovery. Missing, tampered, wrong-scope, and replayed
+  receipts fail closed.
+- Customer-agent container, edge, deployment, and monitoring health checks use `/health/ready` and
+  require the hosted SQL store, preventing promotion of a restart-unsafe memory-backed process.
+- RecoveryBench model files are byte-reproducible across repeated fixed-seed builds; the current
+  artifact manifest contains 240 evaluation cases and checksum
+  `6e32c34262eb8a6daac10d6109c6beb0de68cad5e8d85be3dd8a91e56e9f5183`.
 - Worker container health now requires an actively running Temporal worker plus a successful
   Temporal service-health probe. The deterministic Failure Lab exposes the four principal webhook
   failure scenarios in the product.

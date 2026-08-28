@@ -36,19 +36,25 @@ variables with that contract before the first deploy.
 
 ## Service boundaries
 
-| Service        | Server-only values it owns                                                                                                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API            | `DATABASE_URL`, Temporal client settings, `OPERATOR_DEMO_TOKEN`, `OPERATOR_SESSION_SECRET`, Razorpay webhook secret, and only the provider values required by API ingress |
-| Worker         | `DATABASE_URL`, Temporal worker settings, selected provider credentials, pinned `CUSTOMER_AGENT_PUBLIC_KEYS_JSON`, and enabled voice credentials                          |
-| Customer agent | `CUSTOMER_AGENT_DATABASE_URL` and, only when real signing is enabled, `CUSTOMER_AGENT_ED25519_PRIVATE_KEY`                                                                |
-| Web            | public API origin only; no operator password, session secret, provider secret, or signing material                                                                        |
+| Service        | Server-only values it owns                                                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API            | `DATABASE_URL`, Temporal client settings, `OPERATOR_DEMO_TOKEN`, `OPERATOR_SESSION_SECRET`, Razorpay webhook secret, and only the provider values required by API ingress       |
+| Worker         | `DATABASE_URL`, Temporal worker settings, selected provider credentials, pinned `CUSTOMER_AGENT_PUBLIC_KEYS_JSON`, recovery-receipt signing seed, and enabled voice credentials |
+| Customer agent | `CUSTOMER_AGENT_DATABASE_URL`, mandate signing seed, and pinned `CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON` receipt-verification keys                                      |
+| Web            | public API origin only; no operator password, session secret, provider secret, or signing material                                                                              |
 
-Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true`, `OPERATOR_COOKIE_SECURE=true`, and
-`CUSTOMER_AGENT_TASK_STORE=sql`. Supply non-default operator credentials and session-signing secrets
-in the protected API file, and supply the SQL customer-task URL only to the customer agent. The
+Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true`, `OPERATOR_COOKIE_SECURE=true`,
+`OPERATOR_COOKIE_SAMESITE=none`, and `CUSTOMER_AGENT_TASK_STORE=sql`. Set `WEB_ORIGIN` to the exact
+HTTPS frontend origin. Supply non-default operator credentials and session-signing secrets in the
+protected API file, and supply the SQL customer-task URL only to the customer agent. The
 operator session cookie is HttpOnly; the browser retains only the issued CSRF token in session
 storage. `OPERATOR_DEMO_TOKEN` may be used as a server-to-server smoke header, but must never become a
 `NEXT_PUBLIC_*` value.
+
+For hosted A2A, configure the worker receipt signer and pin only its public key in the customer
+agent. Keep the customer-agent mandate signing seed isolated from the worker and pin only its public
+key in `CUSTOMER_AGENT_PUBLIC_KEYS_JSON`. Mock signing modes are local-only defaults and must not be
+used as proof in a hosted verified flow.
 
 ## Installation
 
