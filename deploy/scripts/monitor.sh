@@ -26,10 +26,27 @@ probe() {
   fi
 }
 
+probe_agent_ready() {
+  local name="$1"
+  local url="$2"
+  if curl --fail --silent --show-error \
+    --connect-timeout 5 --max-time 10 \
+    --retry 2 --retry-delay 2 \
+    --header 'Accept: application/json' \
+    "$url" | python3 -c \
+      'import json, sys; payload=json.load(sys.stdin); assert payload.get("status") == "ready"; assert payload.get("store") == "sql"'; then
+    echo "UP ${name} ${url}"
+  else
+    echo "DOWN ${name} ${url}" >&2
+    failures=$((failures + 1))
+  fi
+}
+
 probe api-live "${api_base_url}/health/live"
 probe api-ready "${api_base_url}/health/ready"
 if [[ -n "$agent_base_url" ]]; then
   probe agent-live "${agent_base_url}/health/live"
+  probe_agent_ready agent-ready "${agent_base_url}/health/ready"
   probe agent-card "${agent_base_url}/.well-known/agent-card.json"
 fi
 

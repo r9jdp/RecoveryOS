@@ -60,6 +60,9 @@ elif assertion == "api-ready":
 elif assertion == "agent-live":
     assert payload.get("status") == "live"
     assert payload.get("service") == "recoveryos-customer-agent"
+elif assertion == "agent-ready":
+    assert payload.get("status") == "ready"
+    assert payload.get("store") == "sql"
 elif assertion == "agent-card":
     assert payload.get("name")
     interfaces = payload.get("supportedInterfaces", [])
@@ -94,5 +97,6 @@ retry_json "${api_base_url}/health/ready" api-ready
 
 if [[ -n "$agent_base_url" ]]; then
   retry_json "${agent_base_url}/health/live" agent-live
+  retry_json "${agent_base_url}/health/ready" agent-ready
   retry_json "${agent_base_url}/.well-known/agent-card.json" agent-card
 fi

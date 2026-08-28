@@ -142,3 +142,22 @@ def test_agent_card_smoke_uses_supported_interface_and_exact_rpc_origin() -> Non
     assert "f\"{expected_agent_origin.rstrip('/')}/rpc\"" in smoke
     assert 'interface.get("protocolBinding") == "JSONRPC"' in smoke
     assert 'payload.get("url"' not in smoke
+
+
+def test_hosted_customer_agent_checks_sql_readiness_before_promotion() -> None:
+    compose = (ROOT / "infra" / "compose" / "compose.base.yml").read_text(encoding="utf-8")
+    haproxy = (ROOT / "infra" / "haproxy" / "haproxy.cfg").read_text(encoding="utf-8")
+    smoke = (ROOT / "deploy" / "scripts" / "smoke.sh").read_text(encoding="utf-8")
+    monitor = (ROOT / "deploy" / "scripts" / "monitor.sh").read_text(encoding="utf-8")
+
+    customer_agent = compose.split("  customer-agent:\n", 1)[1].split(
+        "  edge-gateway:\n", 1
+    )[0]
+    customer_backend = haproxy.split("backend customer_agent_upstream\n", 1)[1]
+    assert "http://127.0.0.1:8010/health/ready" in customer_agent
+    assert "CUSTOMER_AGENT_TASK_STORE" in customer_agent
+    assert "option httpchk GET /health/ready" in customer_backend
+    assert 'retry_json "${agent_base_url}/health/ready" agent-ready' in smoke
+    assert 'payload.get("store") == "sql"' in smoke
+    assert 'probe_agent_ready agent-ready "${agent_base_url}/health/ready"' in monitor
+    assert 'payload.get("store") == "sql"' in monitor
