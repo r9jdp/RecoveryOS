@@ -21,11 +21,13 @@ from .activities import (
     RECONCILE_CASE,
     RECORD_AUDIT_EVENT,
     SCORE_RECOVERY,
+    SEND_A2A_PAYMENT_RECEIPT,
     START_A2A_AUTHORIZATION,
 )
 from .contracts import (
     A2AAuthorizationResult,
     A2AMandatePollResult,
+    A2APaymentReceiptResult,
     A2AUpdateSignal,
     ActionExecutionResult,
     ApprovalSignal,
@@ -55,6 +57,7 @@ from .contracts import (
     RecoveryWorkflowStatus,
     ScoreInput,
     ScoreResult,
+    SendA2APaymentReceiptInput,
     StartA2AAuthorizationInput,
 )
 
@@ -100,6 +103,8 @@ class RecoveryCaseWorkflow:
         self._a2a_task_id: str | None = None
         self._next_a2a_poll_at: datetime | None = None
         self._mandate_received = False
+        self._a2a_mandate_id: str | None = None
+        self._a2a_receipt_sent = False
         self._deadline: datetime | None = None
         self._signals: list[QueuedSignal] = []
         self._seen_signal_ids: set[str] = set()
@@ -400,6 +405,7 @@ class RecoveryCaseWorkflow:
             },
         )
         if result.case_recovered and result.authoritative:
+            await self._send_a2a_receipt_if_applicable(result)
             await self._cancel_active_action("AUTHORITATIVE_PAYMENT_SUCCESS")
             self._finish("RECOVERED", "PAYMENT_CAPTURED")
 
@@ -438,6 +444,7 @@ class RecoveryCaseWorkflow:
             )
             self._apply_reconciliation(result)
             if result.case_recovered and result.authoritative:
+                await self._send_a2a_receipt_if_applicable(result)
                 await self._cancel_active_action("AUTHORITATIVE_PAYMENT_SUCCESS")
                 self._finish("RECOVERED", "ALREADY_PAID_RECONCILED")
 
@@ -601,11 +608,7 @@ class RecoveryCaseWorkflow:
             self._next_a2a_poll_at = workflow.now() + _A2A_POLL_INTERVAL
             return
         self._next_a2a_poll_at = None
-        accepted = (
-            result.verification_status == "VERIFIED"
-            and result.mandate_id is not None
-            and result.verified_artifact is not None
-        )
+        accepted = result.verification_status == "VERIFIED" and result.mandate_id is not None
         await self._audit(
             "MANDATE_VERIFICATION_COMPLETED",
             result.mandate_id or f"a2a:{self._a2a_task_id}",
@@ -621,13 +624,62 @@ class RecoveryCaseWorkflow:
             return
 
         self._mandate_received = True
+        self._a2a_mandate_id = result.mandate_id
         policy = PolicyResult(
             disposition="ALLOW",
             decision_code="VERIFIED_MANDATE",
             action="OPEN_CUSTOMER_PAYMENT_SURFACE",
             payment_surface_type=surface_type,
         )
-        await self._execute_action(policy, mandate=dict(result.verified_artifact))
+        await self._execute_action(
+            policy,
+            mandate={
+                "mandate_id": result.mandate_id,
+                "remote_task_id": result.remote_task_id,
+            },
+        )
+
+    async def _send_a2a_receipt_if_applicable(self, result: ReconciliationResult) -> None:
+        if self._a2a_receipt_sent or self._a2a_task_id is None or self._a2a_mandate_id is None:
+            return
+        command = self._require_input()
+        if (
+            result.payment_state != "CAPTURED"
+            or not result.authoritative
+            or not result.case_recovered
+            or result.arrears_collected_paise != command.amount_at_risk_paise
+            or result.provider_reference is None
+        ):
+            return
+        receipt = await self._activity(
+            SEND_A2A_PAYMENT_RECEIPT,
+            SendA2APaymentReceiptInput(
+                remote_task_id=self._a2a_task_id,
+                mandate_id=self._a2a_mandate_id,
+                merchant_id=command.merchant_id,
+                case_id=command.case_id,
+                exact_amount_paise=command.amount_at_risk_paise,
+                currency=command.currency,
+                provider_reference=result.provider_reference,
+                observed_at=workflow.now().isoformat(),
+                idempotency_key=(f"{self._a2a_task_id}:{self._a2a_mandate_id}:recovery.receipt.v1"),
+            ),
+            A2APaymentReceiptResult,
+        )
+        if receipt.delivered and receipt.task_state == "COMPLETED":
+            self._a2a_receipt_sent = True
+            self._a2a_state = "COMPLETED"
+        await self._audit(
+            "A2A_PAYMENT_RECEIPT_DELIVERED"
+            if self._a2a_receipt_sent
+            else "A2A_PAYMENT_RECEIPT_FAILED",
+            self._a2a_mandate_id,
+            {
+                "remote_task_id": receipt.remote_task_id,
+                "task_state": receipt.task_state,
+                "provider_reference": result.provider_reference,
+            },
+        )
 
     async def _execute_action(
         self, policy: PolicyResult, mandate: dict[str, Any] | None = None

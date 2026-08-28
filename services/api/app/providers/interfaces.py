@@ -1,5 +1,6 @@
 """Async provider ports used by activities and application services."""
 
+from datetime import datetime
 from typing import Literal, Protocol, runtime_checkable
 
 from .contracts import (
@@ -75,5 +76,19 @@ class CustomerAgentClient(Protocol):
     ) -> CustomerAgentTask: ...
 
     async def get_task(self, *, remote_task_id: str) -> CustomerAgentTask: ...
+
+    async def send_payment_receipt(
+        self,
+        *,
+        remote_task_id: str,
+        mandate_id: str,
+        merchant_id: str,
+        case_id: str,
+        exact_amount_paise: int,
+        currency: str,
+        provider_reference: str,
+        observed_at: datetime,
+        idempotency_key: str,
+    ) -> CustomerAgentTask: ...
 
     async def cancel_task(self, *, remote_task_id: str, reason: str) -> CustomerAgentTask: ...

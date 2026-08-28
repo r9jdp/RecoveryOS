@@ -25,6 +25,7 @@ from services.api.app.providers.contracts import (
 from services.worker.app.a2a_runtime import LiveA2AMandateActivityServices
 from services.worker.app.contracts import (
     PollA2AMandateInput,
+    SendA2APaymentReceiptInput,
     StartA2AAuthorizationInput,
 )
 
@@ -35,6 +36,7 @@ NOW = datetime(2026, 8, 28, 10, 0, tzinfo=UTC)
 class FakeCustomerAgentClient:
     task: CustomerAgentTask
     requests: list[CustomerAgentRecoveryRequest] = field(default_factory=list)
+    receipts: list[dict[str, Any]] = field(default_factory=list)
 
     async def send_recovery_request(
         self, request: CustomerAgentRecoveryRequest
@@ -45,6 +47,11 @@ class FakeCustomerAgentClient:
     async def get_task(self, *, remote_task_id: str) -> CustomerAgentTask:
         assert remote_task_id == self.task.remote_task_id
         return self.task
+
+    async def send_payment_receipt(self, **receipt: Any) -> CustomerAgentTask:
+        assert receipt["remote_task_id"] == self.task.remote_task_id
+        self.receipts.append(receipt)
+        return self.task.model_copy(update={"state": "COMPLETED"})
 
     async def cancel_task(self, *, remote_task_id: str, reason: str) -> CustomerAgentTask:
         del reason
@@ -181,9 +188,38 @@ async def test_live_bridge_starts_exact_request_and_sql_nonce_is_consumed_once()
     replayed = await services.poll_and_verify_mandate(poll_command())
     assert verified.verification_status == "VERIFIED"
     assert verified.mandate_id == "mandate-1"
-    assert verified.verified_artifact == artifact
+    assert verified.verified_artifact is None
     assert replayed.verification_status == "REJECTED"
     assert replayed.reason_code == "REPLAYED"
+
+    receipt = await services.send_payment_receipt(
+        SendA2APaymentReceiptInput(
+            remote_task_id="task-1",
+            mandate_id="mandate-1",
+            merchant_id="merchant-1",
+            case_id="case-1",
+            exact_amount_paise=149_900,
+            currency="INR",
+            provider_reference="pay-captured-1",
+            observed_at=NOW.isoformat(),
+            idempotency_key="task-1:mandate-1:recovery.receipt.v1",
+        )
+    )
+    assert receipt.delivered is True
+    assert receipt.task_state == "COMPLETED"
+    assert client.receipts == [
+        {
+            "remote_task_id": "task-1",
+            "mandate_id": "mandate-1",
+            "merchant_id": "merchant-1",
+            "case_id": "case-1",
+            "exact_amount_paise": 149_900,
+            "currency": "INR",
+            "provider_reference": "pay-captured-1",
+            "observed_at": NOW,
+            "idempotency_key": "task-1:mandate-1:recovery.receipt.v1",
+        }
+    ]
     await engine.dispose()
 
 

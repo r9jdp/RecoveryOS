@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
 from app.config import CustomerAgentSettings
 from app.main import create_app
+from app.store import create_schema_for_tests
 
 from services.api.app.domain.enums import PaymentSurfaceType
 from services.api.app.integrations.a2a.client import A2ACustomerAgentClient
@@ -45,3 +47,83 @@ async def test_frozen_customer_agent_client_maps_auth_required_and_cancel() -> N
             reason="Payment captured elsewhere",
         )
         assert canceled.state == "CANCELED"
+
+
+@pytest.mark.asyncio
+async def test_customer_agent_client_completes_task_with_exact_idempotent_receipt(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'receipt.db').as_posix()}"
+    await create_schema_for_tests(database_url)
+    settings = CustomerAgentSettings(
+        origin="https://customer.example",
+        task_store="sql",
+        database_url=database_url,
+    )
+    app = create_app(settings)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://customer.example",
+    ) as http_client:
+        client = A2ACustomerAgentClient(
+            origin="https://customer.example",
+            client=http_client,
+        )
+        task = await client.send_recovery_request(
+            CustomerAgentRecoveryRequest(
+                idempotency_key="merchant-1:case-receipt:a2a",
+                case_id="case-receipt",
+                merchant_id="merchant-1",
+                customer_id="customer-1",
+                exact_amount_paise=149_900,
+                currency="INR",
+                payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+                payment_surface_reference="inv_receipt",
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+        approved = await http_client.post(
+            f"/v1/tasks/{task.remote_task_id}/approval",
+            json={
+                "decision": "APPROVE",
+                "merchant_id": "merchant-1",
+                "case_id": "case-receipt",
+                "exact_amount_paise": 149_900,
+                "payment_surface_reference": "inv_receipt",
+            },
+        )
+        assert approved.status_code == 200
+        mandate = approved.json()["artifacts"][0]["parts"][0]["data"]["data"]
+        observed_at = datetime.now(UTC)
+        receipt_args = {
+            "remote_task_id": task.remote_task_id,
+            "mandate_id": mandate["mandate_id"],
+            "merchant_id": "merchant-1",
+            "case_id": "case-receipt",
+            "exact_amount_paise": 149_900,
+            "currency": "INR",
+            "provider_reference": "pay_captured_receipt",
+            "observed_at": observed_at,
+            "idempotency_key": f"{task.remote_task_id}:{mandate['mandate_id']}:receipt",
+        }
+        completed = await client.send_payment_receipt(**receipt_args)
+        duplicate = await client.send_payment_receipt(**receipt_args)
+
+        assert completed.state == "COMPLETED"
+        assert duplicate == completed
+        fetched = await client.get_task(remote_task_id=task.remote_task_id)
+        assert fetched.state == "COMPLETED"
+    await app.state.customer_agent_store.close()
+
+    restarted_app = create_app(settings)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=restarted_app),
+        base_url="https://customer.example",
+    ) as restarted_http_client:
+        restarted_client = A2ACustomerAgentClient(
+            origin="https://customer.example",
+            client=restarted_http_client,
+        )
+        durable = await restarted_client.get_task(remote_task_id=task.remote_task_id)
+        assert durable.state == "COMPLETED"
+    await restarted_app.state.customer_agent_store.close()

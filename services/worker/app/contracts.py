@@ -177,6 +177,26 @@ class A2AMandatePollResult:
 
 
 @dataclass(frozen=True)
+class SendA2APaymentReceiptInput:
+    remote_task_id: str
+    mandate_id: str
+    merchant_id: str
+    case_id: str
+    exact_amount_paise: int
+    currency: str
+    provider_reference: str
+    observed_at: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True)
+class A2APaymentReceiptResult:
+    remote_task_id: str
+    task_state: str
+    delivered: bool
+
+
+@dataclass(frozen=True)
 class ReconciliationInput:
     case_id: str
     merchant_id: str

@@ -28,7 +28,9 @@ from services.api.app.providers.interfaces import CustomerAgentClient
 from .contracts import (
     A2AAuthorizationResult,
     A2AMandatePollResult,
+    A2APaymentReceiptResult,
     PollA2AMandateInput,
+    SendA2APaymentReceiptInput,
     StartA2AAuthorizationInput,
 )
 
@@ -110,7 +112,27 @@ class LiveA2AMandateActivityServices:
             task_state=task.state,
             verification_status="VERIFIED",
             mandate_id=verified.data.mandate_id,
-            verified_artifact=task.artifact,
+        )
+
+    async def send_payment_receipt(
+        self, command: SendA2APaymentReceiptInput
+    ) -> A2APaymentReceiptResult:
+        observed_at = _parse_instant(command.observed_at)
+        task = await self.client.send_payment_receipt(
+            remote_task_id=command.remote_task_id,
+            mandate_id=command.mandate_id,
+            merchant_id=command.merchant_id,
+            case_id=command.case_id,
+            exact_amount_paise=command.exact_amount_paise,
+            currency=command.currency,
+            provider_reference=command.provider_reference,
+            observed_at=observed_at,
+            idempotency_key=command.idempotency_key,
+        )
+        return A2APaymentReceiptResult(
+            remote_task_id=task.remote_task_id,
+            task_state=task.state,
+            delivered=task.state == "COMPLETED",
         )
 
 
@@ -121,6 +143,7 @@ class MockA2AMandateActivityServices:
     poll_results: list[A2AMandatePollResult] = field(default_factory=list)
     started: list[StartA2AAuthorizationInput] = field(default_factory=list)
     polls: list[PollA2AMandateInput] = field(default_factory=list)
+    receipts: list[SendA2APaymentReceiptInput] = field(default_factory=list)
 
     async def start_authorization(
         self, command: StartA2AAuthorizationInput
@@ -139,6 +162,17 @@ class MockA2AMandateActivityServices:
             remote_task_id=command.remote_task_id,
             task_state="AUTH_REQUIRED",
             verification_status="PENDING",
+        )
+
+    async def send_payment_receipt(
+        self, command: SendA2APaymentReceiptInput
+    ) -> A2APaymentReceiptResult:
+        if command not in self.receipts:
+            self.receipts.append(command)
+        return A2APaymentReceiptResult(
+            remote_task_id=command.remote_task_id,
+            task_state="COMPLETED",
+            delivered=True,
         )
 
 

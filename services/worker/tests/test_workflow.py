@@ -401,8 +401,8 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
         assert result.processed_signal_count == 4
         assert len(services.executed_actions) == 1
         assert services.executed_commands[0].mandate == {
-            "protocol_version": "recovery.mandate.v1",
-            "source": "verified-activity-result",
+            "mandate_id": "mandate-activity-verified",
+            "remote_task_id": "mock-a2a:a2a",
         }
         assert a2a_services.polls
         event_types = {event.event_type for event in services.audits}
@@ -416,6 +416,184 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
 
         replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
         assert replay_result.replay_failure is None
+
+
+@pytest.mark.asyncio
+async def test_verified_a2a_capture_delivers_one_exact_receipt_and_replays() -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=False)
+        a2a_services = MockA2AMandateActivityServices(
+            poll_results=[
+                A2AMandatePollResult(
+                    remote_task_id="mock-a2a:a2a-receipt",
+                    task_state="WORKING",
+                    verification_status="VERIFIED",
+                    mandate_id="mandate-receipt-1",
+                    verified_artifact={"protocol_version": "recovery.mandate.v1"},
+                )
+            ]
+        )
+        activities = RecoveryActivities(services, a2a_services)
+        task_queue = "recovery-a2a-receipt"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            base = workflow_input("a2a-receipt")
+            command = RecoveryWorkflowInput(
+                **{**base.__dict__, "candidate_action": "SEND_TO_CUSTOMER_AGENT"}
+            )
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if status.provider_reference == "mock-a2a:a2a-receipt":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("workflow did not start the customer authorization task")
+            await handle.signal(
+                "a2a_update",
+                A2AUpdateSignal(
+                    signal_id="wake-a2a-receipt",
+                    remote_task_id="mock-a2a:a2a-receipt",
+                    state="WORKING",
+                ),
+            )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if status.action_status == "SUCCEEDED":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("verified mandate did not open the payment surface")
+
+            captured = PaymentEventSignal(
+                signal_id="payment-a2a-receipt",
+                provider_event_id="pay-authoritative-captured-1",
+                payment_state="CAPTURED",
+                amount_paise=149_900,
+                authoritative=True,
+            )
+            await handle.signal("payment_event", captured)
+            await handle.signal("payment_event", captured)
+            result = await handle.result()
+            history = await handle.fetch_history()
+
+        assert result.outcome == "RECOVERED"
+        assert result.duplicate_signal_count == 1
+        assert len(a2a_services.receipts) == 1
+        receipt = a2a_services.receipts[0]
+        assert receipt.remote_task_id == "mock-a2a:a2a-receipt"
+        assert receipt.mandate_id == "mandate-receipt-1"
+        assert receipt.merchant_id == "merchant-fitbox"
+        assert receipt.case_id == "a2a-receipt"
+        assert receipt.exact_amount_paise == 149_900
+        assert receipt.currency == "INR"
+        assert receipt.provider_reference == "pay-authoritative-captured-1"
+        assert receipt.idempotency_key == (
+            "mock-a2a:a2a-receipt:mandate-receipt-1:recovery.receipt.v1"
+        )
+        assert any(event.event_type == "A2A_PAYMENT_RECEIPT_DELIVERED" for event in services.audits)
+        replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
+        assert replay_result.replay_failure is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payment_state", "authoritative", "amount_paise"),
+    [
+        ("CAPTURED", False, 149_900),
+        ("FAILED", True, 149_900),
+        ("CANCELED", True, 149_900),
+        ("CAPTURED", True, 149_899),
+    ],
+)
+async def test_a2a_non_exact_or_non_authoritative_payment_never_sends_success_receipt(
+    payment_state: str,
+    authoritative: bool,
+    amount_paise: int,
+) -> None:
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        services = MockRecoveryActivityServices(require_manual_approval=False)
+        a2a_services = MockA2AMandateActivityServices(
+            poll_results=[
+                A2AMandatePollResult(
+                    remote_task_id="mock-a2a:a2a-no-receipt",
+                    task_state="WORKING",
+                    verification_status="VERIFIED",
+                    mandate_id="mandate-no-receipt",
+                    verified_artifact={"protocol_version": "recovery.mandate.v1"},
+                )
+            ]
+        )
+        activities = RecoveryActivities(services, a2a_services)
+        task_queue = f"a2a-no-receipt-{payment_state}-{authoritative}-{amount_paise}"
+        async with Worker(
+            env.client,
+            task_queue=task_queue,
+            workflows=[RecoveryCaseWorkflow],
+            activities=activities.registrations(),
+        ):
+            base = workflow_input("a2a-no-receipt")
+            command = RecoveryWorkflowInput(
+                **{**base.__dict__, "candidate_action": "SEND_TO_CUSTOMER_AGENT"}
+            )
+            handle = await env.client.start_workflow(
+                RecoveryCaseWorkflow.run,
+                command,
+                id=recovery_workflow_id(command.case_id),
+                task_queue=task_queue,
+            )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if status.provider_reference == "mock-a2a:a2a-no-receipt":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("workflow did not start the customer authorization task")
+            await handle.signal(
+                "a2a_update",
+                A2AUpdateSignal(
+                    signal_id="wake-a2a-no-receipt",
+                    remote_task_id="mock-a2a:a2a-no-receipt",
+                    state="WORKING",
+                ),
+            )
+            for _ in range(100):
+                status = await handle.query("status", result_type=RecoveryWorkflowStatus)
+                if status.action_status == "SUCCEEDED":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                pytest.fail("verified mandate did not open the payment surface")
+            await handle.signal(
+                "payment_event",
+                PaymentEventSignal(
+                    signal_id="non-success-payment",
+                    provider_event_id="evt-non-success",
+                    payment_state=payment_state,
+                    amount_paise=amount_paise,
+                    authoritative=authoritative,
+                ),
+            )
+            await handle.signal(
+                "cancel",
+                CancellationSignal(
+                    signal_id="stop-after-non-success",
+                    reason="test complete",
+                    requested_by="test",
+                ),
+            )
+            await handle.result()
+
+        assert a2a_services.receipts == []
 
 
 @pytest.mark.asyncio

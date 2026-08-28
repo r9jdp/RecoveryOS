@@ -12,6 +12,7 @@ from typing import Protocol
 from .contracts import (
     A2AAuthorizationResult,
     A2AMandatePollResult,
+    A2APaymentReceiptResult,
     ActionExecutionResult,
     AuditInput,
     AuditResult,
@@ -29,6 +30,7 @@ from .contracts import (
     ReconciliationResult,
     ScoreInput,
     ScoreResult,
+    SendA2APaymentReceiptInput,
     StartA2AAuthorizationInput,
 )
 
@@ -41,6 +43,10 @@ class A2AMandateActivityServices(Protocol):
     async def poll_and_verify_mandate(
         self, command: PollA2AMandateInput
     ) -> A2AMandatePollResult: ...
+
+    async def send_payment_receipt(
+        self, command: SendA2APaymentReceiptInput
+    ) -> A2APaymentReceiptResult: ...
 
 
 class RecoveryActivityServices(Protocol):

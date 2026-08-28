@@ -59,6 +59,54 @@ class A2ACustomerAgentClient:
         result = await self._rpc("GetTask", {"id": remote_task_id})
         return self._map_task(result)
 
+    async def send_payment_receipt(
+        self,
+        *,
+        remote_task_id: str,
+        mandate_id: str,
+        merchant_id: str,
+        case_id: str,
+        exact_amount_paise: int,
+        currency: str,
+        provider_reference: str,
+        observed_at: datetime,
+        idempotency_key: str,
+    ) -> CustomerAgentTask:
+        """Complete an authorized task with an idempotent captured-payment receipt."""
+
+        result = await self._rpc(
+            "SendMessage",
+            {
+                "message": {
+                    "messageId": idempotency_key,
+                    "role": "ROLE_USER",
+                    "taskId": remote_task_id,
+                    "parts": [
+                        {
+                            "data": {
+                                "protocol_version": "recovery.receipt.v1",
+                                "task_id": remote_task_id,
+                                "mandate_id": mandate_id,
+                                "merchant_id": merchant_id,
+                                "case_id": case_id,
+                                "exact_amount_paise": exact_amount_paise,
+                                "currency": currency,
+                                "provider_reference": provider_reference,
+                                "payment_state": "CAPTURED",
+                                "observed_at": observed_at.isoformat(),
+                            }
+                        }
+                    ],
+                }
+            },
+        )
+        task = self._map_task(_object(result.get("task"), "SendMessage result.task"))
+        if task.remote_task_id != remote_task_id:
+            raise CustomerAgentProtocolError("payment receipt response task ID does not match")
+        if task.state != "COMPLETED":
+            raise CustomerAgentProtocolError("customer task did not complete after payment receipt")
+        return task
+
     async def cancel_task(self, *, remote_task_id: str, reason: str) -> CustomerAgentTask:
         result = await self._rpc("CancelTask", {"id": remote_task_id, "reason": reason})
         return self._map_task(result)

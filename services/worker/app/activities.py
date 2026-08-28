@@ -12,6 +12,7 @@ from temporalio import activity
 from .contracts import (
     A2AAuthorizationResult,
     A2AMandatePollResult,
+    A2APaymentReceiptResult,
     ActionExecutionResult,
     AuditInput,
     AuditResult,
@@ -29,6 +30,7 @@ from .contracts import (
     ReconciliationResult,
     ScoreInput,
     ScoreResult,
+    SendA2APaymentReceiptInput,
     StartA2AAuthorizationInput,
 )
 from .ports import A2AMandateActivityServices, RecoveryActivityServices
@@ -43,6 +45,7 @@ RECORD_AUDIT_EVENT = "recovery.record_audit_event"
 CANCEL_RECOVERY_ACTION = "recovery.cancel_recovery_action"
 START_A2A_AUTHORIZATION = "recovery.start_a2a_authorization"
 POLL_A2A_MANDATE = "recovery.poll_a2a_mandate"
+SEND_A2A_PAYMENT_RECEIPT = "recovery.send_a2a_payment_receipt"
 
 
 class RecoveryActivities:
@@ -98,6 +101,12 @@ class RecoveryActivities:
     async def poll_a2a_mandate(self, command: PollA2AMandateInput) -> A2AMandatePollResult:
         return await self._a2a_services.poll_and_verify_mandate(command)
 
+    @activity.defn(name=SEND_A2A_PAYMENT_RECEIPT)
+    async def send_a2a_payment_receipt(
+        self, command: SendA2APaymentReceiptInput
+    ) -> A2APaymentReceiptResult:
+        return await self._a2a_services.send_payment_receipt(command)
+
     def registrations(self) -> list[Callable[..., Any]]:
         return [
             self.normalize_failure,
@@ -110,6 +119,7 @@ class RecoveryActivities:
             self.cancel_recovery_action,
             self.start_a2a_authorization,
             self.poll_a2a_mandate,
+            self.send_a2a_payment_receipt,
         ]
 
 
@@ -254,4 +264,13 @@ class DisabledA2AMandateActivityServices:
             remote_task_id=command.remote_task_id,
             task_state="AUTH_REQUIRED",
             verification_status="PENDING",
+        )
+
+    async def send_payment_receipt(
+        self, command: SendA2APaymentReceiptInput
+    ) -> A2APaymentReceiptResult:
+        return A2APaymentReceiptResult(
+            remote_task_id=command.remote_task_id,
+            task_state="FAILED",
+            delivered=False,
         )
