@@ -11,7 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from .cards import RECOVERY_MANDATE_EXTENSION_URI, customer_agent_card
+from .cards import (
+    RECOVERY_MANDATE_EXTENSION_URI,
+    RECOVERY_RECEIPT_EXTENSION_URI,
+    customer_agent_card,
+)
 from .config import CustomerAgentSettings
 from .models import (
     ApprovalDecision,
@@ -21,7 +25,7 @@ from .models import (
     SendMessageParams,
 )
 from .service import CustomerAgentService, TaskConflictError, TaskNotFoundError
-from .signing import MandateSigner
+from .signing import MandateSigner, ReceiptVerifier
 from .store import TaskStore, create_task_store
 
 
@@ -35,6 +39,7 @@ def create_app(
         signer_key_id=active_settings.signer_key_id,
         seed=active_settings.signing_seed(),
     )
+    recovery_receipt_public_keys = active_settings.recovery_receipt_public_keys()
     store = task_store or create_task_store(
         mode=active_settings.task_store,
         database_url=(
@@ -44,6 +49,7 @@ def create_app(
     service = CustomerAgentService(
         store=store,
         signer=signer,
+        receipt_verifier=ReceiptVerifier(pinned_public_keys=recovery_receipt_public_keys),
         mandate_ttl_seconds=active_settings.request_ttl_seconds,
     )
 
@@ -89,6 +95,7 @@ def create_app(
             origin=active_settings.origin,
             signer_key_id=signer.signer_key_id,
             public_key=signer.public_key_base64,
+            accepted_receipt_signer_key_ids=sorted(recovery_receipt_public_keys),
         )
 
     @app.post("/rpc", tags=["a2a"])
@@ -131,6 +138,13 @@ def create_app(
                 -32009,
                 "Recovery mandate extension support is required",
                 [{"uri": RECOVERY_MANDATE_EXTENSION_URI}],
+            )
+        if RECOVERY_RECEIPT_EXTENSION_URI not in declared_extensions:
+            return _rpc_error(
+                request.id,
+                -32009,
+                "Authenticated recovery receipt extension support is required",
+                [{"uri": RECOVERY_RECEIPT_EXTENSION_URI}],
             )
         if request.method not in {"SendMessage", "GetTask", "CancelTask"}:
             return _rpc_error(request.id, -32601, "Method not found")

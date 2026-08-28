@@ -12,9 +12,17 @@ from app.config import CustomerAgentSettings
 from app.main import create_app
 from app.store import create_schema_for_tests
 
+from services.api.app.integrations.a2a.receipts import (
+    RecoveryReceiptData,
+    RecoveryReceiptSigner,
+)
+
 _A2A_HEADERS = {
     "A2A-Version": "1.0",
-    "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+    "A2A-Extensions": (
+        "https://recoveryos.dev/a2a/recovery-mandate/v1,"
+        "https://recoveryos.dev/a2a/recovery-receipt/v1"
+    ),
 }
 
 
@@ -72,6 +80,29 @@ def _approval() -> dict[str, Any]:
     }
 
 
+def _signed_receipt(
+    *,
+    task_id: str,
+    mandate_id: str,
+    provider_reference: str = "pay_durable_1",
+) -> dict[str, Any]:
+    signer = RecoveryReceiptSigner.mock()
+    return signer.sign(
+        RecoveryReceiptData(
+            receipt_id="message-receipt-durable",
+            signer_key_id=signer.signer_key_id,
+            task_id=task_id,
+            mandate_id=mandate_id,
+            merchant_id="merchant-1",
+            case_id="case-durable",
+            exact_amount_paise=149_900,
+            currency="INR",
+            provider_reference=provider_reference,
+            observed_at=datetime.now(UTC),
+        )
+    ).model_dump(mode="json")
+
+
 async def _client(app: Any) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
@@ -122,18 +153,10 @@ async def test_task_approval_artifact_and_receipt_survive_service_restarts(
                 "taskId": task_id,
                 "parts": [
                     {
-                        "data": {
-                            "protocol_version": "recovery.receipt.v1",
-                            "task_id": task_id,
-                            "mandate_id": signed["data"]["mandate_id"],
-                            "merchant_id": "merchant-1",
-                            "case_id": "case-durable",
-                            "exact_amount_paise": 149900,
-                            "currency": "INR",
-                            "provider_reference": "pay_durable_1",
-                            "payment_state": "CAPTURED",
-                            "observed_at": datetime.now(UTC).isoformat(),
-                        }
+                        "data": _signed_receipt(
+                            task_id=task_id,
+                            mandate_id=signed["data"]["mandate_id"],
+                        )
                     }
                 ],
             }
@@ -155,8 +178,10 @@ async def test_task_approval_artifact_and_receipt_survive_service_restarts(
         assert completed.json()["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
         assert duplicate.json()["result"]["task"] == completed.json()["result"]["task"]
         changed_receipt = deepcopy(receipt_request)
-        changed_receipt["params"]["message"]["parts"][0]["data"]["provider_reference"] = (
-            "pay_changed"
+        changed_receipt["params"]["message"]["parts"][0]["data"] = _signed_receipt(
+            task_id=task_id,
+            mandate_id=signed["data"]["mandate_id"],
+            provider_reference="pay_changed",
         )
         conflict = await client.post("/rpc", json=changed_receipt)
         assert conflict.json()["error"] == {
@@ -178,7 +203,7 @@ async def test_task_approval_artifact_and_receipt_survive_service_restarts(
         )
         assert final.json()["result"]["status"]["state"] == "TASK_STATE_COMPLETED"
         assert (
-            final.json()["result"]["artifacts"][1]["parts"][0]["data"]["provider_reference"]
+            final.json()["result"]["artifacts"][1]["parts"][0]["data"]["data"]["provider_reference"]
             == "pay_durable_1"
         )
     await fourth_app.state.customer_agent_store.close()

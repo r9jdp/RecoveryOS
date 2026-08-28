@@ -68,15 +68,29 @@ class RecoveryRequestData(WireModel):
 
 class RecoveryReceiptData(WireModel):
     protocol_version: Literal["recovery.receipt.v1"] = "recovery.receipt.v1"
-    task_id: str
-    mandate_id: str
-    merchant_id: str
-    case_id: str
+    receipt_id: str = Field(min_length=1)
+    signer_key_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    mandate_id: str = Field(min_length=1)
+    merchant_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
-    provider_reference: str
-    payment_state: Literal["CAPTURED", "FAILED", "CANCELED"]
+    provider_reference: str = Field(min_length=1)
+    payment_state: Literal["CAPTURED"] = "CAPTURED"
     observed_at: datetime
+
+    @model_validator(mode="after")
+    def require_aware_observation(self) -> RecoveryReceiptData:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("receipt observed_at must be timezone-aware")
+        return self
+
+
+class SignedRecoveryReceipt(WireModel):
+    algorithm: Literal["Ed25519"] = "Ed25519"
+    data: RecoveryReceiptData
+    signature: str = Field(min_length=1)
 
 
 class RecoveryMandateData(WireModel):

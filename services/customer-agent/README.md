@@ -3,6 +3,8 @@
 This is a separate A2A 1.0 service that collects explicit customer approval for one exact
 recovery surface. It returns an Ed25519-signed `recovery.mandate.v1` DataPart; it never calls a
 payment provider or treats a browser callback as proof of payment.
+It only completes a task after verifying an Ed25519-signed `recovery.receipt.v1` from a pinned
+RecoveryOS recovery-agent identity.
 
 ## Local process
 
@@ -34,6 +36,13 @@ The wire shape follows the current [A2A specification](https://github.com/a2apro
 | `CUSTOMER_AGENT_REQUEST_TTL_SECONDS` | Maximum signed-mandate lifetime, default 900 seconds |
 | `CUSTOMER_AGENT_TASK_STORE` | `memory` by default; set `sql` explicitly for hosted durability |
 | `CUSTOMER_AGENT_DATABASE_URL` | Server-only PostgreSQL URL required when the task store is `sql` |
+| `CUSTOMER_AGENT_RECEIPT_VERIFICATION_MODE` | `mock` locally; hosted environments must use `pinned` |
+| `CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON` | Server-only JSON map of accepted recovery-agent receipt signer IDs to Ed25519 public keys |
+
+The worker uses `RECOVERY_AGENT_RECEIPT_SIGNING_MODE=mock` locally. Hosted workers set it to
+`configured`, then provide `RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID` and the server-only
+`RECOVERY_AGENT_RECEIPT_ED25519_PRIVATE_KEY`. The matching public key is pinned in the customer
+agent; it is not learned from an incoming message or HTTP header.
 
 Mock mode is the default and uses a deterministic development-only key. A hosted non-mock process
 must set the real-signing flag, inject the seed from server-side secret storage, select the SQL
@@ -69,7 +78,11 @@ Application startup does not create this table. `/health/ready` returns HTTP 503
 2. The approval page repeats the exact merchant, case, amount in paise, currency, and payment surface.
 3. Approval emits a signed, bounded `recovery.mandate.v1` artifact and moves the task to `WORKING`.
 4. RecoveryOS verifies the pinned key and full scope, then atomically consumes the nonce.
-5. A scoped `recovery.receipt.v1` message completes the task with the provider result.
+5. RecoveryOS signs the complete receipt scope—receipt/task/mandate IDs, merchant, case, integer
+   amount, currency, captured provider reference, state, and observation time—with Ed25519.
+6. The customer agent verifies the pinned signer and exact mandate scope before a
+   `recovery.receipt.v1` message can complete the task. Exact replays are idempotent; changed
+   payloads using the same receipt/message ID are rejected.
 
 The mock task store is process-local. Hosted multi-instance operation uses the durable task store;
 nonce replay protection remains at the RecoveryOS API boundary using the coordinator-owned

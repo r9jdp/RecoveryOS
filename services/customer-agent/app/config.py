@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import Literal
 
 from pydantic import Field
 from pydantic.types import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .signing import MandateSigner
+
 _MOCK_SEED = hashlib.sha256(b"recoveryos-customer-agent-mock-key-v1").digest()
+_MOCK_RECEIPT_SEED = hashlib.sha256(b"recoveryos-recovery-agent-receipt-mock-key-v1").digest()
+_MOCK_RECEIPT_SIGNER_KEY_ID = "recoveryos-receipt-mock-2026-01"
 
 
 class CustomerAgentSettings(BaseSettings):
@@ -23,6 +28,8 @@ class CustomerAgentSettings(BaseSettings):
     request_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     task_store: Literal["memory", "sql"] = "memory"
     database_url: SecretStr | None = None
+    receipt_verification_mode: Literal["mock", "pinned"] = "mock"
+    recovery_agent_public_keys_json: SecretStr | None = None
 
     def signing_seed(self) -> bytes:
         if self.real_signing_enabled:
@@ -44,3 +51,28 @@ class CustomerAgentSettings(BaseSettings):
                 "CUSTOMER_AGENT_DATABASE_URL is required when CUSTOMER_AGENT_TASK_STORE=sql"
             )
         return self.database_url.get_secret_value()
+
+    def recovery_receipt_public_keys(self) -> dict[str, str]:
+        if self.receipt_verification_mode == "mock":
+            mock_signer = MandateSigner.from_seed(
+                signer_key_id=_MOCK_RECEIPT_SIGNER_KEY_ID,
+                seed=_MOCK_RECEIPT_SEED,
+            )
+            return {_MOCK_RECEIPT_SIGNER_KEY_ID: mock_signer.public_key_base64}
+        if self.recovery_agent_public_keys_json is None:
+            raise ValueError(
+                "CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON is required in pinned mode"
+            )
+        try:
+            parsed = json.loads(self.recovery_agent_public_keys_json.get_secret_value())
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON must be valid JSON"
+            ) from exc
+        if not isinstance(parsed, dict) or not parsed:
+            raise ValueError("at least one recovery-agent receipt public key must be pinned")
+        if not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in parsed.items()
+        ):
+            raise ValueError("recovery-agent receipt keys must map string IDs to strings")
+        return parsed

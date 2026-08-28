@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from app.store import create_schema_for_tests
 
 from services.api.app.domain.enums import PaymentSurfaceType
 from services.api.app.integrations.a2a.client import A2ACustomerAgentClient
+from services.api.app.integrations.a2a.receipts import RecoveryReceiptSigner
 from services.api.app.providers.contracts import CustomerAgentRecoveryRequest
 
 
@@ -127,3 +129,72 @@ async def test_customer_agent_client_completes_task_with_exact_idempotent_receip
         durable = await restarted_client.get_task(remote_task_id=task.remote_task_id)
         assert durable.state == "COMPLETED"
     await restarted_app.state.customer_agent_store.close()
+
+
+@pytest.mark.asyncio
+async def test_configured_recovery_receipt_signer_must_match_customer_agent_pin() -> None:
+    receipt_signer = RecoveryReceiptSigner.from_seed(
+        signer_key_id="recovery-agent-hosted-1",
+        seed=bytes(range(32)),
+    )
+    settings = CustomerAgentSettings(
+        origin="https://customer.example",
+        receipt_verification_mode="pinned",
+        recovery_agent_public_keys_json=json.dumps(
+            {receipt_signer.signer_key_id: receipt_signer.public_key_base64}
+        ),
+    )
+    app = create_app(settings)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="https://customer.example",
+    ) as http_client:
+        client = A2ACustomerAgentClient(
+            origin="https://customer.example",
+            client=http_client,
+            receipt_signer=receipt_signer,
+        )
+        task = await client.send_recovery_request(
+            CustomerAgentRecoveryRequest(
+                idempotency_key="merchant-1:case-hosted:a2a",
+                case_id="case-hosted",
+                merchant_id="merchant-1",
+                customer_id="customer-1",
+                exact_amount_paise=149_900,
+                currency="INR",
+                payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+                payment_surface_reference="inv_hosted",
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+        approved = await http_client.post(
+            f"/v1/tasks/{task.remote_task_id}/approval",
+            json={
+                "decision": "APPROVE",
+                "merchant_id": "merchant-1",
+                "case_id": "case-hosted",
+                "exact_amount_paise": 149_900,
+                "payment_surface_reference": "inv_hosted",
+            },
+        )
+        mandate_id = approved.json()["artifacts"][0]["parts"][0]["data"]["data"]["mandate_id"]
+        completed = await client.send_payment_receipt(
+            remote_task_id=task.remote_task_id,
+            mandate_id=mandate_id,
+            merchant_id="merchant-1",
+            case_id="case-hosted",
+            exact_amount_paise=149_900,
+            currency="INR",
+            provider_reference="pay_hosted_captured",
+            observed_at=datetime.now(UTC),
+            idempotency_key=f"{task.remote_task_id}:{mandate_id}:receipt",
+        )
+        assert completed.state == "COMPLETED"
+
+
+def test_pinned_receipt_mode_requires_explicit_server_side_keys() -> None:
+    with pytest.raises(
+        ValueError,
+        match="CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON is required",
+    ):
+        create_app(CustomerAgentSettings(receipt_verification_mode="pinned"))

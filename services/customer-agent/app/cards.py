@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v1"
+RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v1"
 
 
-def customer_agent_card(*, origin: str, signer_key_id: str, public_key: str) -> dict[str, object]:
+def customer_agent_card(
+    *,
+    origin: str,
+    signer_key_id: str,
+    public_key: str,
+    accepted_receipt_signer_key_ids: list[str],
+) -> dict[str, object]:
     return {
         "name": "RecoveryOS Customer Authorization Agent",
         "description": (
@@ -32,7 +39,29 @@ def customer_agent_card(*, origin: str, signer_key_id: str, public_key: str) -> 
                         "signerKeyId": signer_key_id,
                         "publicKeyBase64Url": public_key,
                     },
-                }
+                },
+                {
+                    "uri": RECOVERY_RECEIPT_EXTENSION_URI,
+                    "required": True,
+                    "params": {
+                        "authentication": "Ed25519",
+                        "protocolVersion": "recovery.receipt.v1",
+                        "canonicalization": "RECOVERYOS_CANONICAL_JSON_V1",
+                        "acceptedSignerKeyIds": accepted_receipt_signer_key_ids,
+                        "scope": [
+                            "receipt_id",
+                            "task_id",
+                            "mandate_id",
+                            "merchant_id",
+                            "case_id",
+                            "exact_amount_paise",
+                            "currency",
+                            "provider_reference",
+                            "payment_state",
+                            "observed_at",
+                        ],
+                    },
+                },
             ],
         },
         "defaultInputModes": ["application/json"],

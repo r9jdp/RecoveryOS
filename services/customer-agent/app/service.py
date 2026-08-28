@@ -19,9 +19,10 @@ from .models import (
     RecoveryReceiptData,
     RecoveryRequestData,
     SignedMandate,
+    SignedRecoveryReceipt,
     TaskRecord,
 )
-from .signing import MandateSigner
+from .signing import MandateSigner, ReceiptAuthenticationError, ReceiptVerifier
 from .store import TaskStore, TaskVersionConflictError
 
 
@@ -39,10 +40,12 @@ class CustomerAgentService:
         *,
         store: TaskStore,
         signer: MandateSigner,
+        receipt_verifier: ReceiptVerifier,
         mandate_ttl_seconds: int = 900,
     ) -> None:
         self._store = store
         self._signer = signer
+        self._receipt_verifier = receipt_verifier
         self._mandate_ttl = timedelta(seconds=mandate_ttl_seconds)
 
     async def send_message(self, message: Message) -> TaskRecord:
@@ -51,9 +54,21 @@ class CustomerAgentService:
         if protocol_version == "recovery.request.v1":
             request = RecoveryRequestData.model_validate(part)
             return await self._create_authorization_task(message=message, request=request)
-        if protocol_version == "recovery.receipt.v1":
-            receipt = RecoveryReceiptData.model_validate(part)
-            return await self._complete_with_receipt(message=message, receipt=receipt)
+        nested_data = part.get("data")
+        nested_protocol = (
+            nested_data.get("protocol_version") if isinstance(nested_data, dict) else None
+        )
+        if protocol_version == "recovery.receipt.v1" or nested_protocol == "recovery.receipt.v1":
+            signed_receipt = SignedRecoveryReceipt.model_validate(part)
+            try:
+                receipt = self._receipt_verifier.verify(signed_receipt)
+            except ReceiptAuthenticationError as exc:
+                raise TaskConflictError(str(exc)) from exc
+            return await self._complete_with_receipt(
+                message=message,
+                signed_receipt=signed_receipt,
+                receipt=receipt,
+            )
         raise TaskConflictError("unsupported recovery DataPart protocol_version")
 
     async def _create_authorization_task(
@@ -217,7 +232,11 @@ class CustomerAgentService:
         return task
 
     async def _complete_with_receipt(
-        self, *, message: Message, receipt: RecoveryReceiptData
+        self,
+        *,
+        message: Message,
+        signed_receipt: SignedRecoveryReceipt,
+        receipt: RecoveryReceiptData,
     ) -> TaskRecord:
         task_id = message.task_id or receipt.task_id
         task = await self.get_task(task_id)
@@ -225,6 +244,8 @@ class CustomerAgentService:
             return task
         if task.state != "TASK_STATE_WORKING":
             raise TaskConflictError("task is not awaiting a payment receipt")
+        if message.message_id != receipt.receipt_id:
+            raise TaskConflictError("receipt ID does not match the A2A message ID")
         expected_revision = task.revision
         mandate_part = task.artifacts[0]["parts"][0]["data"]
         mandate_data = mandate_part["data"]
@@ -252,7 +273,7 @@ class CustomerAgentService:
             {
                 "artifactId": f"receipt_{uuid4().hex}",
                 "name": "Recovery payment receipt",
-                "parts": [{"data": receipt.model_dump(mode="json")}],
+                "parts": [{"data": signed_receipt.model_dump(mode="json")}],
             }
         )
         task.history.append(message.model_dump(mode="json", by_alias=True, exclude_none=True))

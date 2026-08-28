@@ -10,7 +10,10 @@ import httpx
 
 from services.api.app.providers.contracts import CustomerAgentRecoveryRequest, CustomerAgentTask
 
+from .receipts import RecoveryReceiptData, RecoveryReceiptSigner
+
 RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v1"
+RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v1"
 
 
 class CustomerAgentProtocolError(RuntimeError):
@@ -34,10 +37,12 @@ class A2ACustomerAgentClient:
         origin: str,
         client: httpx.AsyncClient | None = None,
         timeout_seconds: float = 5.0,
+        receipt_signer: RecoveryReceiptSigner | None = None,
     ) -> None:
         self._origin = origin.rstrip("/")
         self._provided_client = client
         self._timeout = timeout_seconds
+        self._receipt_signer = receipt_signer or RecoveryReceiptSigner.mock()
 
     async def send_recovery_request(
         self, request: CustomerAgentRecoveryRequest
@@ -74,6 +79,19 @@ class A2ACustomerAgentClient:
     ) -> CustomerAgentTask:
         """Complete an authorized task with an idempotent captured-payment receipt."""
 
+        receipt = RecoveryReceiptData(
+            receipt_id=idempotency_key,
+            signer_key_id=self._receipt_signer.signer_key_id,
+            task_id=remote_task_id,
+            mandate_id=mandate_id,
+            merchant_id=merchant_id,
+            case_id=case_id,
+            exact_amount_paise=exact_amount_paise,
+            currency=currency,
+            provider_reference=provider_reference,
+            observed_at=observed_at,
+        )
+        signed_receipt = self._receipt_signer.sign(receipt)
         result = await self._rpc(
             "SendMessage",
             {
@@ -81,22 +99,7 @@ class A2ACustomerAgentClient:
                     "messageId": idempotency_key,
                     "role": "ROLE_USER",
                     "taskId": remote_task_id,
-                    "parts": [
-                        {
-                            "data": {
-                                "protocol_version": "recovery.receipt.v1",
-                                "task_id": remote_task_id,
-                                "mandate_id": mandate_id,
-                                "merchant_id": merchant_id,
-                                "case_id": case_id,
-                                "exact_amount_paise": exact_amount_paise,
-                                "currency": currency,
-                                "provider_reference": provider_reference,
-                                "payment_state": "CAPTURED",
-                                "observed_at": observed_at.isoformat(),
-                            }
-                        }
-                    ],
+                    "parts": [{"data": signed_receipt.model_dump(mode="json")}],
                 }
             },
         )
@@ -129,7 +132,9 @@ class A2ACustomerAgentClient:
             json=payload,
             headers={
                 "A2A-Version": "1.0",
-                "A2A-Extensions": RECOVERY_MANDATE_EXTENSION_URI,
+                "A2A-Extensions": (
+                    f"{RECOVERY_MANDATE_EXTENSION_URI},{RECOVERY_RECEIPT_EXTENSION_URI}"
+                ),
             },
         )
         response.raise_for_status()

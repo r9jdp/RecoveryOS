@@ -22,6 +22,7 @@ from services.api.app.integrations.a2a.mandates import (
     MandateVerifier,
 )
 from services.api.app.integrations.a2a.models import ExpectedMandateScope, SignedMandate
+from services.api.app.integrations.a2a.receipts import create_receipt_signer_from_env
 from services.api.app.providers.contracts import CustomerAgentRecoveryRequest
 from services.api.app.providers.interfaces import CustomerAgentClient
 
@@ -181,7 +182,8 @@ def create_live_a2a_services_from_env() -> LiveA2AMandateActivityServices:
 
     return LiveA2AMandateActivityServices(
         client=A2ACustomerAgentClient(
-            origin=os.getenv("CUSTOMER_AGENT_ORIGIN", "http://localhost:8010")
+            origin=os.getenv("CUSTOMER_AGENT_ORIGIN", "http://localhost:8010"),
+            receipt_signer=create_receipt_signer_from_env(),
         ),
         verifier=create_mandate_verifier_from_env(),
     )

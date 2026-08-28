@@ -8,6 +8,15 @@ import pytest
 from app.config import CustomerAgentSettings
 from app.main import create_app
 
+from services.api.app.integrations.a2a.receipts import (
+    RecoveryReceiptData,
+    RecoveryReceiptSigner,
+)
+
+_A2A_EXTENSIONS = (
+    "https://recoveryos.dev/a2a/recovery-mandate/v1,https://recoveryos.dev/a2a/recovery-receipt/v1"
+)
+
 
 @pytest.fixture
 def app():  # type: ignore[no-untyped-def]
@@ -26,7 +35,7 @@ async def client(app):  # type: ignore[no-untyped-def]
         base_url="https://customer-agent.example",
         headers={
             "A2A-Version": "1.0",
-            "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+            "A2A-Extensions": _A2A_EXTENSIONS,
         },
     ) as active_client:
         yield active_client
@@ -69,6 +78,65 @@ def recovery_request(
     }
 
 
+def signed_receipt(
+    *,
+    task_id: str,
+    mandate_id: str,
+    message_id: str = "message-receipt",
+    merchant_id: str = "merchant-1",
+    case_id: str = "case-1",
+    exact_amount_paise: int = 149_900,
+    provider_reference: str = "pay_captured_1",
+    signer: RecoveryReceiptSigner | None = None,
+) -> dict[str, Any]:
+    active_signer = signer or RecoveryReceiptSigner.mock()
+    return active_signer.sign(
+        RecoveryReceiptData(
+            receipt_id=message_id,
+            signer_key_id=active_signer.signer_key_id,
+            task_id=task_id,
+            mandate_id=mandate_id,
+            merchant_id=merchant_id,
+            case_id=case_id,
+            exact_amount_paise=exact_amount_paise,
+            currency="INR",
+            provider_reference=provider_reference,
+            observed_at=datetime.now(UTC),
+        )
+    ).model_dump(mode="json")
+
+
+def receipt_rpc(
+    *,
+    task_id: str,
+    mandate_id: str,
+    message_id: str = "message-receipt",
+    envelope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": f"rpc-{message_id}",
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": message_id,
+                "role": "ROLE_USER",
+                "taskId": task_id,
+                "parts": [
+                    {
+                        "data": envelope
+                        or signed_receipt(
+                            task_id=task_id,
+                            mandate_id=mandate_id,
+                            message_id=message_id,
+                        )
+                    }
+                ],
+            }
+        },
+    }
+
+
 @pytest.mark.asyncio
 async def test_agent_card_declares_a2a_1_and_public_signing_key(client: httpx.AsyncClient) -> None:
     response = await client.get("/.well-known/agent-card.json")
@@ -86,6 +154,26 @@ async def test_agent_card_declares_a2a_1_and_public_signing_key(client: httpx.As
     extension = card["capabilities"]["extensions"][0]
     assert extension["params"]["signingAlgorithm"] == "Ed25519"
     assert len(extension["params"]["publicKeyBase64Url"]) == 43
+    receipt_extension = card["capabilities"]["extensions"][1]
+    assert receipt_extension["uri"].endswith("/recovery-receipt/v1")
+    assert receipt_extension["params"] == {
+        "authentication": "Ed25519",
+        "protocolVersion": "recovery.receipt.v1",
+        "canonicalization": "RECOVERYOS_CANONICAL_JSON_V1",
+        "acceptedSignerKeyIds": ["recoveryos-receipt-mock-2026-01"],
+        "scope": [
+            "receipt_id",
+            "task_id",
+            "mandate_id",
+            "merchant_id",
+            "case_id",
+            "exact_amount_paise",
+            "currency",
+            "provider_reference",
+            "payment_state",
+            "observed_at",
+        ],
+    }
 
 
 @pytest.mark.asyncio
@@ -152,38 +240,140 @@ async def test_send_get_approval_and_receipt_lifecycle(client: httpx.AsyncClient
     assert signed["algorithm"] == "Ed25519"
     assert signed["data"]["authorized_action"] == "OPEN_EXACT_PAYMENT_SURFACE"
 
-    receipt = {
-        "jsonrpc": "2.0",
-        "id": "rpc-receipt",
-        "method": "SendMessage",
-        "params": {
-            "message": {
-                "messageId": "message-receipt",
-                "role": "ROLE_USER",
-                "taskId": task["id"],
-                "parts": [
-                    {
-                        "data": {
-                            "protocol_version": "recovery.receipt.v1",
-                            "task_id": task["id"],
-                            "mandate_id": signed["data"]["mandate_id"],
-                            "merchant_id": "merchant-1",
-                            "case_id": "case-1",
-                            "exact_amount_paise": 149900,
-                            "currency": "INR",
-                            "provider_reference": "pay_captured_1",
-                            "payment_state": "CAPTURED",
-                            "observed_at": datetime.now(UTC).isoformat(),
-                        }
-                    }
-                ],
-            }
-        },
-    }
+    receipt = receipt_rpc(task_id=task["id"], mandate_id=signed["data"]["mandate_id"])
     completed = await client.post("/rpc", json=receipt)
     result = completed.json()["result"]["task"]
     assert result["status"]["state"] == "TASK_STATE_COMPLETED"
-    assert result["artifacts"][1]["parts"][0]["data"]["provider_reference"] == "pay_captured_1"
+    assert (
+        result["artifacts"][1]["parts"][0]["data"]["data"]["provider_reference"] == "pay_captured_1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_receipt_requires_valid_signature_exact_scope_and_stable_replay(
+    client: httpx.AsyncClient,
+) -> None:
+    task = (
+        await client.post(
+            "/rpc",
+            json=recovery_request(request_id="receipt-auth", idempotency_key="receipt-auth:a2a"),
+        )
+    ).json()["result"]["task"]
+    approved = await client.post(
+        f"/v1/tasks/{task['id']}/approval",
+        json={
+            "decision": "APPROVE",
+            "merchant_id": "merchant-1",
+            "case_id": "case-1",
+            "exact_amount_paise": 149_900,
+            "payment_surface_reference": "inv_123",
+        },
+    )
+    mandate_id = approved.json()["artifacts"][0]["parts"][0]["data"]["data"]["mandate_id"]
+    message_id = "receipt-auth-message"
+
+    missing_auth = receipt_rpc(
+        task_id=task["id"],
+        mandate_id=mandate_id,
+        message_id=message_id,
+        envelope={
+            "protocol_version": "recovery.receipt.v1",
+            "task_id": task["id"],
+            "mandate_id": mandate_id,
+        },
+    )
+    missing_response = await client.post("/rpc", json=missing_auth)
+    assert missing_response.json()["error"]["code"] == -32602
+
+    exact_envelope = signed_receipt(
+        task_id=task["id"],
+        mandate_id=mandate_id,
+        message_id=message_id,
+    )
+    bad_signature = {
+        **exact_envelope,
+        "signature": ("A" if exact_envelope["signature"][0] != "A" else "B")
+        + exact_envelope["signature"][1:],
+    }
+    bad_response = await client.post(
+        "/rpc",
+        json=receipt_rpc(
+            task_id=task["id"],
+            mandate_id=mandate_id,
+            message_id=message_id,
+            envelope=bad_signature,
+        ),
+    )
+    assert bad_response.json()["error"] == {
+        "code": -32002,
+        "message": "payment receipt signature is invalid",
+    }
+
+    changed_scope = {
+        **exact_envelope,
+        "data": {**exact_envelope["data"], "exact_amount_paise": 1},
+    }
+    changed_response = await client.post(
+        "/rpc",
+        json=receipt_rpc(
+            task_id=task["id"],
+            mandate_id=mandate_id,
+            message_id=message_id,
+            envelope=changed_scope,
+        ),
+    )
+    assert changed_response.json()["error"]["message"] == "payment receipt signature is invalid"
+
+    valid_wrong_scope = signed_receipt(
+        task_id=task["id"],
+        mandate_id=mandate_id,
+        message_id=message_id,
+        exact_amount_paise=1,
+    )
+    wrong_scope_response = await client.post(
+        "/rpc",
+        json=receipt_rpc(
+            task_id=task["id"],
+            mandate_id=mandate_id,
+            message_id=message_id,
+            envelope=valid_wrong_scope,
+        ),
+    )
+    assert wrong_scope_response.json()["error"] == {
+        "code": -32002,
+        "message": "receipt scope does not match the signed mandate",
+    }
+
+    exact_request = receipt_rpc(
+        task_id=task["id"],
+        mandate_id=mandate_id,
+        message_id=message_id,
+        envelope=exact_envelope,
+    )
+    completed = await client.post("/rpc", json=exact_request)
+    replay = await client.post("/rpc", json=exact_request)
+    assert completed.json()["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert replay.json()["result"]["task"] == completed.json()["result"]["task"]
+
+    different_envelope = signed_receipt(
+        task_id=task["id"],
+        mandate_id=mandate_id,
+        message_id=message_id,
+        provider_reference="pay_changed_but_validly_signed",
+    )
+    different_response = await client.post(
+        "/rpc",
+        json=receipt_rpc(
+            task_id=task["id"],
+            mandate_id=mandate_id,
+            message_id=message_id,
+            envelope=different_envelope,
+        ),
+    )
+    assert different_response.json()["error"] == {
+        "code": -32002,
+        "message": "messageId was reused with different receipt data",
+    }
 
 
 @pytest.mark.asyncio
