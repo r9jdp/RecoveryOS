@@ -27,6 +27,7 @@ from services.api.app.domain.enums import (
     Diagnosis,
     PaymentState,
     PaymentSurfaceType,
+    PolicyDisposition,
     RecoveryActionType,
     RevenueAttribution,
     SubscriptionState,
@@ -35,6 +36,7 @@ from services.api.app.models import (
     A2AMandateNonceConsumption,
     CustomerAgentTaskRecord,
     Invoice,
+    PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
     RecoveryEventRecord,
@@ -55,6 +57,9 @@ MERCHANT_ID = "merchant_fitbox"
 A2A_CASE_ID = "case_fitbox_a2a_service_e2e"
 A2A_INVOICE_ID = "inv_fitbox_a2a_service_e2e"
 A2A_ACTION_ID = "action_fitbox_a2a_service_e2e"
+A2A_DELEGATION_ACTION_ID = "action_fitbox_a2a_delegation_service_e2e"
+A2A_ACTION_POLICY_ID = "policy_fitbox_a2a_surface_service_e2e"
+A2A_DELEGATION_POLICY_ID = "policy_fitbox_a2a_delegation_service_e2e"
 A2A_BILLING_CYCLE = "service-e2e-a2a"
 A2A_AMOUNT_PAISE = 149_900
 
@@ -162,6 +167,16 @@ async def _ensure_a2a_case() -> datetime:
             recovery_deadline=deadline,
             version=1,
         )
+        delegation_action = RecoveryActionRecord(
+            id=A2A_DELEGATION_ACTION_ID,
+            case_id=A2A_CASE_ID,
+            action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
+            payment_surface_type=None,
+            status=ActionStatus.AWAITING_APPROVAL,
+            idempotency_key=f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1",
+            created_at=now,
+            updated_at=now,
+        )
         action = RecoveryActionRecord(
             id=A2A_ACTION_ID,
             case_id=A2A_CASE_ID,
@@ -173,7 +188,36 @@ async def _ensure_a2a_case() -> datetime:
             created_at=now,
             updated_at=now,
         )
-        for record in (invoice, recovery_case, action):
+        delegation_policy = PolicyDecisionRecord(
+            id=A2A_DELEGATION_POLICY_ID,
+            case_id=A2A_CASE_ID,
+            action_id=A2A_DELEGATION_ACTION_ID,
+            disposition=PolicyDisposition.REQUIRE_MANUAL_APPROVAL,
+            decision_code="A2A_REQUIRES_APPROVAL",
+            reason_codes=["A2A_REQUIRES_APPROVAL"],
+            reasons=["Customer-agent delegation requires operator approval."],
+            policy_version="service-e2e.v1",
+            created_at=now,
+        )
+        action_policy = PolicyDecisionRecord(
+            id=A2A_ACTION_POLICY_ID,
+            case_id=A2A_CASE_ID,
+            action_id=A2A_ACTION_ID,
+            disposition=PolicyDisposition.ALLOW,
+            decision_code="EXACT_INVOICE_SURFACE_ALLOWED",
+            reason_codes=["EXACT_INVOICE_SURFACE"],
+            reasons=["The mandate may open only the persisted subscription invoice surface."],
+            policy_version="service-e2e.v1",
+            created_at=now,
+        )
+        for record in (
+            invoice,
+            recovery_case,
+            delegation_action,
+            action,
+            delegation_policy,
+            action_policy,
+        ):
             session.add(record)
             await session.flush()
         await session.commit()
@@ -262,6 +306,7 @@ async def start_a2a_workflow() -> dict[str, Any]:
 async def a2a_snapshot() -> dict[str, Any]:
     async with get_session_factory()() as session:
         action = await session.get(RecoveryActionRecord, A2A_ACTION_ID)
+        recovery_case = await session.get(RecoveryCase, A2A_CASE_ID)
         task = await session.scalar(
             select(CustomerAgentTaskRecord).where(
                 CustomerAgentTaskRecord.idempotency_key == f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1"
@@ -272,6 +317,18 @@ async def a2a_snapshot() -> dict[str, Any]:
                 A2AMandateNonceConsumption.case_id == A2A_CASE_ID
             )
         )
+        revenue_count = await session.scalar(
+            select(func.count(RevenueRecognitionRecord.id)).where(
+                RevenueRecognitionRecord.case_id == A2A_CASE_ID
+            )
+        )
+    receipt_count = 0
+    if task is not None:
+        for artifact in task.payload.get("artifacts", []):
+            for part in artifact.get("parts", []):
+                data = part.get("data", {})
+                if data.get("protocol_version") == "recovery.receipt.v1":
+                    receipt_count += 1
     client = await _client()
     handle = client.get_workflow_handle(recovery_workflow_id(A2A_CASE_ID))
     status = await handle.query("status", result_type=RecoveryWorkflowStatus)
@@ -284,7 +341,10 @@ async def a2a_snapshot() -> dict[str, Any]:
             "customer_task_id": task.task_id if task is not None else None,
             "customer_task_state": task.state if task is not None else None,
             "customer_task_version": task.version if task is not None else None,
+            "customer_task_receipt_count": receipt_count,
             "nonce_consumption_count": int(nonce_count or 0),
+            "case_outcome": recovery_case.case_outcome.value if recovery_case is not None else None,
+            "revenue_recognition_count": int(revenue_count or 0),
         },
         "temporal": {
             "phase": status.phase,
@@ -293,6 +353,7 @@ async def a2a_snapshot() -> dict[str, Any]:
             "provider_reference": status.provider_reference,
             "a2a_state": status.a2a_state,
             "mandate_received": status.mandate_received,
+            "outcome": status.outcome,
         },
     }
 

@@ -43,15 +43,19 @@ interface A2AServiceSnapshot {
     action_external_reference: string | null;
     action_status: string | null;
     customer_task_id: string | null;
+    customer_task_receipt_count: number;
     customer_task_state: string | null;
     customer_task_version: number | null;
+    case_outcome: string | null;
     nonce_consumption_count: number;
+    revenue_recognition_count: number;
   };
   temporal: {
     a2a_state: string | null;
     action: string | null;
     action_status: string | null;
     mandate_received: boolean;
+    outcome: string | null;
     phase: string;
     provider_reference: string | null;
   };
@@ -359,4 +363,57 @@ test("real services recover FitBox without fixture or network mocks", async ({
   });
   const afterReplay = serviceState("a2a-snapshot") as A2AServiceSnapshot;
   expect(afterReplay.database.nonce_consumption_count).toBe(1);
+
+  const a2aSuccessPayload = {
+    provider_event_id: "service-e2e-a2a-payment-captured-001",
+    amount_paise: a2aStart.exact_amount_paise,
+    occurred_at: new Date().toISOString(),
+    subscription_reactivated: false,
+  };
+  const a2aSuccess = await request.post(
+    `${apiOrigin}/v1/mock/recovery-cases/${a2aStart.case_id}/payment-success`,
+    { data: a2aSuccessPayload },
+  );
+  expect(a2aSuccess.ok()).toBe(true);
+  expect((await a2aSuccess.json()).newly_recognized).toBe(true);
+  const duplicateA2aSuccess = await request.post(
+    `${apiOrigin}/v1/mock/recovery-cases/${a2aStart.case_id}/payment-success`,
+    { data: a2aSuccessPayload },
+  );
+  expect(duplicateA2aSuccess.ok()).toBe(true);
+  expect((await duplicateA2aSuccess.json()).newly_recognized).toBe(false);
+
+  const completed = await a2aSnapshotEventually(
+    (value) =>
+      value.database.customer_task_state === "TASK_STATE_COMPLETED" &&
+      value.database.customer_task_receipt_count === 1 &&
+      value.database.revenue_recognition_count === 1 &&
+      value.database.case_outcome === "RECOVERED" &&
+      value.temporal.a2a_state === "COMPLETED" &&
+      value.temporal.outcome === "RECOVERED",
+  );
+  expect(completed.database.customer_task_version).toBe(3);
+
+  const completedTask = await request.post(`${customerAgentOrigin}/rpc`, {
+    headers: a2aHeaders,
+    data: a2aRpc("service-e2e-completed-task", "GetTask", {
+      id: a2aStart.task_id,
+      historyLength: 5,
+    }),
+  });
+  expect(completedTask.ok()).toBe(true);
+  const completedTaskBody = (await completedTask.json()) as {
+    result: {
+      artifacts: Array<{ parts: Array<{ data: Record<string, unknown> }> }>;
+      status: { state: string };
+    };
+  };
+  expect(completedTaskBody.result.status.state).toBe("TASK_STATE_COMPLETED");
+  expect(
+    completedTaskBody.result.artifacts.some((artifact) =>
+      artifact.parts.some(
+        (part) => part.data.protocol_version === "recovery.receipt.v1",
+      ),
+    ),
+  ).toBe(true);
 });

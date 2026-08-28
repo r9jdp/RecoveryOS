@@ -15,12 +15,12 @@ provider gates require infrastructure and credentials that are not present in th
 
 | Area              | Available locally                                                                                    | Still gated                                               |
 | ----------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Merchant product  | Login, Control Tower, case workspace, approvals, policy controls, guided FitBox demo                 | Production authentication and multi-tenancy               |
-| Recovery workflow | Invoice-scoped state, Temporal workflow/replay tests, duplicate-safe revenue accounting              | Temporal Cloud deployment                                 |
-| Razorpay          | Signed webhook inbox/outbox, reconciliation, invoice/card-update surfaces, halted-only Payment Links | Hosted test-mode smoke and production review              |
-| A2A               | Separate customer agent, signed exact-scope mandates, replay protection                              | Hosted origins and production identity/storage            |
+| Merchant product  | Signed demo session, Control Tower, case workspace, approvals, policy controls, guided FitBox demo  | Production identity, RBAC and multi-tenancy                |
+| Recovery workflow | Persisted policy gates, Temporal replay/reconciliation, duplicate-safe revenue accounting           | Temporal Cloud deployment                                  |
+| Razorpay          | Signed webhook inbox/outbox, reconciliation, invoice/card-update surfaces, halted-only Payment Links | Hosted test-mode smoke and production review               |
+| A2A               | Durable hosted task store, exact-scope mandates, replay protection and authoritative receipts       | Hosted origins and production identity/key rotation        |
 | Voice             | Browser rehearsal, consent/limit gates, Twilio and ElevenLabs adapters                               | One allowlisted credentialed test call and telecom review |
-| RecoveryBench     | Fixed-seed paired simulation, versioned CatBoost artifact and `/lab` report                          | Production outcome validation                             |
+| RecoveryBench     | Fixed-seed paired simulation, versioned CatBoost artifact and `/lab` report                          | Production outcome validation                              |
 
 Evidence is always labelled `SIMULATED` or `RAZORPAY TEST VERIFIED`; synthetic results never count
 as verified merchant revenue. See the [implementation status](docs/development/implementation-status.md)
@@ -102,6 +102,7 @@ pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm e2e
+pnpm e2e:service
 pnpm build
 pnpm generate:openapi
 git diff --exit-code -- packages/contracts/openapi.json
