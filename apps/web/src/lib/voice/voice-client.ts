@@ -1,3 +1,5 @@
+import { operatorMutationHeaders } from "@/lib/operator-session";
+
 export interface BrowserTranscriptResult {
   detected_intent: string;
   disposition: string;
@@ -27,10 +29,9 @@ export interface VoiceTimelineItem {
   created_at: string;
 }
 
-const apiOrigin = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(
-  /\/$/,
-  "",
-);
+function apiOrigin(): string {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+}
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -54,7 +55,7 @@ export async function submitBrowserTranscript(
   transcript: string,
 ): Promise<BrowserTranscriptResult> {
   const response = await fetch(
-    `${apiOrigin}/v1/voice/contacts/${encodeURIComponent(attemptId)}/browser-transcript`,
+    `${apiOrigin()}/v1/voice/contacts/${encodeURIComponent(attemptId)}/browser-transcript`,
     {
       method: "POST",
       headers: {
@@ -70,10 +71,13 @@ export async function submitBrowserTranscript(
 export async function startRealVoiceContact(
   caseId: string,
 ): Promise<StartVoiceResult> {
-  const response = await fetch(`${apiOrigin}/v1/voice/contacts`, {
+  const response = await fetch(`${apiOrigin()}/v1/voice/contacts`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      ...operatorMutationHeaders(),
+    },
+    credentials: "include",
     body: JSON.stringify({
       case_id: caseId,
       idempotency_key: `voice:${caseId}:${crypto.randomUUID()}`,
@@ -87,7 +91,7 @@ export async function fetchVoiceTimeline(
   caseId: string,
 ): Promise<VoiceTimelineItem[]> {
   const response = await fetch(
-    `${apiOrigin}/v1/voice/cases/${encodeURIComponent(caseId)}/timeline`,
+    `${apiOrigin()}/v1/voice/cases/${encodeURIComponent(caseId)}/timeline`,
     { cache: "no-store" },
   );
   const payload = await parseResponse<{ items: VoiceTimelineItem[] }>(response);

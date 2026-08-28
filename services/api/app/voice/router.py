@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.db.session import get_async_session
@@ -80,16 +91,78 @@ VoiceServiceDependency = Annotated[VoiceContactService, Depends(get_voice_servic
 RegistrarDependency = Annotated[ElevenLabsCallRegistrar, Depends(get_call_registrar)]
 
 
+def _authorize_voice_start(
+    *,
+    service: VoiceContactService,
+    supplied_voice_operator_token: str | None,
+    supplied_recoveryos_operator_token: str | None,
+    supplied_csrf_token: str | None,
+    operator_session: str | None,
+) -> bool:
+    """Authorize a real call without exposing the server-side voice token.
+
+    Existing server integrations may continue using the dedicated voice token.
+    Browser clients instead present the API-owned HttpOnly session cookie and
+    matching CSRF header. Real voice mode must never inherit the payment guard's
+    safe mock-mode no-op behavior.
+    """
+
+    # Import lazily because the shared model registry imports the voice package
+    # while the core API package is still initializing.
+    from services.api.app.api.operator_auth import (
+        OperatorAuthorizationNotConfiguredError,
+        _authorization_required,
+        require_operator_for_non_mock_payment,
+    )
+
+    voice_token = service.operator_token
+    if (
+        service.real_calls_enabled
+        and voice_token
+        and supplied_voice_operator_token is not None
+        and hmac.compare_digest(supplied_voice_operator_token, voice_token)
+    ):
+        return False
+    if _authorization_required():
+        require_operator_for_non_mock_payment(
+            x_recoveryos_operator_token=supplied_recoveryos_operator_token,
+            x_recoveryos_csrf_token=supplied_csrf_token,
+            operator_session=operator_session,
+        )
+        return service.real_calls_enabled
+    if service.real_calls_enabled:
+        raise OperatorAuthorizationNotConfiguredError(
+            "Real voice calls require OPERATOR_AUTH_REQUIRED=true or another active "
+            "RecoveryOS operator-auth gate."
+        )
+    return False
+
+
 @router.post("/contacts", response_model=StartVoiceContactResponse)
 async def start_voice_contact(
     payload: StartVoiceContactRequest,
     service: VoiceServiceDependency,
-    x_recovery_operator_token: Annotated[str | None, Header()] = None,
+    x_recovery_operator_token: Annotated[
+        str | None, Header(alias="X-Recovery-Operator-Token")
+    ] = None,
+    x_recoveryos_operator_token: Annotated[
+        str | None, Header(alias="X-RecoveryOS-Operator-Token")
+    ] = None,
+    x_recoveryos_csrf_token: Annotated[str | None, Header(alias="X-RecoveryOS-CSRF-Token")] = None,
+    operator_session: Annotated[str | None, Cookie(alias="recoveryos_operator_session")] = None,
 ) -> StartVoiceContactResponse:
+    operator_session_authorized = _authorize_voice_start(
+        service=service,
+        supplied_voice_operator_token=x_recovery_operator_token,
+        supplied_recoveryos_operator_token=x_recoveryos_operator_token,
+        supplied_csrf_token=x_recoveryos_csrf_token,
+        operator_session=operator_session,
+    )
     result = await service.start(
         case_id=payload.case_id,
         idempotency_key=payload.idempotency_key,
         supplied_operator_token=x_recovery_operator_token,
+        operator_session_authorized=operator_session_authorized,
         max_duration_seconds=payload.max_duration_seconds,
         now=datetime.now(UTC),
     )

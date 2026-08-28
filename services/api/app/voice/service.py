@@ -298,6 +298,7 @@ class VoiceContactService:
         case_id: str,
         idempotency_key: str,
         supplied_operator_token: str | None,
+        operator_session_authorized: bool = False,
         max_duration_seconds: int,
         now: datetime,
     ) -> VoiceContactResult:
@@ -331,7 +332,7 @@ class VoiceContactService:
                 quiet_hours_end=subject.quiet_hours_end,
                 real_calls_enabled=self.real_calls_enabled,
                 operator_authorized=bool(self.operator_token)
-                and supplied_operator_token == self.operator_token,
+                and (operator_session_authorized or supplied_operator_token == self.operator_token),
                 kill_switch=subject.kill_switch,
                 destination_allowlisted=subject.destination_token in self.allowlisted_destinations,
                 consent_verified_at=subject.consent_verified_at,
