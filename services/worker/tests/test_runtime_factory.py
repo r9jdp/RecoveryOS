@@ -45,10 +45,15 @@ def test_razorpay_wiring_is_guarded_before_credentials_are_loaded(
         create_activity_services_from_env()
 
     selected: list[str] = []
+
+    def selected_razorpay_client() -> MockPaymentProvider:
+        selected.append("razorpay")
+        return MockPaymentProvider()
+
     monkeypatch.setenv("RAZORPAY_TEST_MODE_REQUIRED", "true")
     monkeypatch.setattr(
         "services.worker.app.runtime.create_razorpay_client_from_env",
-        lambda: selected.append("razorpay") or MockPaymentProvider(),
+        selected_razorpay_client,
     )
     assert isinstance(create_activity_services_from_env(), ProductionRecoveryActivityServices)
     assert selected == ["razorpay"]

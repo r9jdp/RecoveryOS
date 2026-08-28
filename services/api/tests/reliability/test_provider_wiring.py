@@ -120,7 +120,7 @@ async def test_razorpay_create_breaker_survives_adapter_rebuild_and_allows_reads
     reconciled = await rebuilt.reconcile_payment_link_by_reference(
         reference_id="case-1-payment-link"
     )
-    assert reconciled is not None and reconciled["id"] == "plink-existing"
+    assert reconciled is not None and reconciled.provider_reference == "plink-existing"
     created = await rebuilt.open_customer_payment_surface(_payment_request())
     assert created.provider_reference == "plink-new"
     assert calls.count(("POST", "/v1/payment_links")) == 1
