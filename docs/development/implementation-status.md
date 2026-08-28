@@ -132,6 +132,10 @@ final combined gate is recorded separately only after the continuation branch is
   consequential requests. Hosted Compose forces operator authentication, an exact credentialed
   frontend origin, and `Secure; SameSite=None` cookies across the web/API origins; the shared demo
   identity is not production multi-tenant authorization.
+- The hosted Voice Console uses that same cookie and CSRF proof with credentialed cross-origin
+  requests; the raw `VOICE_OPERATOR_TOKEN` stays server-only. Real voice fails closed when the
+  operator-auth gate is inactive, while authenticated server-to-server callers retain the dedicated
+  token path.
 - Hosted customer-agent tasks use SQL. The live A2A bridge verifies exact signed scope, atomically
   consumes the nonce, and completes the task with an idempotent, pinned-key Ed25519
   `recovery.receipt.v1` only after authoritative recovery. Missing, tampered, wrong-scope, and replayed
@@ -148,6 +152,27 @@ final combined gate is recorded separately only after the continuation branch is
   remains separate and never modifies merchant accounting.
 
 No public URL or credentialed hosted/provider success is claimed by these local changes.
+
+## Final continuation code gate
+
+The combined local/mock gate passed on 2026-08-28 after the final re-audit and contract generation:
+
+- no P0 or P1 code findings remain; the last hosted voice-session gap was closed in `80aeee9`;
+- strict lint and formatting pass, TypeScript passes, and Mypy reports no issues across 199 source
+  files;
+- 336 Python tests, 43 web tests, 31 mock Playwright checks, and the Compose-backed real-service E2E
+  pass;
+- the production Next build emits 12 product routes, and regenerated OpenAPI plus the TypeScript
+  client have zero drift;
+- the five-migration safety check, 11 deployment tests, HAProxy validation, repository/browser secret
+  scan, and Gitleaks scan across 139 commits pass;
+- `pip-audit` and the pnpm production audit report no known vulnerabilities after upgrading
+  `cryptography` to 50.0.1 in `f2cecce`;
+- repeated fixed-seed RecoveryBench generation remains byte-identical with 240 evaluation cases.
+
+Trivy remains a deployment gate because no current immutable release-image trio exists to scan. This
+local result is therefore code-complete evidence, not a hosted/provider or production-readiness
+claim.
 
 ## External prerequisites
 

@@ -506,3 +506,22 @@ The original external-gate conclusion is unchanged: no public URL or credentiale
 Temporal Cloud, Razorpay, Twilio, or ElevenLabs success is claimed. The continuation can only be
 called locally code-complete after the combined lint, format, typecheck, test, build, migration,
 OpenAPI, service-E2E, and security gates pass on the integrated commit.
+
+### Continuation closure
+
+An independent re-audit of the integrated continuation found no P0 issue and one final P1: the
+hosted Voice Console did not send the operator cookie/CSRF proof to its cross-origin API action.
+`80aeee9` closed that gap without exposing the raw voice token and added browser/API tests for
+session success plus anonymous, missing-CSRF, and wrong-CSRF rejection. `28a430f` publishes the
+resulting OpenAPI and generated TypeScript contract.
+
+The final local gate then passed with 336 Python tests, 43 web tests, 31 mock Playwright checks, one
+Compose-backed service E2E, 12 product routes, 199-file Mypy coverage, and zero OpenAPI/client drift.
+Repository/browser secret scanning, Gitleaks across 139 commits, migration/deployment checks, HAProxy
+validation, and pnpm/Python production dependency audits also pass. The Python audit initially found
+four advisories in `cryptography` 46.0.7; `f2cecce` upgrades it to 50.0.1 and the repeated hashed audit
+reports no known vulnerabilities.
+
+Accordingly, the continuation is locally/mock code-complete with no open P0/P1 finding. Trivy and all
+public-hosting, Razorpay, A2A-origin, and allowlisted telephony demonstrations remain external gates
+and are not represented as complete.
