@@ -10,7 +10,7 @@ import json
 import os
 import secrets
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Cookie, Header, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -93,6 +93,33 @@ def _session_secret(*, required: bool) -> bytes:
     return _LOCAL_SESSION_SECRET.encode("utf-8")
 
 
+def _cookie_policy() -> tuple[bool, Literal["lax", "strict", "none"]]:
+    """Resolve a browser-session cookie policy and reject insecure deployments.
+
+    Separate Vercel and API origins are cross-site in the common hosted setup,
+    so they require ``SameSite=None``. Browsers only accept that mode on Secure
+    cookies. Local HTTP remains usable with the safer Lax default.
+    """
+
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    hosted = app_env in {"staging", "production"}
+    secure = _enabled("OPERATOR_COOKIE_SECURE", "true" if hosted else "false")
+    same_site_value = os.getenv("OPERATOR_COOKIE_SAMESITE", "lax").strip().lower()
+    if same_site_value not in {"lax", "strict", "none"}:
+        raise OperatorAuthorizationNotConfiguredError(
+            "OPERATOR_COOKIE_SAMESITE must be one of lax, strict, or none."
+        )
+    if hosted and not secure:
+        raise OperatorAuthorizationNotConfiguredError(
+            "Hosted operator sessions require OPERATOR_COOKIE_SECURE=true."
+        )
+    if same_site_value == "none" and not secure:
+        raise OperatorAuthorizationNotConfiguredError(
+            "OPERATOR_COOKIE_SAMESITE=none requires OPERATOR_COOKIE_SECURE=true."
+        )
+    return secure, cast(Literal["lax", "strict", "none"], same_site_value)
+
+
 def _encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
@@ -148,15 +175,14 @@ async def create_operator_session(
         {"sub": "demo-operator", "csrf": csrf_token, "exp": expires_at},
         _session_secret(required=required),
     )
-    app_env = os.getenv("APP_ENV", "development").strip().lower()
-    secure_default = "true" if app_env in {"staging", "production"} else "false"
+    secure, same_site = _cookie_policy()
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
         max_age=ttl_seconds,
         httponly=True,
-        secure=_enabled("OPERATOR_COOKIE_SECURE", secure_default),
-        samesite="lax",
+        secure=secure,
+        samesite=same_site,
         path="/",
     )
     return OperatorSessionResponse(

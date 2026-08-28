@@ -145,10 +145,18 @@ async function main() {
     "utf8",
   );
   if (/\b(?:page|context)\.route\s*\(|routeFromHAR\s*\(/.test(scenarioSource)) {
-    throw new Error("real-service scenario must not intercept browser network requests");
+    throw new Error(
+      "real-service scenario must not intercept browser network requests",
+    );
   }
   const [postgresPort, temporalPort, apiPort, agentPort, webPort] =
-    await Promise.all([freePort(), freePort(), freePort(), freePort(), freePort()]);
+    await Promise.all([
+      freePort(),
+      freePort(),
+      freePort(),
+      freePort(),
+      freePort(),
+    ]);
   const databaseUrl = `postgresql+psycopg://recovery:recovery@127.0.0.1:${postgresPort}/recovery_os`;
   const temporalAddress = `127.0.0.1:${temporalPort}`;
   const apiOrigin = `http://127.0.0.1:${apiPort}`;
@@ -171,6 +179,12 @@ async function main() {
     DATABASE_URL: databaseUrl,
     NEXT_PUBLIC_API_BASE_URL: apiOrigin,
     NEXT_PUBLIC_RECOVERY_API_URL: apiOrigin,
+    OPERATOR_AUTH_REQUIRED: "true",
+    OPERATOR_COOKIE_SAMESITE: "lax",
+    OPERATOR_COOKIE_SECURE: "false",
+    OPERATOR_DEMO_EMAIL: "service-operator@recoveryos.test",
+    OPERATOR_DEMO_TOKEN: "service-e2e-operator-secret",
+    OPERATOR_SESSION_SECRET: "service-e2e-session-signing-secret",
     PAYMENT_PROVIDER: "mock",
     RAZORPAY_OUTBOX_POLL_SECONDS: "0.1",
     RAZORPAY_WEBHOOK_SECRET: "service-e2e-local-secret",
@@ -179,6 +193,8 @@ async function main() {
     RECOVERY_ALLOW_REAL_VOICE_CALLS: "false",
     RECOVERYOS_SERVICE_API_ORIGIN: apiOrigin,
     RECOVERYOS_SERVICE_CUSTOMER_AGENT_ORIGIN: agentOrigin,
+    RECOVERYOS_SERVICE_OPERATOR_EMAIL: "service-operator@recoveryos.test",
+    RECOVERYOS_SERVICE_OPERATOR_PASSWORD: "service-e2e-operator-secret",
     RECOVERYOS_SERVICE_WEB_ORIGIN: webOrigin,
     TEMPORAL_ADDRESS: temporalAddress,
     TEMPORAL_NAMESPACE: "default",
@@ -187,22 +203,40 @@ async function main() {
     WEB_ORIGIN: webOrigin,
   };
 
-  process.once("SIGINT", () => void cleanup(stackEnv).finally(() => process.exit(130)));
-  process.once("SIGTERM", () => void cleanup(stackEnv).finally(() => process.exit(143)));
+  process.once(
+    "SIGINT",
+    () => void cleanup(stackEnv).finally(() => process.exit(130)),
+  );
+  process.once(
+    "SIGTERM",
+    () => void cleanup(stackEnv).finally(() => process.exit(143)),
+  );
 
   try {
-    run(command("docker"), composeArgs("up", "-d", "--wait", "--wait-timeout", "150"), {
-      env: stackEnv,
-      timeout: 180_000,
-    });
-    run(command("uv"), ["run", "alembic", "-c", "services/api/alembic.ini", "upgrade", "head"], {
-      env: serviceEnv,
-      timeout: 120_000,
-    });
-    run(command("uv"), ["run", "python", "-m", "services.api.app.seed", "--reset"], {
-      env: serviceEnv,
-      timeout: 120_000,
-    });
+    run(
+      command("docker"),
+      composeArgs("up", "-d", "--wait", "--wait-timeout", "150"),
+      {
+        env: stackEnv,
+        timeout: 180_000,
+      },
+    );
+    run(
+      command("uv"),
+      ["run", "alembic", "-c", "services/api/alembic.ini", "upgrade", "head"],
+      {
+        env: serviceEnv,
+        timeout: 120_000,
+      },
+    );
+    run(
+      command("uv"),
+      ["run", "python", "-m", "services.api.app.seed", "--reset"],
+      {
+        env: serviceEnv,
+        timeout: 120_000,
+      },
+    );
 
     start(
       "worker",

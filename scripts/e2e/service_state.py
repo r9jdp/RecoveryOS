@@ -327,7 +327,12 @@ async def a2a_snapshot() -> dict[str, Any]:
         for artifact in task.payload.get("artifacts", []):
             for part in artifact.get("parts", []):
                 data = part.get("data", {})
-                if data.get("protocol_version") == "recovery.receipt.v1":
+                signed_data = data.get("data", {})
+                if (
+                    data.get("algorithm") == "Ed25519"
+                    and isinstance(signed_data, dict)
+                    and signed_data.get("protocol_version") == "recovery.receipt.v1"
+                ):
                     receipt_count += 1
     client = await _client()
     handle = client.get_workflow_handle(recovery_workflow_id(A2A_CASE_ID))

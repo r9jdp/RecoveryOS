@@ -4,6 +4,7 @@ services:
       APP_ENV: staging
       OPERATOR_AUTH_REQUIRED: "true"
       OPERATOR_COOKIE_SECURE: "true"
+      OPERATOR_COOKIE_SAMESITE: none
     deploy:
       resources:
         limits:

@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from services.api.app.a2a import router as a2a_router
 from services.api.app.api import install_core_api
 from services.api.app.demo import router as demo_router
 from services.api.app.health.router import router as health_router
+from services.api.app.http_security import install_credentialed_cors
 from services.api.app.lab import install_lab_api
 from services.api.app.voice import router as voice_router
 
@@ -17,14 +17,9 @@ app = FastAPI(
     version="0.1.0",
     description="Auditable subscription-recovery orchestration.",
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        origin.strip() for origin in os.getenv("WEB_ORIGIN", "http://localhost:3000").split(",")
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
+install_credentialed_cors(
+    app,
+    os.getenv("WEB_ORIGIN", "http://localhost:3000"),
 )
 app.include_router(health_router)
 app.include_router(demo_router)

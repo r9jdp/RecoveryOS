@@ -124,6 +124,16 @@ def test_edge_gateway_is_only_app_service_on_edge_network() -> None:
     assert "edge:" not in agent_section
 
 
+def test_hosted_operator_cookie_is_secure_and_cross_site_capable() -> None:
+    for environment in ("staging", "production"):
+        compose = (ROOT / "infra" / "compose" / f"compose.{environment}.yml").read_text(
+            encoding="utf-8"
+        )
+        assert 'OPERATOR_AUTH_REQUIRED: "true"' in compose
+        assert 'OPERATOR_COOKIE_SECURE: "true"' in compose
+        assert "OPERATOR_COOKIE_SAMESITE: none" in compose
+
+
 def test_shell_scripts_enable_strict_error_handling() -> None:
     scripts = [
         *sorted((ROOT / "deploy" / "scripts").glob("*.sh")),
@@ -150,9 +160,7 @@ def test_hosted_customer_agent_checks_sql_readiness_before_promotion() -> None:
     smoke = (ROOT / "deploy" / "scripts" / "smoke.sh").read_text(encoding="utf-8")
     monitor = (ROOT / "deploy" / "scripts" / "monitor.sh").read_text(encoding="utf-8")
 
-    customer_agent = compose.split("  customer-agent:\n", 1)[1].split(
-        "  edge-gateway:\n", 1
-    )[0]
+    customer_agent = compose.split("  customer-agent:\n", 1)[1].split("  edge-gateway:\n", 1)[0]
     customer_backend = haproxy.split("backend customer_agent_upstream\n", 1)[1]
     assert "http://127.0.0.1:8010/health/ready" in customer_agent
     assert "CUSTOMER_AGENT_TASK_STORE" in customer_agent

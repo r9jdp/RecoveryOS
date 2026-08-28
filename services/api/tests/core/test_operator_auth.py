@@ -104,6 +104,9 @@ async def test_browser_session_requires_matching_csrf_header(
     monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
     monkeypatch.setenv("OPERATOR_DEMO_TOKEN", "test-operator-secret")
     monkeypatch.setenv("OPERATOR_SESSION_SECRET", "test-session-signing-secret")
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("OPERATOR_COOKIE_SECURE", "false")
+    monkeypatch.setenv("OPERATOR_COOKIE_SAMESITE", "lax")
     app = authorization_test_app()
 
     async with httpx.AsyncClient(
@@ -128,6 +131,90 @@ async def test_browser_session_requires_matching_csrf_header(
     assert "recoveryos_operator_session" in login.cookies
     assert missing_csrf.status_code == 401
     assert authorized.status_code == 200
+
+
+async def test_cross_site_operator_cookie_requires_and_emits_secure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPERATOR_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("OPERATOR_DEMO_TOKEN", "test-operator-secret")
+    monkeypatch.setenv("OPERATOR_SESSION_SECRET", "test-session-signing-secret")
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("OPERATOR_COOKIE_SECURE", "true")
+    monkeypatch.setenv("OPERATOR_COOKIE_SAMESITE", "none")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=authorization_test_app()),
+        base_url="https://api.example.test",
+    ) as client:
+        response = await client.post(
+            "/v1/operator/session",
+            json={
+                "email": "demo@recoveryos.dev",
+                "password": "test-operator-secret",
+            },
+        )
+
+    assert response.status_code == 200
+    cookie = response.headers["set-cookie"].lower()
+    assert "secure" in cookie
+    assert "httponly" in cookie
+    assert "samesite=none" in cookie
+
+
+@pytest.mark.parametrize(
+    ("app_env", "secure", "same_site", "expected_message"),
+    [
+        (
+            "development",
+            "false",
+            "none",
+            "OPERATOR_COOKIE_SAMESITE=none requires OPERATOR_COOKIE_SECURE=true",
+        ),
+        (
+            "production",
+            "false",
+            "lax",
+            "Hosted operator sessions require OPERATOR_COOKIE_SECURE=true",
+        ),
+        (
+            "development",
+            "false",
+            "cross-site",
+            "OPERATOR_COOKIE_SAMESITE must be one of lax, strict, or none",
+        ),
+    ],
+)
+async def test_operator_cookie_rejects_unsafe_or_unknown_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    app_env: str,
+    secure: str,
+    same_site: str,
+    expected_message: str,
+) -> None:
+    monkeypatch.setenv("OPERATOR_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("OPERATOR_DEMO_TOKEN", "test-operator-secret")
+    monkeypatch.setenv("OPERATOR_SESSION_SECRET", "test-session-signing-secret")
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv("OPERATOR_COOKIE_SECURE", secure)
+    monkeypatch.setenv("OPERATOR_COOKIE_SAMESITE", same_site)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=authorization_test_app()),
+        base_url="https://api.example.test",
+    ) as client:
+        response = await client.post(
+            "/v1/operator/session",
+            json={
+                "email": "demo@recoveryos.dev",
+                "password": "test-operator-secret",
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "OPERATOR_AUTH_NOT_CONFIGURED"
+    assert expected_message in response.json()["error"]["message"]
+    assert "set-cookie" not in response.headers
 
 
 async def test_real_operator_route_rejects_anonymous_before_provider_or_database_access(

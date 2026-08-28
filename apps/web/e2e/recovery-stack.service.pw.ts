@@ -74,6 +74,8 @@ const apiOrigin = requiredEnv("RECOVERYOS_SERVICE_API_ORIGIN");
 const customerAgentOrigin = requiredEnv(
   "RECOVERYOS_SERVICE_CUSTOMER_AGENT_ORIGIN",
 );
+const operatorEmail = requiredEnv("RECOVERYOS_SERVICE_OPERATOR_EMAIL");
+const operatorPassword = requiredEnv("RECOVERYOS_SERVICE_OPERATOR_PASSWORD");
 const repositoryRoot = path.resolve(__dirname, "../../..");
 const uv = process.platform === "win32" ? "uv.exe" : "uv";
 
@@ -102,7 +104,8 @@ function serviceState(
 
 const a2aHeaders = {
   "A2A-Version": "1.0",
-  "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+  "A2A-Extensions":
+    "https://recoveryos.dev/a2a/recovery-mandate/v1,https://recoveryos.dev/a2a/recovery-receipt/v1",
 };
 
 function a2aRpc(id: string, method: string, params: Record<string, unknown>) {
@@ -160,14 +163,46 @@ async function a2aSnapshotEventually(
 test("real services recover FitBox without fixture or network mocks", async ({
   page,
   playwright,
-  request,
 }) => {
   const apiResponses: string[] = [];
   page.on("response", (response) => {
     if (response.url().startsWith(apiOrigin)) apiResponses.push(response.url());
   });
 
-  await page.goto("/dashboard");
+  const anonymousApi = await playwright.request.newContext({
+    baseURL: apiOrigin,
+  });
+  try {
+    const blocked = await anonymousApi.post(
+      "/v1/mock/recovery-cases/case_fitbox_aug_2026/payment-success",
+      {
+        data: {
+          provider_event_id: "service-e2e-anonymous-attempt",
+          amount_paise: 149_900,
+          occurred_at: new Date().toISOString(),
+          subscription_reactivated: true,
+        },
+      },
+    );
+    expect(blocked.status()).toBe(401);
+  } finally {
+    await anonymousApi.dispose();
+  }
+
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill(operatorEmail);
+  await page.getByLabel("Demo access code").fill(operatorPassword);
+  await page.getByRole("button", { name: "Enter Control Tower" }).click();
+  await page.waitForURL("**/dashboard");
+  const csrfToken = await page.evaluate(() =>
+    window.sessionStorage.getItem("recoveryos-operator-csrf"),
+  );
+  expect(csrfToken).toBeTruthy();
+  const operatorHeaders = {
+    "X-RecoveryOS-CSRF-Token": csrfToken as string,
+  };
+  const authenticatedApi = page.context().request;
+
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   await expect(page.getByText(/deterministic FitBox demo data/i)).toHaveCount(
     0,
@@ -202,16 +237,16 @@ test("real services recover FitBox without fixture or network mocks", async ({
     occurred_at: new Date().toISOString(),
     subscription_reactivated: true,
   };
-  const first = await request.post(
+  const first = await authenticatedApi.post(
     `${apiOrigin}/v1/mock/recovery-cases/case_fitbox_aug_2026/payment-success`,
-    { data: successPayload },
+    { data: successPayload, headers: operatorHeaders },
   );
   expect(first.ok()).toBe(true);
   expect((await first.json()).newly_recognized).toBe(true);
 
-  const duplicate = await request.post(
+  const duplicate = await authenticatedApi.post(
     `${apiOrigin}/v1/mock/recovery-cases/case_fitbox_aug_2026/payment-success`,
-    { data: successPayload },
+    { data: successPayload, headers: operatorHeaders },
   );
   expect(duplicate.ok()).toBe(true);
   expect((await duplicate.json()).newly_recognized).toBe(false);
@@ -234,13 +269,15 @@ test("real services recover FitBox without fixture or network mocks", async ({
   ).toBeVisible();
   await expect(page.getByText(/could not be loaded/i)).toHaveCount(0);
 
-  const agentHealth = await request.get(`${customerAgentOrigin}/health/ready`);
+  const agentHealth = await authenticatedApi.get(
+    `${customerAgentOrigin}/health/ready`,
+  );
   expect(agentHealth.ok()).toBe(true);
   await expect(agentHealth.json()).resolves.toMatchObject({
     mode: "mock",
     status: "ready",
   });
-  const agentCard = await request.get(
+  const agentCard = await authenticatedApi.get(
     `${customerAgentOrigin}/.well-known/agent-card.json`,
   );
   expect(agentCard.ok()).toBe(true);
@@ -259,7 +296,7 @@ test("real services recover FitBox without fixture or network mocks", async ({
   const a2aStart = serviceState("start-a2a-workflow") as A2AWorkflowStart;
   expect(a2aStart.workflow_id).toBe(`recovery-case:${a2aStart.case_id}`);
 
-  const approvalSummary = await request.get(
+  const approvalSummary = await authenticatedApi.get(
     `${customerAgentOrigin}/v1/tasks/${a2aStart.task_id}/approval`,
   );
   expect(approvalSummary.ok()).toBe(true);
@@ -274,7 +311,7 @@ test("real services recover FitBox without fixture or network mocks", async ({
     payment_surface_reference: a2aStart.payment_surface_reference,
   });
 
-  const customerApproval = await request.post(
+  const customerApproval = await authenticatedApi.post(
     `${customerAgentOrigin}/v1/tasks/${a2aStart.task_id}/approval`,
     {
       data: {
@@ -370,15 +407,15 @@ test("real services recover FitBox without fixture or network mocks", async ({
     occurred_at: new Date().toISOString(),
     subscription_reactivated: false,
   };
-  const a2aSuccess = await request.post(
+  const a2aSuccess = await authenticatedApi.post(
     `${apiOrigin}/v1/mock/recovery-cases/${a2aStart.case_id}/payment-success`,
-    { data: a2aSuccessPayload },
+    { data: a2aSuccessPayload, headers: operatorHeaders },
   );
   expect(a2aSuccess.ok()).toBe(true);
   expect((await a2aSuccess.json()).newly_recognized).toBe(true);
-  const duplicateA2aSuccess = await request.post(
+  const duplicateA2aSuccess = await authenticatedApi.post(
     `${apiOrigin}/v1/mock/recovery-cases/${a2aStart.case_id}/payment-success`,
-    { data: a2aSuccessPayload },
+    { data: a2aSuccessPayload, headers: operatorHeaders },
   );
   expect(duplicateA2aSuccess.ok()).toBe(true);
   expect((await duplicateA2aSuccess.json()).newly_recognized).toBe(false);
@@ -394,17 +431,27 @@ test("real services recover FitBox without fixture or network mocks", async ({
   );
   expect(completed.database.customer_task_version).toBe(3);
 
-  const completedTask = await request.post(`${customerAgentOrigin}/rpc`, {
-    headers: a2aHeaders,
-    data: a2aRpc("service-e2e-completed-task", "GetTask", {
-      id: a2aStart.task_id,
-      historyLength: 5,
-    }),
-  });
+  const completedTask = await authenticatedApi.post(
+    `${customerAgentOrigin}/rpc`,
+    {
+      headers: a2aHeaders,
+      data: a2aRpc("service-e2e-completed-task", "GetTask", {
+        id: a2aStart.task_id,
+        historyLength: 5,
+      }),
+    },
+  );
   expect(completedTask.ok()).toBe(true);
   const completedTaskBody = (await completedTask.json()) as {
     result: {
-      artifacts: Array<{ parts: Array<{ data: Record<string, unknown> }> }>;
+      artifacts: Array<{
+        parts: Array<{
+          data: {
+            algorithm?: string;
+            data?: Record<string, unknown>;
+          };
+        }>;
+      }>;
       status: { state: string };
     };
   };
@@ -412,7 +459,9 @@ test("real services recover FitBox without fixture or network mocks", async ({
   expect(
     completedTaskBody.result.artifacts.some((artifact) =>
       artifact.parts.some(
-        (part) => part.data.protocol_version === "recovery.receipt.v1",
+        (part) =>
+          part.data.algorithm === "Ed25519" &&
+          part.data.data?.protocol_version === "recovery.receipt.v1",
       ),
     ),
   ).toBe(true);
