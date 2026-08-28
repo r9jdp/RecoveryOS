@@ -6,7 +6,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: ".",
   testMatch: "**/*.pw.ts",
-  testIgnore: ["**/support/**"],
+  testIgnore: ["**/support/**", "**/*.service.pw.ts"],
   outputDir: "test-results",
   snapshotPathTemplate: "{testDir}/snapshots/{projectName}/{arg}{ext}",
   fullyParallel: false,

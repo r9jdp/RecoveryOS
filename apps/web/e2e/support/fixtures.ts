@@ -19,6 +19,16 @@ export async function openMockDashboard(page: Page): Promise<void> {
 }
 
 export async function mockMerchantMutations(page: Page): Promise<void> {
+  await page.route("**/__e2e-api/v1/operator/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        csrf_token: "e2e-fixture-csrf-token",
+        expires_at_epoch: 2_000_000_000,
+        operator: "demo@recoveryos.dev",
+      }),
+    });
+  });
   await page.route(
     "**/__e2e-api/v1/recovery-cases/*/commands",
     async (route) => {

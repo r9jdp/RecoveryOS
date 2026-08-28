@@ -16,9 +16,13 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import StaticPool
 
 from services.api.app.db import Base
-from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType
+from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType, PolicyDisposition
 from services.api.app.integrations.razorpay.errors import RazorpayUncertainSubmissionError
-from services.api.app.models import Merchant, RecoveryActionRecord  # noqa: F401
+from services.api.app.models import (  # noqa: F401
+    Merchant,
+    PolicyDecisionRecord,
+    RecoveryActionRecord,
+)
 from services.api.app.providers.contracts import (
     OpenPaymentSurfaceRequest,
     PaymentSnapshot,
@@ -149,6 +153,10 @@ async def _seed_standard_action(
             select(RecoveryActionRecord).where(RecoveryActionRecord.case_id == FITBOX_CASE_ID)
         )
         assert action is not None
+        policy = await session.scalar(
+            select(PolicyDecisionRecord).where(PolicyDecisionRecord.action_id == action.id)
+        )
+        assert policy is not None
         action.payment_surface_type = PaymentSurfaceType.STANDARD_PAYMENT_LINK
         action.status = status
         action.idempotency_key = _command().idempotency_key
@@ -156,6 +164,8 @@ async def _seed_standard_action(
         action.customer_url = (
             f"https://rzp.test/i/{external_reference}" if external_reference else None
         )
+        policy.disposition = PolicyDisposition.ALLOW
+        policy.decision_code = "TEST_STANDARD_PAYMENT_LINK_ALLOWED"
         await session.commit()
         return action
 
