@@ -186,6 +186,15 @@ class ProductionRecoveryActivityServices:
         except ValueError:
             return self._blocked_policy(command, "PERSISTED_ACTION_SCOPE_INVALID")
 
+        # Only OPEN_CUSTOMER_PAYMENT_SURFACE owns a persisted surface subtype.
+        # A2A and voice actions may carry the eventual exact surface in the
+        # workflow input, but the action-table constraint correctly stores NULL.
+        persisted_surface_type = (
+            surface_type
+            if action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
+            else None
+        )
+
         async with get_session_factory()() as session:
             statement = (
                 select(RecoveryActionRecord, PolicyDecisionRecord, RecoveryCase)
@@ -198,7 +207,7 @@ class ProductionRecoveryActivityServices:
                     RecoveryActionRecord.case_id == command.case_id,
                     RecoveryCase.merchant_id == command.merchant_id,
                     RecoveryActionRecord.action_type == action_type,
-                    RecoveryActionRecord.payment_surface_type == surface_type,
+                    RecoveryActionRecord.payment_surface_type == persisted_surface_type,
                 )
                 .order_by(
                     RecoveryActionRecord.created_at.desc(),

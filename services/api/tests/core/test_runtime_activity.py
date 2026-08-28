@@ -11,6 +11,7 @@ from services.api.app.domain.enums import (
     ActionStatus,
     PaymentSurfaceType,
     PolicyDisposition,
+    RecoveryActionType,
 )
 from services.api.app.models import PolicyDecisionRecord, RecoveryActionRecord
 from services.api.app.providers.contracts import (
@@ -178,6 +179,61 @@ async def test_persisted_allow_policy_authorizes_once_without_synthetic_manual_p
     assert submitted.status == duplicate.status == "SUCCEEDED"
     assert submitted.provider_reference == duplicate.provider_reference == "surface-authorized"
     assert len(provider.requests) == 1
+
+
+async def test_a2a_policy_uses_nullable_persisted_surface_but_keeps_exact_workflow_scope(
+    session_factory: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with session_factory() as session:
+        await seed_fitbox(session)
+        action = RecoveryActionRecord(
+            id="action_a2a_policy",
+            case_id=FITBOX_CASE_ID,
+            action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
+            payment_surface_type=None,
+            status=ActionStatus.AWAITING_APPROVAL,
+            idempotency_key=f"{FITBOX_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1",
+            created_at=TEST_NOW,
+            updated_at=TEST_NOW,
+        )
+        session.add(action)
+        await session.flush()
+        session.add(
+            PolicyDecisionRecord(
+                id="policy_a2a_policy",
+                case_id=FITBOX_CASE_ID,
+                action_id=action.id,
+                disposition=PolicyDisposition.REQUIRE_MANUAL_APPROVAL,
+                decision_code="A2A_REQUIRES_APPROVAL",
+                reason_codes=["A2A_REQUIRES_APPROVAL"],
+                reasons=["Customer-agent delegation requires operator approval."],
+                policy_version="policy-v1",
+                created_at=TEST_NOW,
+            )
+        )
+        await session.commit()
+
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: session_factory)
+    services = ProductionRecoveryActivityServices(
+        payment_provider=RecordingPaymentProvider(),
+        scorer=FixedScorer(),
+        clock=lambda: TEST_NOW,
+    )
+    command = PolicyInput(
+        case_id=FITBOX_CASE_ID,
+        merchant_id="merchant_fitbox",
+        amount_at_risk_paise=149_900,
+        diagnosis="AUTHENTICATION_REQUIRED",
+        candidate_action="SEND_TO_CUSTOMER_AGENT",
+        payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
+        recovery_deadline=(TEST_NOW + timedelta(hours=1)).isoformat(),
+    )
+
+    policy = await services.evaluate_policy(command)
+
+    assert policy.disposition == "REQUIRE_MANUAL_APPROVAL"
+    assert policy.action == "SEND_TO_CUSTOMER_AGENT"
+    assert policy.payment_surface_type is None
 
 
 async def test_future_delay_is_rejected_until_both_policy_and_action_are_due(
