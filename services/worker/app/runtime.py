@@ -19,14 +19,22 @@ from services.api.app.domain.enums import (
     PaymentSurfaceType,
     PolicyDisposition,
     RecoveryActionType,
+    RevenueAttribution,
 )
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
+from services.api.app.integrations.razorpay.errors import RazorpayIntegrationError
+from services.api.app.integrations.razorpay.normalizer import normalize_webhook
 from services.api.app.lab.scorer import create_recovery_scorer
 from services.api.app.models import (
+    Invoice,
+    PaymentAttempt,
     PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
     RecoveryEventRecord,
+    RevenueRecognitionRecord,
+    Subscription,
+    WebhookInboxEntry,
 )
 from services.api.app.providers.contracts import (
     OpenPaymentSurfaceRequest,
@@ -422,36 +430,188 @@ class ProductionRecoveryActivityServices:
         if isinstance(self._payment_provider, MockPaymentProvider):
             return await self._fallback.reconcile_case(command)
         if command.failed_invoice_id is None:
-            return ReconciliationResult(
-                payment_state="UNKNOWN",
-                subscription_state="UNKNOWN",
-                authoritative=False,
-                case_recovered=False,
-                arrears_collected_paise=0,
-                subscription_reactivated=False,
-            )
-        payment_id: str | None = None
-        async with get_session_factory()() as session:
-            recovery_case = await session.get(RecoveryCase, command.case_id)
-            if recovery_case is not None and recovery_case.failed_payment_id:
-                from services.api.app.models import PaymentAttempt
+            return self._unreconciled_case()
 
-                payment = await session.get(PaymentAttempt, recovery_case.failed_payment_id)
-                payment_id = payment.provider_payment_id if payment is not None else None
+        provider_payment_id: str | None = None
+        provider_invoice_id: str | None = None
+        expected_subscription_id: str | None = None
+        expected_currency: str | None = None
+        required_arrears_paise = 0
+        existing_arrears_paise = 0
+        async with get_session_factory()() as session:
+            recovery_case = await session.scalar(
+                select(RecoveryCase).where(
+                    RecoveryCase.id == command.case_id,
+                    RecoveryCase.merchant_id == command.merchant_id,
+                    RecoveryCase.failed_invoice_id == command.failed_invoice_id,
+                )
+            )
+            if recovery_case is None:
+                return self._unreconciled_case()
+            invoice = await session.scalar(
+                select(Invoice).where(
+                    Invoice.id == command.failed_invoice_id,
+                    Invoice.merchant_id == command.merchant_id,
+                    Invoice.subscription_id == recovery_case.subscription_id,
+                )
+            )
+            subscription = await session.scalar(
+                select(Subscription).where(
+                    Subscription.id == recovery_case.subscription_id,
+                    Subscription.merchant_id == command.merchant_id,
+                )
+            )
+            if invoice is None or subscription is None:
+                return self._unreconciled_case()
+
+            # The webhook processor persists the accounting recognition before it
+            # signals Temporal.  Prefer that exact, invoice-scoped evidence.  A
+            # duplicate/late event may have a different event id after the same
+            # payment was already recognized, so a terminal case may use its
+            # existing Razorpay recognition as the convergence source.
+            recognition_filter = [
+                RevenueRecognitionRecord.case_id == recovery_case.id,
+                RevenueRecognitionRecord.merchant_id == command.merchant_id,
+                RevenueRecognitionRecord.provider == "razorpay",
+                RevenueRecognitionRecord.attribution == RevenueAttribution.RAZORPAY_TEST_VERIFIED,
+                RevenueRecognitionRecord.arrears_collected.is_(True),
+                PaymentAttempt.invoice_id == invoice.id,
+                PaymentAttempt.payment_state == PaymentState.CAPTURED,
+            ]
+            if not recovery_case.case_recovered:
+                recognition_filter.append(
+                    RevenueRecognitionRecord.provider_event_id == command.trigger_event_id
+                )
+            recognized = (
+                await session.execute(
+                    select(RevenueRecognitionRecord, PaymentAttempt)
+                    .join(
+                        PaymentAttempt,
+                        PaymentAttempt.id == RevenueRecognitionRecord.payment_attempt_id,
+                    )
+                    .where(*recognition_filter)
+                    .order_by(RevenueRecognitionRecord.recognized_at.desc())
+                    .limit(1)
+                )
+            ).first()
+            if recognized is not None:
+                _, recognized_payment = recognized
+                return ReconciliationResult(
+                    payment_state=recovery_case.payment_state.value,
+                    subscription_state=recovery_case.subscription_state.value,
+                    authoritative=True,
+                    case_recovered=recovery_case.case_recovered,
+                    arrears_collected_paise=recovery_case.arrears_collected_paise,
+                    subscription_reactivated=recovery_case.subscription_reactivated,
+                    provider_reference=(
+                        recognized_payment.provider_payment_id or command.trigger_event_id
+                    ),
+                )
+
+            inbox = await session.scalar(
+                select(WebhookInboxEntry).where(
+                    WebhookInboxEntry.merchant_id == command.merchant_id,
+                    WebhookInboxEntry.provider == "razorpay",
+                    WebhookInboxEntry.provider_event_id == command.trigger_event_id,
+                )
+            )
+            if inbox is not None:
+                try:
+                    event = normalize_webhook(
+                        provider_event_id=inbox.provider_event_id,
+                        payload=inbox.payload,
+                    )
+                except RazorpayIntegrationError:
+                    return self._unreconciled_case()
+                invoice_matches = event.invoice_id == invoice.provider_invoice_id
+                subscription_matches = event.subscription_id in {
+                    None,
+                    subscription.provider_subscription_id,
+                }
+                if event.event_type == "payment_link.paid":
+                    # Replacement Payment Links are arrears collection only and
+                    # must carry both exact case and invoice notes.  They do not
+                    # imply that the subscription mandate became active again.
+                    scope_matches = (
+                        event.case_id == recovery_case.id
+                        and invoice_matches
+                        and subscription_matches
+                    )
+                else:
+                    # Native invoice payments and card-update/gateway retries are
+                    # tied to the failed invoice; a case note is optional.
+                    scope_matches = (
+                        event.payment_state == PaymentState.CAPTURED
+                        and invoice_matches
+                        and subscription_matches
+                        and event.case_id in {None, recovery_case.id}
+                    )
+                if (
+                    not scope_matches
+                    or event.payment_state != PaymentState.CAPTURED
+                    or event.payment_id is None
+                ):
+                    return self._unreconciled_case()
+                provider_payment_id = event.payment_id
+            elif command.authoritative_hint:
+                # An asserted success without a durable signed webhook is never
+                # payment truth (in particular, browser callbacks are ignored).
+                return self._unreconciled_case()
+
+            provider_invoice_id = invoice.provider_invoice_id
+            expected_subscription_id = subscription.provider_subscription_id
+            expected_currency = invoice.currency
+            existing_arrears_paise = recovery_case.arrears_collected_paise
+            required_arrears_paise = max(
+                recovery_case.amount_at_risk_paise - existing_arrears_paise,
+                0,
+            )
+
+        if (
+            provider_invoice_id is None
+            or expected_subscription_id is None
+            or expected_currency is None
+        ):
+            return self._unreconciled_case()
         snapshot = await self._payment_provider.fetch_payment_snapshot(
             merchant_id=command.merchant_id,
-            payment_id=payment_id,
-            invoice_id=command.failed_invoice_id,
+            # For a webhook signal this is the newly captured payment, not the
+            # original failed attempt.  For an already-paid reconciliation it is
+            # deliberately None so Razorpay's current invoice payment wins.
+            payment_id=provider_payment_id,
+            invoice_id=provider_invoice_id,
         )
-        recovered = snapshot.authoritative and snapshot.payment_state == PaymentState.CAPTURED
+        recovered = (
+            snapshot.authoritative
+            and snapshot.payment_state == PaymentState.CAPTURED
+            and snapshot.invoice_id == provider_invoice_id
+            and snapshot.subscription_id == expected_subscription_id
+            and snapshot.currency == expected_currency
+            and snapshot.amount_paise == required_arrears_paise
+            and required_arrears_paise > 0
+            and (provider_payment_id is None or snapshot.payment_id == provider_payment_id)
+        )
         return ReconciliationResult(
             payment_state=snapshot.payment_state.value,
             subscription_state=snapshot.subscription_state.value,
             authoritative=snapshot.authoritative,
             case_recovered=recovered,
-            arrears_collected_paise=snapshot.amount_paise if recovered else 0,
+            arrears_collected_paise=(
+                existing_arrears_paise + snapshot.amount_paise if recovered else 0
+            ),
             subscription_reactivated=recovered and snapshot.subscription_state.value == "ACTIVE",
             provider_reference=snapshot.payment_id or snapshot.invoice_id,
+        )
+
+    @staticmethod
+    def _unreconciled_case() -> ReconciliationResult:
+        return ReconciliationResult(
+            payment_state="UNKNOWN",
+            subscription_state="UNKNOWN",
+            authoritative=False,
+            case_recovered=False,
+            arrears_collected_paise=0,
+            subscription_reactivated=False,
         )
 
     async def record_audit_event(self, command: AuditInput) -> AuditResult:
