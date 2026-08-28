@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -373,23 +373,111 @@ class RazorpayClient:
 
     async def reconcile_payment_link_by_reference(
         self, *, reference_id: str
-    ) -> dict[str, Any] | None:
-        """Resolve an uncertain create before an activity decides whether to resubmit."""
+    ) -> PaymentSurfaceResult | None:
+        """Resolve an uncertain create before an activity decides whether to resubmit.
+
+        Razorpay documents ``reference_id`` as a filter on this collection.  A
+        valid empty collection is therefore confirmed absence; malformed or
+        ambiguous responses raise and must remain unresolved upstream.
+        """
 
         collection = await self._request_json(
             "GET", "/v1/payment_links", params={"reference_id": reference_id}
         )
         items = collection.get("payment_links", collection.get("items"))
         if not isinstance(items, list):
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_COLLECTION_INVALID",
+                "Razorpay Payment Link collection has no payment_links array.",
+            )
+        matches = [
+            cast(dict[str, Any], item)
+            for item in items
+            if isinstance(item, dict) and item.get("reference_id") == reference_id
+        ]
+        if len(matches) > 1:
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_REFERENCE_AMBIGUOUS",
+                "Razorpay returned multiple Payment Links for one unique reference_id.",
+                reference_id=reference_id,
+            )
+        match = matches[0] if matches else None
+        if match is None:
+            if self._payment_link_breaker.uncertain_submission:
+                self._payment_link_breaker.reconcile_uncertain(provider_confirmed_absent=True)
             return None
-        match = next(
-            (
-                cast(dict[str, Any], item)
-                for item in items
-                if isinstance(item, dict) and item.get("reference_id") == reference_id
-            ),
-            None,
-        )
+        link_id = _text(match.get("id"))
+        short_url = _text(match.get("short_url"))
+        if link_id is None or short_url is None:
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_RESPONSE_INVALID",
+                "Reconciled Payment Link has no id or short_url.",
+                reference_id=reference_id,
+            )
         if self._payment_link_breaker.uncertain_submission:
-            self._payment_link_breaker.reconcile_uncertain(provider_confirmed_absent=match is None)
-        return match
+            self._payment_link_breaker.reconcile_uncertain(provider_confirmed_absent=False)
+        expire_by = _integer(match.get("expire_by"))
+        expires_at = datetime.fromtimestamp(expire_by, UTC) if expire_by else None
+        return PaymentSurfaceResult(
+            provider="razorpay",
+            provider_reference=link_id,
+            surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+            customer_url=short_url,
+            expires_at=expires_at,
+            authoritative=True,
+        )
+
+    async def revoke_standard_payment_link(
+        self, *, provider_reference: str
+    ) -> Literal["CANCELLED", "ALREADY_INACTIVE", "PAYMENT_PRESENT"]:
+        """Cancel a created link while converging harmless terminal races.
+
+        A paid or partially-paid link cannot be cancelled.  Reporting that state
+        lets authoritative invoice/payment reconciliation proceed instead of
+        turning terminal-case cleanup into a false payment failure.
+        """
+
+        async def fetch() -> dict[str, Any]:
+            return await self._request_json("GET", f"/v1/payment_links/{provider_reference}")
+
+        def terminal_state(
+            link: dict[str, Any],
+        ) -> Literal["ALREADY_INACTIVE", "PAYMENT_PRESENT"] | None:
+            status = _text(link.get("status"))
+            if status in {"cancelled", "expired"}:
+                return "ALREADY_INACTIVE"
+            if status in {"paid", "partially_paid"}:
+                return "PAYMENT_PRESENT"
+            return None
+
+        link = await fetch()
+        terminal = terminal_state(link)
+        if terminal is not None:
+            return terminal
+        if link.get("status") != "created":
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_STATUS_UNRESOLVED",
+                "Payment Link cannot be safely cancelled from its current state.",
+                provider_reference=provider_reference,
+                provider_status=link.get("status"),
+            )
+        try:
+            cancelled = await self._request_json(
+                "POST", f"/v1/payment_links/{provider_reference}/cancel"
+            )
+        except RazorpayRequestError:
+            # Payment or another cancellation can win after the read.  A second
+            # authoritative read makes those races idempotent; otherwise the
+            # original error remains unresolved and is not treated as success.
+            terminal = terminal_state(await fetch())
+            if terminal is not None:
+                return terminal
+            raise
+        if cancelled.get("status") != "cancelled":
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_CANCEL_UNCONFIRMED",
+                "Razorpay did not confirm Payment Link cancellation.",
+                provider_reference=provider_reference,
+                provider_status=cancelled.get("status"),
+            )
+        return "CANCELLED"

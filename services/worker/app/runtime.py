@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import or_, select, update
@@ -38,9 +39,14 @@ from services.api.app.models import (
 )
 from services.api.app.providers.contracts import (
     OpenPaymentSurfaceRequest,
+    PaymentSurfaceResult,
     RecoveryScoreRequest,
 )
-from services.api.app.providers.interfaces import PaymentProvider, RecoveryScorer
+from services.api.app.providers.interfaces import (
+    PaymentProvider,
+    RecoveryScorer,
+    StandardPaymentLinkLifecycleProvider,
+)
 from services.api.app.services.mock_payment import MockPaymentProvider
 from services.api.app.voice.factory import create_voice_service_from_env
 
@@ -68,6 +74,12 @@ from .ports import RecoveryActivityServices
 
 class ActivityConfigurationError(RuntimeError):
     """Raised before worker startup when provider flags are unsafe or incomplete."""
+
+
+@dataclass(frozen=True, slots=True)
+class _PaymentActionClaim:
+    action: RecoveryActionRecord
+    reconcile_before_submission: bool
 
 
 def _enabled(name: str, default: str = "false") -> bool:
@@ -126,6 +138,7 @@ class ProductionRecoveryActivityServices:
         self._scorer = scorer
         self._clock = clock or (lambda: datetime.now(UTC))
         self._fallback = MockRecoveryActivityServices(require_manual_approval=True)
+        self._payment_submissions_in_flight: set[str] = set()
 
     async def normalize_failure(self, command: NormalizeFailureInput) -> NormalizedFailure:
         return await self._fallback.normalize_failure(command)
@@ -245,9 +258,10 @@ class ProductionRecoveryActivityServices:
                 reason_code="PAYMENT_SURFACE_SCOPE_MISSING",
             )
 
-        action = await self._claim_payment_action(command)
-        if isinstance(action, ActionExecutionResult):
-            return action
+        claim = await self._claim_payment_action(command)
+        if isinstance(claim, ActionExecutionResult):
+            return claim
+        action = claim.action
 
         surface_type = PaymentSurfaceType(command.payment_surface_type)
         deadline = _instant(command.recovery_deadline)
@@ -255,41 +269,79 @@ class ProductionRecoveryActivityServices:
         expires_at: datetime | None = None
         notes: dict[str, str] = {}
         if surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
-            reference_id = "rec_" + hashlib.sha256(action.idempotency_key.encode()).hexdigest()[:32]
+            reference_id = self._standard_payment_link_reference(action.idempotency_key)
             expires_at = deadline
             notes = {"case_id": command.case_id, "invoice_id": command.failed_invoice_id}
 
-        try:
-            result = await self._payment_provider.open_customer_payment_surface(
-                OpenPaymentSurfaceRequest(
-                    idempotency_key=action.idempotency_key,
-                    case_id=command.case_id,
-                    merchant_id=command.merchant_id,
-                    customer_id=command.customer_id,
-                    subscription_id=command.subscription_id,
-                    failed_invoice_id=command.failed_invoice_id,
-                    surface_type=surface_type,
-                    exact_amount_paise=command.amount_paise,
-                    currency=command.currency,
-                    recovery_deadline=deadline,
-                    expires_at=expires_at,
-                    reference_id=reference_id,
-                    notes=notes,
+        request = OpenPaymentSurfaceRequest(
+            idempotency_key=action.idempotency_key,
+            case_id=command.case_id,
+            merchant_id=command.merchant_id,
+            customer_id=command.customer_id,
+            subscription_id=command.subscription_id,
+            failed_invoice_id=command.failed_invoice_id,
+            surface_type=surface_type,
+            exact_amount_paise=command.amount_paise,
+            currency=command.currency,
+            recovery_deadline=deadline,
+            expires_at=expires_at,
+            reference_id=reference_id,
+            notes=notes,
+        )
+        if claim.reconcile_before_submission:
+            if surface_type != PaymentSurfaceType.STANDARD_PAYMENT_LINK:
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="unknown",
+                    provider_reference=action.external_reference,
+                    reason_code="SUBMISSION_RECONCILIATION_REQUIRED",
                 )
+            return await self._reconcile_or_resume_standard_payment_link(
+                action_id=action.id,
+                request=request,
             )
+
+        self._payment_submissions_in_flight.add(action.id)
+        try:
+            result = await self._payment_provider.open_customer_payment_surface(request)
         except Exception:
             # Submission may be uncertain. The EXECUTING claim deliberately
             # prevents an automatic second provider call on activity replay.
             raise
+        finally:
+            self._payment_submissions_in_flight.discard(action.id)
+        return await self._persist_payment_surface(action.id, result)
 
+    @staticmethod
+    def _standard_payment_link_reference(idempotency_key: str) -> str:
+        return "rec_" + hashlib.sha256(idempotency_key.encode()).hexdigest()[:32]
+
+    async def _persist_payment_surface(
+        self, action_id: str, result: PaymentSurfaceResult
+    ) -> ActionExecutionResult:
         async with get_session_factory()() as session:
-            persisted = await session.get(RecoveryActionRecord, action.id, with_for_update=True)
+            persisted = await session.get(RecoveryActionRecord, action_id, with_for_update=True)
             if persisted is None:
                 return ActionExecutionResult(
                     status="UNCERTAIN",
                     provider=result.provider,
                     provider_reference=result.provider_reference,
                     reason_code="ACTION_RECORD_MISSING_AFTER_SUBMISSION",
+                )
+            if persisted.status == ActionStatus.CANCELLED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider=result.provider,
+                    provider_reference=result.provider_reference,
+                    reason_code="ACTION_CANCELLED_AFTER_SUBMISSION",
+                )
+            if persisted.status == ActionStatus.SUCCEEDED:
+                return ActionExecutionResult(
+                    status="SUCCEEDED",
+                    provider="persisted",
+                    provider_reference=persisted.external_reference,
+                    customer_url=persisted.customer_url,
+                    reason_code="ALREADY_EXECUTED",
                 )
             persisted.status = ActionStatus.SUCCEEDED
             persisted.external_reference = result.provider_reference
@@ -303,9 +355,91 @@ class ProductionRecoveryActivityServices:
             customer_url=result.customer_url,
         )
 
+    async def _reconcile_or_resume_standard_payment_link(
+        self,
+        *,
+        action_id: str,
+        request: OpenPaymentSurfaceRequest,
+    ) -> ActionExecutionResult:
+        if not isinstance(self._payment_provider, StandardPaymentLinkLifecycleProvider):
+            return ActionExecutionResult(
+                status="UNCERTAIN",
+                provider="unknown",
+                reason_code="PAYMENT_LINK_RECONCILIATION_UNSUPPORTED",
+            )
+
+        # The row lock serializes competing activity deliveries around the
+        # provider lookup and any confirmed-absent resubmission.  No second
+        # create can begin while another reconciler is deciding this action.
+        async with get_session_factory()() as session:
+            persisted = await session.get(RecoveryActionRecord, action_id, with_for_update=True)
+            if persisted is None:
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="unknown",
+                    reason_code="ACTION_RECORD_MISSING_DURING_RECONCILIATION",
+                )
+            if persisted.status == ActionStatus.SUCCEEDED:
+                return ActionExecutionResult(
+                    status="SUCCEEDED",
+                    provider="persisted",
+                    provider_reference=persisted.external_reference,
+                    customer_url=persisted.customer_url,
+                    reason_code="ALREADY_EXECUTED",
+                )
+            if persisted.status == ActionStatus.CANCELLED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_CANCELLED",
+                )
+            if persisted.status != ActionStatus.EXECUTING:
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="unknown",
+                    reason_code="ACTION_STATE_CHANGED_DURING_RECONCILIATION",
+                )
+            assert request.reference_id is not None
+            try:
+                reconciled = await self._payment_provider.reconcile_payment_link_by_reference(
+                    reference_id=request.reference_id
+                )
+            except Exception:
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="razorpay",
+                    reason_code="PAYMENT_LINK_RECONCILIATION_UNRESOLVED",
+                )
+
+            if reconciled is None:
+                try:
+                    reconciled = await self._payment_provider.open_customer_payment_surface(request)
+                except Exception:
+                    return ActionExecutionResult(
+                        status="UNCERTAIN",
+                        provider="razorpay",
+                        reason_code="CONFIRMED_ABSENT_RESUBMISSION_UNCERTAIN",
+                    )
+                reason_code = "CONFIRMED_ABSENT_RESUBMITTED"
+            else:
+                reason_code = "SUBMISSION_RECONCILED"
+
+            persisted.status = ActionStatus.SUCCEEDED
+            persisted.external_reference = reconciled.provider_reference
+            persisted.customer_url = reconciled.customer_url
+            persisted.completed_at = self._clock()
+            await session.commit()
+            return ActionExecutionResult(
+                status="SUCCEEDED",
+                provider=reconciled.provider,
+                provider_reference=reconciled.provider_reference,
+                customer_url=reconciled.customer_url,
+                reason_code=reason_code,
+            )
+
     async def _claim_payment_action(
         self, command: ExecuteActionInput
-    ) -> RecoveryActionRecord | ActionExecutionResult:
+    ) -> _PaymentActionClaim | ActionExecutionResult:
         if command.payment_surface_type is None:
             return ActionExecutionResult(
                 status="REJECTED",
@@ -348,6 +482,18 @@ class ProductionRecoveryActivityServices:
                     reason_code="ALREADY_EXECUTED",
                 )
             if action.status == ActionStatus.EXECUTING:
+                if action.id in self._payment_submissions_in_flight:
+                    return ActionExecutionResult(
+                        status="UNCERTAIN",
+                        provider="unknown",
+                        provider_reference=action.external_reference,
+                        reason_code="SUBMISSION_RECONCILIATION_REQUIRED",
+                    )
+                if surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
+                    return _PaymentActionClaim(
+                        action=action,
+                        reconcile_before_submission=True,
+                    )
                 return ActionExecutionResult(
                     status="UNCERTAIN",
                     provider="unknown",
@@ -416,6 +562,16 @@ class ProductionRecoveryActivityServices:
                         customer_url=current.customer_url,
                         reason_code="ALREADY_EXECUTED",
                     )
+                if (
+                    current is not None
+                    and current.status == ActionStatus.EXECUTING
+                    and current.id not in self._payment_submissions_in_flight
+                    and surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK
+                ):
+                    return _PaymentActionClaim(
+                        action=current,
+                        reconcile_before_submission=True,
+                    )
                 return ActionExecutionResult(
                     status="UNCERTAIN",
                     provider="unknown",
@@ -424,7 +580,10 @@ class ProductionRecoveryActivityServices:
                 )
             await session.commit()
             action.status = ActionStatus.EXECUTING
-            return action
+            return _PaymentActionClaim(
+                action=action,
+                reconcile_before_submission=False,
+            )
 
     async def reconcile_case(self, command: ReconciliationInput) -> ReconciliationResult:
         if isinstance(self._payment_provider, MockPaymentProvider):
@@ -650,6 +809,9 @@ class ProductionRecoveryActivityServices:
             return AuditResult(audit_event_id=event.id, recorded=True)
 
     async def cancel_recovery_action(self, command: CancelActionInput) -> CancelActionResult:
+        payment_link_cleanup_ok, payment_link_reason = await self._cleanup_standard_payment_links(
+            command.case_id
+        )
         async with get_session_factory()() as session:
             actions = list(
                 (
@@ -663,6 +825,7 @@ class ProductionRecoveryActivityServices:
                                     ActionStatus.AWAITING_APPROVAL,
                                     ActionStatus.SCHEDULED,
                                     ActionStatus.EXECUTING,
+                                    ActionStatus.SUCCEEDED,
                                 ]
                             ),
                         )
@@ -673,8 +836,16 @@ class ProductionRecoveryActivityServices:
                 .all()
             )
             for action in actions:
+                if action.payment_surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
+                    # Standalone links were reconciled/revoked above.  Never
+                    # overwrite a PAYMENT_PRESENT or unresolved provider state.
+                    continue
+                if action.status == ActionStatus.SUCCEEDED:
+                    # Provider-owned invoice and card-update surfaces are not
+                    # cancellable RecoveryOS resources.
+                    continue
                 action.status = ActionStatus.CANCELLED
-                action.completed_at = datetime.now(UTC)
+                action.completed_at = self._clock()
             await session.commit()
 
         voice_reason: str | None = None
@@ -693,7 +864,98 @@ class ProductionRecoveryActivityServices:
             voice_reason = voice_result.reason_code or f"VOICE_{voice_result.status}"
             if voice_result.status == "UNCERTAIN":
                 return CancelActionResult(cancelled=False, reason_code=voice_reason)
+        if not payment_link_cleanup_ok:
+            return CancelActionResult(
+                cancelled=False,
+                reason_code=payment_link_reason or "PAYMENT_LINK_CLEANUP_UNRESOLVED",
+            )
         return CancelActionResult(
             cancelled=True,
-            reason_code=voice_reason or ("CANCELLED" if actions else "NO_ACTIVE_ACTION"),
+            reason_code=(
+                voice_reason
+                or payment_link_reason
+                or ("CANCELLED" if actions else "NO_ACTIVE_ACTION")
+            ),
         )
+
+    async def _cleanup_standard_payment_links(self, case_id: str) -> tuple[bool, str | None]:
+        async with get_session_factory()() as session:
+            actions = list(
+                (
+                    await session.execute(
+                        select(RecoveryActionRecord)
+                        .where(
+                            RecoveryActionRecord.case_id == case_id,
+                            RecoveryActionRecord.payment_surface_type
+                            == PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+                            RecoveryActionRecord.status.in_(
+                                [ActionStatus.EXECUTING, ActionStatus.SUCCEEDED]
+                            ),
+                        )
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not actions:
+                return True, None
+
+            if isinstance(self._payment_provider, MockPaymentProvider):
+                for action in actions:
+                    action.status = ActionStatus.CANCELLED
+                    action.completed_at = self._clock()
+                await session.commit()
+                return True, "PAYMENT_LINK_MOCK_CANCELLED"
+
+            if not isinstance(self._payment_provider, StandardPaymentLinkLifecycleProvider):
+                return False, "PAYMENT_LINK_CLEANUP_UNSUPPORTED"
+
+            payment_present = False
+            for action in actions:
+                provider_reference = action.external_reference
+                if provider_reference is None:
+                    reference_id = self._standard_payment_link_reference(action.idempotency_key)
+                    try:
+                        reconciled = (
+                            await self._payment_provider.reconcile_payment_link_by_reference(
+                                reference_id=reference_id
+                            )
+                        )
+                    except Exception:
+                        await session.rollback()
+                        return False, "PAYMENT_LINK_CLEANUP_RECONCILIATION_UNRESOLVED"
+                    if reconciled is None:
+                        action.status = ActionStatus.CANCELLED
+                        action.completed_at = self._clock()
+                        continue
+                    action.status = ActionStatus.SUCCEEDED
+                    action.external_reference = reconciled.provider_reference
+                    action.customer_url = reconciled.customer_url
+                    provider_reference = reconciled.provider_reference
+
+                try:
+                    revocation = await self._payment_provider.revoke_standard_payment_link(
+                        provider_reference=provider_reference
+                    )
+                except Exception:
+                    await session.rollback()
+                    return False, "PAYMENT_LINK_CLEANUP_UNRESOLVED"
+                if revocation == "PAYMENT_PRESENT":
+                    # Preserve the successful surface and let the normal signed
+                    # webhook / authoritative snapshot path recognize payment.
+                    payment_present = True
+                    continue
+                if revocation not in {"CANCELLED", "ALREADY_INACTIVE"}:
+                    await session.rollback()
+                    return False, "PAYMENT_LINK_CLEANUP_STATUS_UNRESOLVED"
+                action.status = ActionStatus.CANCELLED
+                action.completed_at = self._clock()
+
+            await session.commit()
+            return (
+                True,
+                "PAYMENT_LINK_PAYMENT_PRESENT_RECONCILIATION_REQUIRED"
+                if payment_present
+                else "PAYMENT_LINK_REVOKED",
+            )

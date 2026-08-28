@@ -1,6 +1,6 @@
 """Async provider ports used by activities and application services."""
 
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 from .contracts import (
     CustomerAgentRecoveryRequest,
@@ -32,6 +32,26 @@ class PaymentProvider(Protocol):
     async def fetch_payment_snapshot(
         self, *, merchant_id: str, payment_id: str | None, invoice_id: str
     ) -> PaymentSnapshot: ...
+
+
+@runtime_checkable
+class StandardPaymentLinkLifecycleProvider(Protocol):
+    """Optional lifecycle operations for provider-owned standalone links.
+
+    Invoice links and subscription card-update Checkout surfaces deliberately do
+    not implement this port: their lifecycle remains owned by the provider.
+    """
+
+    async def reconcile_payment_link_by_reference(
+        self, *, reference_id: str
+    ) -> PaymentSurfaceResult | None:
+        """Return a confirmed matching link, or ``None`` for confirmed absence."""
+
+        ...
+
+    async def revoke_standard_payment_link(
+        self, *, provider_reference: str
+    ) -> Literal["CANCELLED", "ALREADY_INACTIVE", "PAYMENT_PRESENT"]: ...
 
 
 @runtime_checkable
