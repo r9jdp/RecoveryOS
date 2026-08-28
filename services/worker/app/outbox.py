@@ -8,6 +8,7 @@ import os
 from collections.abc import Coroutine
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from temporalio.client import Client, WorkflowHandle
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -15,7 +16,13 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from services.api.app.db import get_session_factory
 from services.api.app.domain.enums import Diagnosis, SubscriptionState
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
-from services.api.app.models import Invoice, PaymentAttempt, RecoveryCase
+from services.api.app.models import (
+    Invoice,
+    PaymentAttempt,
+    PolicyDecisionRecord,
+    RecoveryActionRecord,
+    RecoveryCase,
+)
 from services.api.app.webhooks import RazorpayDownstreamSignal, RazorpayOutboxProcessor
 
 from .contracts import PaymentEventSignal, ProviderEvent, RecoveryWorkflowInput
@@ -103,20 +110,36 @@ class TemporalRazorpaySignalDispatcher:
 
         candidate_action = "OPEN_CUSTOMER_PAYMENT_SURFACE"
         payment_surface_type: str | None = "SUBSCRIPTION_INVOICE_LINK"
-        if signal.event_type != "payment.failed":
+        if signal.event_type == "payment.failed":
+            recommended_action_id = signal.effects.get("recommended_action_id")
+            if not isinstance(recommended_action_id, str):
+                raise RuntimeError("Razorpay failure signal has no durable recommended action")
+            action = await self.session.scalar(
+                select(RecoveryActionRecord)
+                .join(
+                    PolicyDecisionRecord,
+                    PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
+                )
+                .where(
+                    RecoveryActionRecord.id == recommended_action_id,
+                    RecoveryActionRecord.case_id == recovery_case.id,
+                    PolicyDecisionRecord.case_id == recovery_case.id,
+                )
+                .limit(1)
+            )
+            if action is None:
+                raise RuntimeError(
+                    "Razorpay failure signal references no durable action and policy"
+                )
+            candidate_action = action.action_type.value
+            payment_surface_type = (
+                action.payment_surface_type.value if action.payment_surface_type else None
+            )
+        else:
             # A workflow started by a late success must reconcile before it can
             # submit any customer-facing action.
             candidate_action = "WAIT_FOR_GATEWAY_RETRY"
             payment_surface_type = None
-        elif recovery_case.subscription_state == SubscriptionState.PENDING:
-            if recovery_case.diagnosis in {
-                Diagnosis.AUTHENTICATION_REQUIRED,
-                Diagnosis.INSTRUMENT_INVALID,
-            }:
-                payment_surface_type = "SUBSCRIPTION_CARD_UPDATE"
-            else:
-                candidate_action = "WAIT_FOR_GATEWAY_RETRY"
-                payment_surface_type = None
 
         reason_code = _CANONICAL_REASON_BY_DIAGNOSIS.get(recovery_case.diagnosis)
         return RecoveryWorkflowInput(

@@ -3,14 +3,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
     Diagnosis,
     PaymentState,
+    PaymentSurfaceType,
+    PolicyDisposition,
+    RecoveryActionType,
     RevenueAttribution,
     SubscriptionState,
 )
@@ -19,8 +23,10 @@ from services.api.app.models import (
     Customer,
     Invoice,
     Merchant,
+    MerchantPolicySetting,
     OutboxMessage,
     PaymentAttempt,
+    PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
     RecoveryEventRecord,
@@ -40,10 +46,13 @@ from services.api.app.webhooks.processor import (
 )
 from services.api.app.webhooks.razorpay import RazorpayWebhookIngestionService
 from services.api.app.webhooks.repository import InboxOutboxStore
+from services.worker.app.contracts import PolicyInput
+from services.worker.app.runtime import ProductionRecoveryActivityServices
 
 FIXTURES = Path("services/api/tests/fixtures/razorpay")
 SECRET = "processor_test_secret"
 NOW = datetime(2030, 1, 1, tzinfo=UTC)
+POLICY_NOW = datetime(2026, 8, 28, 10, 0, 2, tzinfo=UTC)
 
 
 class FakePaymentProvider:
@@ -123,6 +132,61 @@ async def _ingest(
     assert outbox.payload["merchant_id"] == merchant_id
     assert outbox.payload["event"]["provider_event_id"] == provider_event_id
     return outbox
+
+
+async def _seed_policy_subject(
+    session: AsyncSession,
+    *,
+    suffix: str,
+    recovery_kill_switch: bool = False,
+    require_approval_above_paise: int | None = 500_000,
+) -> str:
+    merchant_id = f"merchant_policy_{suffix}"
+    merchant = Merchant(
+        id=merchant_id,
+        external_id=f"acc_policy_{suffix}",
+        display_name=f"Policy {suffix}",
+        timezone="Asia/Kolkata",
+    )
+    settings = MerchantPolicySetting(
+        merchant_id=merchant_id,
+        quiet_hours_start="20:00",
+        quiet_hours_end="09:00",
+        max_contacts_per_7_days=2,
+        require_approval_above_paise=require_approval_above_paise,
+        require_approval_actions=[],
+        recovery_kill_switch=recovery_kill_switch,
+    )
+    customer = Customer(
+        id=f"customer_policy_{suffix}",
+        merchant_id=merchant_id,
+        external_id="cust_fitbox_001",
+        display_name="Customer",
+    )
+    subscription = Subscription(
+        id=f"subscription_policy_{suffix}",
+        merchant_id=merchant_id,
+        customer_id=customer.id,
+        provider_subscription_id="sub_fitbox_annual_001",
+        plan_name="Annual",
+        amount_paise=149_900,
+        subscription_state=SubscriptionState.PENDING,
+        current_billing_cycle_key="2026-08",
+    )
+    invoice = Invoice(
+        id=f"invoice_policy_{suffix}",
+        merchant_id=merchant_id,
+        subscription_id=subscription.id,
+        provider_invoice_id="inv_fitbox_aug_2026",
+        billing_cycle_key="2026-08",
+        amount_paise=149_900,
+        amount_paid_paise=0,
+        currency="INR",
+        invoice_state="issued",
+    )
+    session.add_all([merchant, settings, customer, subscription, invoice])
+    await session.commit()
+    return merchant_id
 
 
 async def test_captured_events_recognize_one_payment_once_and_signal_before_publish(
@@ -395,6 +459,7 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
 ) -> None:
     session = processor_session
     merchant = Merchant(id="merchant_fresh", external_id="acc_fresh", display_name="Fresh Merchant")
+    policy_settings = MerchantPolicySetting(merchant_id=merchant.id)
     customer = Customer(
         id="customer_fresh",
         merchant_id=merchant.id,
@@ -422,7 +487,7 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
         currency="INR",
         invoice_state="issued",
     )
-    for record in (merchant, customer, subscription, invoice):
+    for record in (merchant, policy_settings, customer, subscription, invoice):
         session.add(record)
         await session.flush()
     await session.commit()
@@ -483,6 +548,204 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
     assert await processor.process_next() is None
 
 
+@pytest.mark.parametrize(
+    (
+        "suffix",
+        "payment_changes",
+        "recovery_kill_switch",
+        "approval_threshold",
+        "expected_action",
+        "expected_surface",
+        "expected_disposition",
+        "expected_status",
+        "expected_code",
+    ),
+    [
+        (
+            "delay",
+            {
+                "error_code": "GATEWAY_ERROR",
+                "error_source": "gateway",
+                "error_step": "payment_authorization",
+                "error_reason": "issuer_unavailable",
+            },
+            False,
+            500_000,
+            RecoveryActionType.WAIT_FOR_GATEWAY_RETRY,
+            None,
+            PolicyDisposition.DELAY,
+            ActionStatus.SCHEDULED,
+            "WAIT_FOR_PROVIDER_RETRY",
+        ),
+        (
+            "approval",
+            {},
+            False,
+            100_000,
+            RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
+            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
+            PolicyDisposition.REQUIRE_MANUAL_APPROVAL,
+            ActionStatus.AWAITING_APPROVAL,
+            "AMOUNT_REQUIRES_APPROVAL",
+        ),
+        (
+            "block",
+            {},
+            True,
+            500_000,
+            RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
+            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
+            PolicyDisposition.BLOCK,
+            ActionStatus.CANCELLED,
+            "MERCHANT_KILL_SWITCH_ENABLED",
+        ),
+    ],
+)
+async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
+    processor_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    suffix: str,
+    payment_changes: dict[str, Any],
+    recovery_kill_switch: bool,
+    approval_threshold: int,
+    expected_action: RecoveryActionType,
+    expected_surface: PaymentSurfaceType | None,
+    expected_disposition: PolicyDisposition,
+    expected_status: ActionStatus,
+    expected_code: str,
+) -> None:
+    session = processor_session
+    merchant_id = await _seed_policy_subject(
+        session,
+        suffix=suffix,
+        recovery_kill_switch=recovery_kill_switch,
+        require_approval_above_paise=approval_threshold,
+    )
+    raw = _raw_fixture("payment.failed.json", changes=payment_changes)
+    await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id=f"evt_policy_{suffix}_first",
+        merchant_id=merchant_id,
+        raw_body=raw,
+    )
+    assert session.bind is not None
+    verification_sessions = async_sessionmaker(session.bind, expire_on_commit=False)
+    monkeypatch.setattr(
+        "services.worker.app.runtime.get_session_factory", lambda: verification_sessions
+    )
+    production_services = ProductionRecoveryActivityServices(
+        payment_provider=FakePaymentProvider(),
+        scorer=cast(Any, None),
+        clock=lambda: POLICY_NOW,
+    )
+    observed_policies = []
+
+    async def callback(signal: RazorpayDownstreamSignal) -> None:
+        action_type = cast(str, signal.effects["recommended_action_type"])
+        surface_type = cast(str | None, signal.effects["recommended_payment_surface_type"])
+        observed_policies.append(
+            await production_services.evaluate_policy(
+                PolicyInput(
+                    case_id=cast(str, signal.case_id),
+                    merchant_id=merchant_id,
+                    amount_at_risk_paise=149_900,
+                    diagnosis="TRANSIENT_RETRYABLE",
+                    candidate_action=action_type,
+                    payment_surface_type=surface_type,
+                    recovery_deadline=(POLICY_NOW + timedelta(days=3)).isoformat(),
+                )
+            )
+        )
+
+    processor = RazorpayOutboxProcessor(
+        session,
+        FakePaymentProvider(),
+        callback,
+        clock=lambda: POLICY_NOW,
+    )
+    first = await processor.process_next()
+    assert first is not None and first.status == "PUBLISHED"
+
+    # A separately delivered duplicate for the same failed payment converges on
+    # the same case/action/policy instead of manufacturing another decision.
+    await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id=f"evt_policy_{suffix}_duplicate",
+        merchant_id=merchant_id,
+        raw_body=raw,
+    )
+    duplicate = await processor.process_next()
+    assert duplicate is not None and duplicate.status == "PUBLISHED"
+
+    action = await session.scalar(
+        select(RecoveryActionRecord).join(
+            RecoveryCase, RecoveryCase.id == RecoveryActionRecord.case_id
+        )
+    )
+    policy = await session.scalar(select(PolicyDecisionRecord))
+    action_count = await session.scalar(select(func.count(RecoveryActionRecord.id)))
+    policy_count = await session.scalar(select(func.count(PolicyDecisionRecord.id)))
+    assert action is not None and policy is not None
+    assert action_count == policy_count == 1
+    assert action.action_type == expected_action
+    assert action.payment_surface_type == expected_surface
+    assert action.status == expected_status
+    assert policy.case_id == action.case_id
+    assert policy.action_id == action.id
+    assert policy.disposition == expected_disposition
+    assert policy.decision_code == expected_code
+    assert policy.reason_codes[0] == expected_code
+    assert action.scheduled_for == policy.delay_until
+    if expected_disposition == PolicyDisposition.DELAY:
+        assert action.scheduled_for == POLICY_NOW + timedelta(minutes=15)
+    else:
+        assert action.scheduled_for is None
+    assert len(observed_policies) == 2
+    assert {result.decision_code for result in observed_policies} == {expected_code}
+    assert all(result.decision_code != "PERSISTED_POLICY_NOT_FOUND" for result in observed_policies)
+
+
+async def test_failed_temporal_dispatch_keeps_policy_durable_for_idempotent_retry(
+    processor_session: AsyncSession,
+) -> None:
+    session = processor_session
+    merchant_id = await _seed_policy_subject(session, suffix="dispatch_retry")
+    await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id="evt_policy_dispatch_retry",
+        merchant_id=merchant_id,
+    )
+    fail = True
+
+    async def callback(signal: RazorpayDownstreamSignal) -> None:
+        nonlocal fail
+        assert signal.effects["recommended_action_id"]
+        if fail:
+            fail = False
+            raise RuntimeError("simulated Temporal outage")
+
+    processor = RazorpayOutboxProcessor(
+        session,
+        FakePaymentProvider(),
+        callback,
+        clock=lambda: POLICY_NOW,
+        retry_base_delay=timedelta(0),
+    )
+    failed = await processor.process_next()
+    assert failed is not None and failed.status == "FAILED"
+    assert await session.scalar(select(func.count(RecoveryActionRecord.id))) == 1
+    assert await session.scalar(select(func.count(PolicyDecisionRecord.id))) == 1
+
+    succeeded = await processor.process_next()
+    assert succeeded is not None and succeeded.status == "PUBLISHED"
+    assert succeeded.attempt_count == 2
+    assert await session.scalar(select(func.count(RecoveryActionRecord.id))) == 1
+    assert await session.scalar(select(func.count(PolicyDecisionRecord.id))) == 1
+
+
 async def test_capture_delivered_before_failure_retries_after_case_creation(
     processor_session: AsyncSession,
 ) -> None:
@@ -492,6 +755,7 @@ async def test_capture_delivered_before_failure_retries_after_case_creation(
         external_id="acc_out_of_order",
         display_name="Out Of Order Merchant",
     )
+    policy_settings = MerchantPolicySetting(merchant_id=merchant.id)
     customer = Customer(
         id="customer_out_of_order",
         merchant_id=merchant.id,
@@ -519,7 +783,7 @@ async def test_capture_delivered_before_failure_retries_after_case_creation(
         currency="INR",
         invoice_state="issued",
     )
-    for record in (merchant, customer, subscription, invoice):
+    for record in (merchant, policy_settings, customer, subscription, invoice):
         session.add(record)
         await session.flush()
     await session.commit()

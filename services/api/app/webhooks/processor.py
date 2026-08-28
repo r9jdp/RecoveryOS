@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,8 +17,12 @@ from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
     ContactDisposition,
+    Diagnosis,
     EvidenceKind,
     PaymentState,
+    PaymentSurfaceType,
+    PolicyDisposition,
+    RecoveryActionType,
     RevenueAttribution,
     SubscriptionState,
 )
@@ -34,8 +39,11 @@ from services.api.app.integrations.razorpay.reconciliation import reconcile_paym
 from services.api.app.models import (
     Customer,
     Invoice,
+    Merchant,
+    MerchantPolicySetting,
     OutboxMessage,
     PaymentAttempt,
+    PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
     RecoveryEventRecord,
@@ -44,6 +52,11 @@ from services.api.app.models import (
     WebhookInboxEntry,
 )
 from services.api.app.providers.interfaces import PaymentProvider
+from services.api.app.safety import (
+    SafetyPolicyConfig,
+    SafetyPolicyContext,
+    evaluate_safety_policy,
+)
 from services.api.app.services.diagnosis import DiagnosisEvidence, diagnose_failure
 
 DEFAULT_RECOVERY_WINDOW = timedelta(days=3)
@@ -104,14 +117,24 @@ class RazorpayOutboxProcessor:
         *,
         clock: Callable[[], datetime] | None = None,
         retry_base_delay: timedelta = timedelta(seconds=5),
+        dispatch_lease: timedelta = timedelta(minutes=5),
+        global_kill_switch: bool | None = None,
     ) -> None:
         if retry_base_delay < timedelta(0):
             raise ValueError("retry_base_delay cannot be negative")
+        if dispatch_lease <= timedelta(0):
+            raise ValueError("dispatch_lease must be positive")
         self.session = session
         self.payment_provider = payment_provider
         self.downstream_signal = downstream_signal
         self.clock = clock or (lambda: datetime.now(UTC))
         self.retry_base_delay = retry_base_delay
+        self.dispatch_lease = dispatch_lease
+        self.global_kill_switch = (
+            global_kill_switch
+            if global_kill_switch is not None
+            else os.getenv("RECOVERY_GLOBAL_KILL_SWITCH", "false").strip().lower() == "true"
+        )
 
     async def process_next(self) -> OutboxProcessResult | None:
         now = self.clock()
@@ -140,6 +163,34 @@ class RazorpayOutboxProcessor:
             correlation = await self._correlate(payload)
             effects = await self._apply_event(payload, correlation)
             case_id = correlation.recovery_case.id if correlation.recovery_case else None
+            if payload.event.event_type == "payment.failed":
+                if correlation.recovery_case is None:
+                    raise RazorpayContractError(
+                        "RAZORPAY_FAILURE_CASE_NOT_CREATED",
+                        "payment.failed did not produce an invoice-scoped recovery case.",
+                    )
+                action = await self._ensure_initial_recommendation(
+                    merchant_id=payload.merchant_id,
+                    recovery_case=correlation.recovery_case,
+                )
+                effects.update(
+                    {
+                        "recommended_action_id": action.id,
+                        "recommended_action_type": action.action_type.value,
+                        "recommended_payment_surface_type": (
+                            action.payment_surface_type.value
+                            if action.payment_surface_type is not None
+                            else None
+                        ),
+                    }
+                )
+                # The Temporal start is an external dispatch. Commit the domain
+                # state and exact durable authorization first so an activity on
+                # another worker connection cannot race an uncommitted policy.
+                # Leasing the row prevents a second poller from dispatching it
+                # while this callback is in flight.
+                outbox.available_at = now + self.dispatch_lease
+                await self.session.commit()
             outbox.attempt_count += 1
             signal = RazorpayDownstreamSignal(
                 idempotency_key=outbox.deduplication_key,
@@ -183,6 +234,173 @@ class RazorpayOutboxProcessor:
                 case_id=case_id,
                 error_code=error_code,
             )
+
+    @staticmethod
+    def _recommended_action(
+        recovery_case: RecoveryCase,
+    ) -> tuple[RecoveryActionType, PaymentSurfaceType | None]:
+        """Choose one provider-safe first action from persisted case state."""
+
+        if recovery_case.diagnosis in {
+            Diagnosis.AUTHENTICATION_REQUIRED,
+            Diagnosis.INSTRUMENT_INVALID,
+        }:
+            return (
+                RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
+                PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
+            )
+        if recovery_case.subscription_state == SubscriptionState.PENDING:
+            return RecoveryActionType.WAIT_FOR_GATEWAY_RETRY, None
+        if recovery_case.diagnosis == Diagnosis.INSUFFICIENT_FUNDS:
+            return (
+                RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
+                PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+            )
+        return RecoveryActionType.ESCALATE_TO_HUMAN, None
+
+    async def _ensure_initial_recommendation(
+        self,
+        *,
+        merchant_id: str,
+        recovery_case: RecoveryCase,
+    ) -> RecoveryActionRecord:
+        """Persist exactly one action and matching merchant-policy decision."""
+
+        action_type, payment_surface_type = self._recommended_action(recovery_case)
+        idempotency_key = (
+            f"case:{recovery_case.id}:action:{action_type.value}:surface:"
+            f"{payment_surface_type.value if payment_surface_type else 'none'}"
+        )
+        existing_action = cast(
+            RecoveryActionRecord | None,
+            await self.session.scalar(
+                select(RecoveryActionRecord)
+                .where(RecoveryActionRecord.idempotency_key == idempotency_key)
+                .with_for_update()
+            ),
+        )
+        if existing_action is not None:
+            if (
+                existing_action.case_id != recovery_case.id
+                or existing_action.action_type != action_type
+                or existing_action.payment_surface_type != payment_surface_type
+            ):
+                raise RazorpayContractError(
+                    "RAZORPAY_RECOVERY_ACTION_SCOPE_MISMATCH",
+                    "The durable recovery action does not match the failed invoice case scope.",
+                )
+            existing_policies = list(
+                (
+                    await self.session.scalars(
+                        select(PolicyDecisionRecord)
+                        .where(
+                            PolicyDecisionRecord.case_id == recovery_case.id,
+                            PolicyDecisionRecord.action_id == existing_action.id,
+                        )
+                        .order_by(PolicyDecisionRecord.created_at, PolicyDecisionRecord.id)
+                        .limit(2)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if len(existing_policies) != 1:
+                raise RazorpayContractError(
+                    "RAZORPAY_RECOVERY_POLICY_CARDINALITY_INVALID",
+                    "The durable recovery action must have exactly one matching policy decision.",
+                )
+            return existing_action
+
+        merchant_policy = (
+            await self.session.execute(
+                select(Merchant, MerchantPolicySetting)
+                .join(
+                    MerchantPolicySetting,
+                    MerchantPolicySetting.merchant_id == Merchant.id,
+                )
+                .where(
+                    Merchant.id == merchant_id,
+                    Merchant.id == recovery_case.merchant_id,
+                )
+                .with_for_update()
+            )
+        ).first()
+        if merchant_policy is None:
+            raise RazorpayContractError(
+                "RAZORPAY_MERCHANT_POLICY_NOT_CONFIGURED",
+                "The merchant has no durable recovery policy settings.",
+            )
+        merchant, settings = merchant_policy._tuple()
+        evaluated_at = self.clock()
+        decision = evaluate_safety_policy(
+            SafetyPolicyContext(
+                now=evaluated_at,
+                recovery_deadline=recovery_case.recovery_deadline,
+                case_outcome=recovery_case.case_outcome,
+                payment_state=recovery_case.payment_state,
+                subscription_state=recovery_case.subscription_state,
+                contact_disposition=recovery_case.contact_disposition,
+                action=action_type,
+                payment_surface_type=payment_surface_type,
+                amount_at_risk_paise=recovery_case.amount_at_risk_paise,
+                active_gateway_retries=(
+                    recovery_case.subscription_state == SubscriptionState.PENDING
+                ),
+            ),
+            SafetyPolicyConfig(
+                merchant_timezone=merchant.timezone,
+                quiet_hours_start=(
+                    time.fromisoformat(settings.quiet_hours_start)
+                    if settings.quiet_hours_start
+                    else None
+                ),
+                quiet_hours_end=(
+                    time.fromisoformat(settings.quiet_hours_end)
+                    if settings.quiet_hours_end
+                    else None
+                ),
+                max_contacts_per_window=settings.max_contacts_per_7_days,
+                manual_approval_actions=frozenset(
+                    RecoveryActionType(value) for value in settings.require_approval_actions
+                ),
+                manual_approval_above_paise=settings.require_approval_above_paise,
+                global_kill_switch=self.global_kill_switch,
+                merchant_kill_switch=settings.recovery_kill_switch,
+            ),
+        ).to_contract()
+        statuses = {
+            PolicyDisposition.ALLOW: ActionStatus.PROPOSED,
+            PolicyDisposition.BLOCK: ActionStatus.CANCELLED,
+            PolicyDisposition.DELAY: ActionStatus.SCHEDULED,
+            PolicyDisposition.REQUIRE_MANUAL_APPROVAL: ActionStatus.AWAITING_APPROVAL,
+        }
+        scope_digest = hashlib.sha256(idempotency_key.encode()).hexdigest()[:40]
+        action = RecoveryActionRecord(
+            id=f"action_rzp_{scope_digest}",
+            case_id=recovery_case.id,
+            action_type=action_type,
+            payment_surface_type=payment_surface_type,
+            status=statuses[decision.disposition],
+            idempotency_key=idempotency_key,
+            scheduled_for=decision.delay_until,
+            completed_at=(
+                evaluated_at if decision.disposition == PolicyDisposition.BLOCK else None
+            ),
+        )
+        policy = PolicyDecisionRecord(
+            id=f"policy_rzp_{scope_digest}",
+            case_id=recovery_case.id,
+            action_id=action.id,
+            disposition=decision.disposition,
+            decision_code=decision.decision_code,
+            reason_codes=decision.reason_codes,
+            reasons=decision.reasons,
+            policy_version=decision.policy_version,
+            delay_until=decision.delay_until,
+            created_at=evaluated_at,
+        )
+        self.session.add_all([action, policy])
+        await self.session.flush()
+        return action
 
     @staticmethod
     def _error_code(error: Exception) -> str:
