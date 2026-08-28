@@ -111,6 +111,35 @@ provider interfaces:
 - Strict lint/format/type checks, 205 Python tests, 27 web tests, 24 Playwright checks, OpenAPI drift,
   the production Next.js build, and API/worker/customer-agent Docker builds pass.
 
+## Phase 5 continuation implemented locally
+
+The following changes landed after the frozen Phase 4 gate. They are implementation evidence; the
+final combined gate is recorded separately only after the continuation branch is clean.
+
+- Merchant commands signal the single Temporal case workflow. Explicit production activity mode
+  composes SQL persistence, the configured payment provider, RecoveryBench scoring, and voice
+  cancellation; the separate A2A flag selects the live customer-agent client/verifier. Mock mode
+  remains the default.
+- Webhook ingress persists its exact action and policy before Temporal dispatch. Late success and
+  replacement captures reconcile against authoritative evidence without charging a failed payment
+  ID or recognizing revenue twice.
+- Standard Payment Link submission persists before create. An uncertain response converges through a
+  bounded lookup by unique reference, never a blind create retry, and unpaid standalone links are
+  cancelled on stop/deadline.
+- Hosted operator login issues a signed HttpOnly session and requires its matching CSRF token for
+  consequential requests. Hosted Compose forces operator authentication and secure cookies; the
+  shared demo identity is not production multi-tenant authorization.
+- Hosted customer-agent tasks use SQL. The live A2A bridge verifies exact signed scope, atomically
+  consumes the nonce, and completes the task with an idempotent `recovery.receipt.v1` only after
+  authoritative recovery.
+- Worker container health now requires an actively running Temporal worker plus a successful
+  Temporal service-health probe. The deterministic Failure Lab exposes the four principal webhook
+  failure scenarios in the product.
+- Verified dashboard value comes from immutable recognition records; simulated RecoveryBench value
+  remains separate and never modifies merchant accounting.
+
+No public URL or credentialed hosted/provider success is claimed by these local changes.
+
 ## External prerequisites
 
 As of 2026-08-28, the installed Vercel token is invalid, and OCI CLI credentials are unavailable.

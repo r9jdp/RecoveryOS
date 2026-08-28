@@ -461,3 +461,43 @@ current blocker. Fix F-01 through F-09 first, then rerun:
 After those code gates pass, the project can be called **local/mock code-complete** without external
 credentials. The public submission and credentialed Razorpay/A2A/telephony gates remain explicitly
 separate and must not be represented as verified until executed.
+
+---
+
+## Remediation appendix — 2026-08-28 continuation
+
+This appendix is a post-audit implementation review. It does not alter the findings or verdict for
+the audited `phase-5-start` baseline. The statuses below describe the continuation branch after the
+listed remediation work; a clean, combined final gate still has to be recorded after all branches are
+integrated.
+
+| Finding | Continuation status              | Remediation evidence                                                                                                                                                                                                      |
+| ------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-01    | Remediated in code               | `956c0c4` routes merchant commands through the case workflow; `196d4bc` binds provider submission to the durable action; production mode composes SQL/provider activities while mock remains default.                     |
+| F-02    | Remediated in code               | `5b0cae0` replaces the trusted boolean with activity verification and atomic nonce consumption; `bd19a74` adds exact authoritative `recovery.receipt.v1` delivery.                                                        |
+| F-03    | Remediated in code               | `e50f532` adds the card-update Checkout route/configuration and safe test-mode path.                                                                                                                                      |
+| F-04    | Remediated for hosted demo scope | `bba3e89` adds the server guard; `9df3e7d` and `ac15233` add a signed HttpOnly operator session, matching CSRF token, hosted enforcement, and malformed-cookie rejection. Production identity/multi-tenancy remains open. |
+| F-05    | Remediated in code               | `56650eb` separates verified and simulated recovery; `1d53555` derives verified gross and remaining at risk from immutable recognition records using integer paise.                                                       |
+| F-06    | Remediated in code               | `35987e1`, `2377b9f`, and `fbeb6be` cancel outreach after authoritative recovery and preserve an uncertain/fail-closed result when cancellation cannot be confirmed.                                                      |
+| F-07    | Remediated in code               | `87c080b` validates the actual A2A Agent Card interface in deployment smoke.                                                                                                                                              |
+| F-08    | Remediated in code               | `3d90100` points the root RecoveryBench commands at the existing generator, trainer, and evaluator modules.                                                                                                               |
+| F-09    | Core concern remediated          | `7146ff1` and `cf16886` add the Compose-backed real-service Playwright gate; `ce9111d` and `df81d73` exercise persisted policy, SQL-backed A2A mandate, and receipt lifecycle. Credentialed hosted paths remain unexecuted. |
+| F-10    | Remediated in code               | `5688e27` replaces the stale root with a judge-oriented entry and seeded demo guide.                                                                                                                                      |
+| F-11    | Remediated in code               | `9adf351` and `8cf7bdc` add the SQL task store and migration; invalid methods use JSON-RPC errors and hosted modes select durable storage.                                                                                |
+| F-12    | Remediated in code               | `9aac1f1` aligns nullable disabled policy controls across the web/API contract.                                                                                                                                           |
+| F-13    | Remediated in documentation      | `ae9d37a` replaces the stale README; this documentation continuation aligns architecture, operations, product, security, and release evidence with the integrated runtime.                                                |
+| F-14    | Remediated in repository policy  | `e50f532` adds explicit LF normalization for source/deployment files; the final frozen Windows/Linux gates must confirm the checkout.                                                                                     |
+| F-15    | Remediated in product            | `8a742b2` adds the deterministic Failure Lab route for duplicate, out-of-order, late-success, and changed-state scenarios.                                                                                                |
+| F-16    | Remediated in code/deployment    | `b884b29` and `e4dde57` add loopback worker readiness based on active polling plus Temporal health and use it in Docker/Compose.                                                                                          |
+| F-17    | Recheck at final gate            | No release claim depends on the warning; the final combined test record must state whether it remains.                                                                                                                    |
+
+Additional post-audit payment hardening persists action/policy authorization before Temporal
+dispatch (`752d457`, `28a092b`), reconciles replacement captures without reusing a failed payment ID
+(`cab15a2`), and converges uncertain standard Payment Link submission by unique reference without a
+blind retry (`dde510c`, `d2dec75`). RecoveryBench is composed through the production worker scorer,
+and hosted customer-agent task state is SQL-backed.
+
+The original external-gate conclusion is unchanged: no public URL or credentialed OCI, Neon,
+Temporal Cloud, Razorpay, Twilio, or ElevenLabs success is claimed. The continuation can only be
+called locally code-complete after the combined lint, format, typecheck, test, build, migration,
+OpenAPI, service-E2E, and security gates pass on the integrated commit.

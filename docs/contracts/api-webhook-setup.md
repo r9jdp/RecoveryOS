@@ -33,6 +33,7 @@ the default; A2A delegation and real mandate signing are off.
 | Group           | Endpoints                                                                                 |
 | --------------- | ----------------------------------------------------------------------------------------- |
 | Health          | `GET /health`, `/health/live`, `/health/ready`                                            |
+| Operator        | `POST /v1/operator/session`                                                               |
 | Demo            | `GET /v1/demo/fixtures/{fixture_name}`                                                    |
 | Dashboard/cases | `GET /v1/dashboard/metrics`, `/v1/recovery-cases`, case detail and timeline               |
 | Decisions       | recommend, approve, reject, command, safety-disposition, stop and escalate case routes    |
@@ -61,9 +62,18 @@ RAZORPAY_WEBHOOK_SECRET=...
 RAZORPAY_TEST_MODE_REQUIRED=true
 ```
 
-Consequential non-mock API calls also require the server-configured `OPERATOR_DEMO_TOKEN` in the
-`X-RecoveryOS-Operator-Token` header. Keep the token out of browser environment variables and
-frontend bundles; credentialed smoke tests should send it from a server-side runner.
+Consequential non-mock API calls require operator authentication. A server-side smoke runner may
+send the configured `OPERATOR_DEMO_TOKEN` in `X-RecoveryOS-Operator-Token`. Browser clients must
+instead call `POST /v1/operator/session` with the configured operator email/password. The API
+returns the CSRF token and sets the signed `recoveryos_operator_session` HttpOnly cookie; subsequent
+consequential requests send the cookie plus `X-RecoveryOS-CSRF-Token`. The raw credential is never
+stored in browser-accessible state.
+
+Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true` and `OPERATOR_COOKIE_SECURE=true`.
+Non-mock payment mode also turns authorization on regardless of that explicit flag. Use non-default,
+server-only values for `OPERATOR_DEMO_TOKEN` and `OPERATOR_SESSION_SECRET`; session/action guards
+reject the checked-in local defaults in real-action mode. The current session represents a shared
+demo operator, not production identity or tenant authorization.
 
 Configure the provider endpoint as `https://<api-origin>/v1/webhooks/razorpay` for
 `payment.failed`, `subscription.pending`, `subscription.halted`, `subscription.charged`,
@@ -86,7 +96,11 @@ The Recovery Agent exposes `/.well-known/agent-card.json` and `/a2a/rpc`. The se
 agent exposes `/.well-known/agent-card.json`, `/rpc`, approval GET/POST routes, and health endpoints.
 Both JSON-RPC directions require `A2A-Version: 1.0` and the recovery-mandate extension URI advertised
 by their Agent Cards. Enable delegation only after pinning the customer-agent public key in
-`CUSTOMER_AGENT_PUBLIC_KEYS_JSON`. Never share the customer-agent Ed25519 private seed with the API.
+`CUSTOMER_AGENT_PUBLIC_KEYS_JSON`. Hosted modes set `CUSTOMER_AGENT_TASK_STORE=sql` and require a
+server-only `CUSTOMER_AGENT_DATABASE_URL`; memory is the local default. Never share the
+customer-agent Ed25519 private seed with the API or worker. The recovery worker verifies and
+atomically consumes the exact mandate, then sends an idempotent `recovery.receipt.v1` only after
+authoritative payment recovery.
 
 ## Contract validation
 

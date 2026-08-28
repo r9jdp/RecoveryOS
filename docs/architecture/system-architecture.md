@@ -25,14 +25,18 @@ flowchart LR
     Gateway --> API
     Gateway --> Agent
     API --> DB
+    API -->|start / signal| Temporal
     Temporal --> Worker
     Worker -->|activities| DB
     Worker -->|activities| Razorpay
-    Worker -->|start / signal| Temporal
+    Worker -->|A2A JSON-RPC| Agent
+    Worker -->|guarded cancellation| Voice
+    Lab -->|score artifact| Worker
+    Agent -->|durable tasks| DB
+    Razorpay -->|signed webhooks| API
     API -->|verified webhooks| DB
-    API -->|A2A JSON-RPC| Agent
-    API -->|guarded callbacks and calls| Voice
-    API --> Lab
+    Voice -->|signed callbacks| API
+    Lab -->|versioned report| API
 ```
 
 The checked-in deployment topology places the web app on Vercel and the API, worker, customer-agent,
@@ -42,14 +46,14 @@ credentialed provisioning remains an external gate.
 
 ## Runtime responsibilities
 
-| Runtime         | Owns                                                                                               | Must not own                                          |
-| --------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Next.js web     | Control Tower, case workspace, policy UI, lab, voice rehearsal, A2A approval page                  | business authorization, payment truth, server secrets |
-| FastAPI API     | merchant-scoped domain services, raw webhook intake, reconciliation, mandate/voice boundaries      | browser-trusted payment completion                    |
-| Temporal worker | durable case orchestration, timers, signals, bounded activity retries, cancellation                | direct network calls in workflow code                 |
-| PostgreSQL      | cases, independent state axes, audit events, inbox/outbox, idempotent revenue, nonce/voice records | card credentials, OTPs, banking secrets               |
-| Customer agent  | exact-scope customer decision and signed mandate                                                   | payment execution or payment-success claims           |
-| RecoveryBench   | fixed-seed training/evaluation report and optional score artifact                                  | mutation of merchant accounting                       |
+| Runtime         | Owns                                                                                                   | Must not own                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Next.js web     | Control Tower, case workspace, policy UI, lab, voice rehearsal, A2A approval page                      | business authorization, payment truth, server secrets              |
+| FastAPI API     | operator session/CSRF, queries, command signals, raw webhook intake, callback ingress                  | browser-trusted payment completion or duplicate provider execution |
+| Temporal worker | durable orchestration, SQL/payment/A2A activities, reconciliation, voice cancellation                  | direct network calls or non-determinism in workflow code           |
+| PostgreSQL      | cases, independent state axes, audit, inbox/outbox, revenue, policy, nonce/voice/customer-task records | card credentials, OTPs, banking secrets                            |
+| Customer agent  | durable exact-scope customer decision, signed mandate, and authoritative recovery receipt              | payment execution or independent payment-success claims            |
+| RecoveryBench   | fixed-seed training/evaluation report and optional score artifact                                      | mutation of merchant accounting                                    |
 
 ## Durable workflow boundary
 
@@ -68,16 +72,21 @@ The webhook inbox and outbox are written atomically. Revenue is unique on mercha
 provider event ID; all amounts are integer paise. A browser callback is navigation, never proof of
 payment.
 
-The database currently has one Alembic head, `27b4eb4b36a1`, covering the core schema, policy
-settings, voice persistence, and A2A nonce consumption.
+The database currently has one Alembic head, `b160d73bfe19`, covering the core schema, policy
+settings, voice persistence, A2A nonce consumption, and durable customer-agent tasks.
 
-## Current composition gaps
+## Current composition and external gates
 
-The worker entry point instantiates `MockRecoveryActivityServices`; it does not compose the
-Razorpay, A2A mandate-verifier, voice, or RecoveryBench adapters into production activities. The API
-can use the Razorpay adapter for merchant-triggered payment surfaces and the webhook outbox worker
-performs authoritative provider reconciliation, but the Temporal action path remains mock-backed.
-Likewise, the Recovery Agent can delegate to the separate customer agent and the verifier/SQL nonce
-store are independently implemented, but no runtime bridge currently polls the approved artifact,
-verifies it, and signals the workflow. These are code-integration blockers, not credential-only
-gates.
+The worker entry point selects mock activity services by default. Explicit
+`RECOVERY_ACTIVITY_MODE=production` composes SQL-backed activities with the selected payment provider
+and RecoveryBench scorer. `A2A_ENABLED=true` independently selects the live customer-agent
+client/verifier, and recovered cases invoke the configured voice cancellation boundary. Merchant
+commands signal the single case workflow. The A2A activity polls the approved artifact, verifies
+exact scope, consumes its nonce atomically, opens only the bound provider-owned surface, and sends an
+idempotent receipt after authoritative recovery.
+
+That composition passes local service-level gates; it does not prove hosted infrastructure or a
+credentialed provider path. Public origins, OCI/Vercel/Neon/Temporal Cloud resources, Razorpay test
+credentials, and allowlisted Twilio/ElevenLabs credentials remain external gates. Production also
+requires real identity, tenant authorization, privacy/retention operations, and provider/regulatory
+review.

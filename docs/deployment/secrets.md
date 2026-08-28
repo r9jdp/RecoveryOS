@@ -34,6 +34,22 @@ The coordinator owns the canonical environment-variable contract. Do not create
 ad-hoc names here; reconcile database, Temporal, payment, A2A, voice, and signing
 variables with that contract before the first deploy.
 
+## Service boundaries
+
+| Service        | Server-only values it owns                                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API            | `DATABASE_URL`, Temporal client settings, `OPERATOR_DEMO_TOKEN`, `OPERATOR_SESSION_SECRET`, Razorpay webhook secret, and only the provider values required by API ingress |
+| Worker         | `DATABASE_URL`, Temporal worker settings, selected provider credentials, pinned `CUSTOMER_AGENT_PUBLIC_KEYS_JSON`, and enabled voice credentials                          |
+| Customer agent | `CUSTOMER_AGENT_DATABASE_URL` and, only when real signing is enabled, `CUSTOMER_AGENT_ED25519_PRIVATE_KEY`                                                                |
+| Web            | public API origin only; no operator password, session secret, provider secret, or signing material                                                                        |
+
+Hosted staging/production set `OPERATOR_AUTH_REQUIRED=true`, `OPERATOR_COOKIE_SECURE=true`, and
+`CUSTOMER_AGENT_TASK_STORE=sql`. Supply non-default operator credentials and session-signing secrets
+in the protected API file, and supply the SQL customer-task URL only to the customer agent. The
+operator session cookie is HttpOnly; the browser retains only the issued CSRF token in session
+storage. `OPERATOR_DEMO_TOKEN` may be used as a server-to-server smoke header, but must never become a
+`NEXT_PUBLIC_*` value.
+
 ## Installation
 
 Create files without echoing values into shell history:
@@ -67,6 +83,7 @@ prompts, screenshots, or command arguments.
 - After rotation, force-recreate affected containers and verify the revoked value
   no longer authenticates.
 - Health endpoints return only `probe_failed`; they do not return exception text,
-  hosts, namespaces, or credentials.
+  hosts, namespaces, database URLs, or credentials. Worker readiness may also return the sanitized
+  `not_polling` reason.
 - Back up secret files only into an encrypted secret manager. Do not include them
   in VM snapshots intended for sharing.

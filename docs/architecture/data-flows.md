@@ -20,7 +20,9 @@ sequenceDiagram
     T->>W: diagnosis, scoring, policy and provider activities
     W->>D: persist decisions and audit evidence
     U->>A: approve bounded customer-present surface
-    A->>R: create/fetch test-mode surface with idempotency
+    A->>T: signal authorized command
+    T->>W: execute persisted action/policy activity
+    W->>R: create/fetch test-mode surface with idempotency
     R->>A: payment success webhook
     W->>R: authoritative payment fetch
     W->>D: recognize event once and preserve lifecycle axes
@@ -31,7 +33,11 @@ sequenceDiagram
 
 Duplicates return the existing inbox/outbox identifiers. Out-of-order failures cannot regress a
 captured payment. `WAIT_FOR_GATEWAY_RETRY` never charges a failed payment ID; Razorpay owns pending
-subscription retries. A standard Payment Link is blocked while those retries are active.
+subscription retries. A standard Payment Link is blocked while those retries are active. Before
+creating a standard link, the activity persists its `EXECUTING` action. If submission is uncertain,
+the workflow performs a bounded reconciliation by the unique reference ID; it never blindly repeats
+the create request. Stop/deadline cleanup cancels an unpaid standard link, while native invoice and
+card-update surfaces remain provider-owned.
 
 ## Exact A2A authorization
 
@@ -58,9 +64,11 @@ sequenceDiagram
 ```
 
 The mandate authorizes one exact payment surface; it does not authorize an LLM to charge. The
-customer still completes the provider-owned surface. The customer-agent task store is process-local
-in this release, so multi-instance hosting is a production blocker; nonce replay protection is
-durable in PostgreSQL.
+customer still completes the provider-owned surface. Hosted Compose selects the SQL-backed
+customer-agent task store, so task, approval, artifact, and receipt state survives process restart.
+Nonce consumption is independently atomic in PostgreSQL. Only an authoritative recovered result
+causes the worker to send the idempotent, exact-scope `recovery.receipt.v1` message and complete the
+customer task.
 
 ## Guarded voice contact
 
@@ -84,8 +92,9 @@ allowlisted destination token, recorded consent, allowed local time, kill switch
 concurrency, ten-call daily budget, and a duration no greater than 180 seconds. Browser text/audio
 rehearsal remains available in mock mode.
 
-These diagrams describe the implemented boundaries and their required composition. In the current
-runtime, webhook reconciliation and merchant-triggered Razorpay surfaces are integrated, while the
-Temporal action service remains mock-backed. A2A delegation, customer approval, mandate
-verification, and nonce consumption pass component/E2E tests, but the approved-task-to-workflow
-bridge is not yet wired.
+These diagrams describe the implemented runtime composition. Mock mode remains the default;
+production activity mode selects SQL persistence, the configured payment adapter, RecoveryBench
+scoring, and voice cancellation behind the Temporal workflow. A separate explicit A2A flag selects
+live delegation/verification/receipt. The local real-service gate covers that A2A bridge with durable
+tasks. Provider credentials, public origins, and hosted smoke evidence remain separate external
+gates.
