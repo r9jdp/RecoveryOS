@@ -13,16 +13,15 @@
 }
 
 .button {
-  min-height: 3rem;
+  min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--ros-space-2);
-  padding: 0.6875rem 1.25rem;
+  padding: 0.625rem 1.125rem;
   border: 1px solid transparent;
   border-radius: var(--ros-radius-sm);
-  font: 700 var(--ros-text-sm) / 1 var(--ros-font-body);
-  letter-spacing: 0.005em;
+  font: 650 var(--ros-text-sm) / 1 var(--ros-font-body);
   cursor: pointer;
   transition:
     transform var(--ros-duration-fast) var(--ros-ease),
@@ -53,34 +52,34 @@
 .buttonPrimary {
   color: white;
   background: var(--ros-brand);
-  box-shadow: 0 6px 14px rgb(48 94 255 / 20%);
+  box-shadow: none;
 }
 
 .buttonPrimary:not(:disabled):hover {
   background: var(--ros-brand-hover);
-  box-shadow: 0 8px 20px rgb(48 94 255 / 28%);
+  box-shadow: none;
 }
 
 .buttonSecondary {
   color: var(--ros-ink);
-  background: var(--ros-canvas);
-  border-color: var(--ros-border-strong);
-  box-shadow: var(--ros-shadow-xs);
+  background: var(--ros-bg-secondary);
+  border-color: var(--ros-border);
 }
 
 .buttonSecondary:not(:disabled):hover {
-  border-color: var(--ros-brand);
-  color: var(--ros-link);
-  background: var(--ros-info-soft);
+  border-color: var(--ros-border-strong);
+  color: white;
+  background: var(--ros-bg-hover);
 }
 
 .buttonGhost {
-  color: var(--ros-link);
+  color: var(--ros-text-muted);
   background: transparent;
 }
 
 .buttonGhost:not(:disabled):hover {
-  background: var(--ros-info-soft);
+  color: var(--ros-ink);
+  background: var(--ros-bg-hover);
 }
 
 .buttonDanger {
@@ -89,7 +88,7 @@
 }
 
 .buttonDanger:not(:disabled):hover {
-  background: #b92016;
+  background: #d92d20;
 }
 
 .buttonSm {
@@ -98,7 +97,7 @@
 }
 
 .buttonLg {
-  min-height: 3.5rem;
+  min-height: 3.25rem;
   padding-inline: 1.5rem;
   font-size: var(--ros-text-md);
 }
@@ -122,10 +121,20 @@
   display: inline-grid;
   place-items: center;
   border: 1px solid var(--ros-border);
-  border-radius: var(--ros-radius-sm);
+  border-radius: 50%;
   color: var(--ros-text-muted);
-  background: var(--ros-canvas);
+  background: var(--ros-bg-secondary);
   cursor: pointer;
+  transition:
+    color var(--ros-duration-fast) var(--ros-ease),
+    border-color var(--ros-duration-fast) var(--ros-ease),
+    background var(--ros-duration-fast) var(--ros-ease);
+}
+
+.iconButton:hover {
+  color: var(--ros-ink);
+  border-color: var(--ros-border-strong);
+  background: var(--ros-bg-hover);
 }
 
 .field {
@@ -163,10 +172,10 @@
   width: 100%;
   min-height: 3rem;
   padding: 0.6875rem 0.875rem;
-  border: 1px solid var(--ros-border-strong);
+  border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
-  background: var(--ros-canvas);
+  background: var(--ros-bg-secondary);
   font: 500 var(--ros-text-sm) / 1.4 var(--ros-font-body);
   transition:
     border-color var(--ros-duration-fast) var(--ros-ease),
@@ -174,12 +183,12 @@
 }
 
 .input::placeholder {
-  color: #71869a;
+  color: var(--ros-text-muted);
 }
 
 .input:hover,
 .select:hover {
-  border-color: #91a1b3;
+  border-color: var(--ros-border-strong);
 }
 
 .input:focus-visible,
@@ -200,8 +209,8 @@
   padding: 0.25rem 0.625rem;
   border: 1px solid transparent;
   border-radius: var(--ros-radius-pill);
-  font: 750 var(--ros-text-xs) / 1.2 var(--ros-font-body);
-  letter-spacing: 0.02em;
+  font: 650 var(--ros-text-xs) / 1.2 var(--ros-font-body);
+  letter-spacing: 0.015em;
   white-space: nowrap;
 }
 
@@ -212,27 +221,27 @@
 }
 
 .badgeInfo {
-  color: #173b9c;
-  background: var(--ros-info-soft);
-  border-color: #bfd1ff;
+  color: var(--ros-link);
+  background: var(--ros-brand-soft);
+  border-color: rgb(79 140 255 / 22%);
 }
 
 .badgeSuccess {
-  color: #006f41;
+  color: #72e5aa;
   background: var(--ros-success-soft);
-  border-color: #abe2c9;
+  border-color: rgb(50 213 131 / 22%);
 }
 
 .badgeWarning {
-  color: #8a4900;
+  color: #ffd17a;
   background: var(--ros-warning-soft);
-  border-color: #f2d487;
+  border-color: rgb(253 176 34 / 22%);
 }
 
 .badgeDanger {
-  color: #a32016;
+  color: #ff8d85;
   background: var(--ros-danger-soft);
-  border-color: #f1bbb6;
+  border-color: rgb(240 68 56 / 22%);
 }
 
 .badgeDot {
@@ -244,9 +253,9 @@
 }
 
 .testModeBadge {
-  color: #152f77;
-  background: linear-gradient(135deg, #edf3ff, #d0e0ff);
-  border-color: #abc2ff;
+  color: var(--ros-link);
+  background: var(--ros-brand-soft);
+  border-color: rgb(79 140 255 / 22%);
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
@@ -256,8 +265,8 @@
   border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-md);
   color: var(--ros-ink);
-  background: var(--ros-canvas);
-  box-shadow: var(--ros-shadow-xs);
+  background: var(--ros-bg-card);
+  box-shadow: none;
 }
 
 .cardInteractive {
@@ -268,15 +277,15 @@
 }
 
 .cardInteractive:hover {
-  transform: translateY(-2px);
-  border-color: #c4d1de;
-  box-shadow: var(--ros-shadow-sm);
+  transform: none;
+  border-color: var(--ros-border-strong);
+  box-shadow: none;
 }
 
 .cardHeader,
 .cardBody,
 .cardFooter {
-  padding: var(--ros-space-5) var(--ros-space-6);
+  padding: var(--ros-space-4);
 }
 
 .cardHeader {
@@ -289,7 +298,7 @@
 
 .cardFooter {
   border-top: 1px solid var(--ros-border);
-  background: var(--ros-surface-subtle);
+  background: rgb(255 255 255 / 1.5%);
 }
 
 .cardTitle,
@@ -298,7 +307,7 @@
 }
 
 .cardTitle {
-  font: 750 var(--ros-text-lg) / 1.3 var(--ros-font-display);
+  font: 650 var(--ros-text-lg) / 1.3 var(--ros-font-display);
   letter-spacing: -0.015em;
 }
 
@@ -310,14 +319,14 @@
 
 .metricValue {
   margin: 0;
-  font: 750 clamp(1.75rem, 4vw, 2.25rem) / 1.1 var(--ros-font-display);
+  font: 650 clamp(1.75rem, 3vw, 2.5rem) / 1.05 var(--ros-font-display);
   letter-spacing: -0.04em;
 }
 
 .metricLabel {
   margin: 0 0 var(--ros-space-3);
   color: var(--ros-text-muted);
-  font: 650 var(--ros-text-sm) / 1.4 var(--ros-font-body);
+  font: 550 var(--ros-text-sm) / 1.4 var(--ros-font-body);
 }
 
 .metricDelta {
@@ -331,7 +340,7 @@
   overflow-x: auto;
   border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-md);
-  background: var(--ros-canvas);
+  background: var(--ros-bg-card);
 }
 
 .table {
@@ -359,7 +368,7 @@
 
 .table th {
   color: var(--ros-text-muted);
-  background: var(--ros-surface-subtle);
+  background: rgb(255 255 255 / 1.5%);
   font-size: var(--ros-text-xs);
   font-weight: 750;
   letter-spacing: 0.04em;
@@ -375,7 +384,7 @@
 }
 
 .table tbody tr:hover td {
-  background: #fbfdff;
+  background: var(--ros-bg-hover);
 }
 
 .drawerBackdrop {
@@ -384,7 +393,8 @@
   inset: 0;
   display: flex;
   justify-content: flex-end;
-  background: rgb(3 42 62 / 48%);
+  background: rgb(0 0 0 / 68%);
+  backdrop-filter: blur(4px);
   animation: fadeIn var(--ros-duration-base) var(--ros-ease);
 }
 
@@ -393,7 +403,8 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--ros-canvas);
+  border-left: 1px solid var(--ros-border);
+  background: var(--ros-bg-card);
   box-shadow: var(--ros-shadow-md);
   animation: slideIn var(--ros-duration-base) var(--ros-ease);
 }
@@ -422,7 +433,7 @@
   justify-content: flex-end;
   gap: var(--ros-space-3);
   border-top: 1px solid var(--ros-border);
-  background: var(--ros-surface-subtle);
+  background: rgb(255 255 255 / 1.5%);
 }
 
 .drawerTitle {
@@ -485,9 +496,9 @@
   margin-top: 0.125rem;
   display: grid;
   place-items: center;
-  border: 3px solid var(--ros-canvas);
+  border: 3px solid var(--ros-bg-card);
   border-radius: 50%;
-  background: var(--ros-brand);
+  background: var(--ros-accent-purple);
   box-shadow: 0 0 0 1px var(--ros-border-strong);
 }
 
@@ -501,7 +512,7 @@
   background: var(--ros-danger);
 }
 .timelineMarkerNeutral {
-  background: #71869a;
+  background: #777b83;
 }
 
 .timelineTitle {
@@ -545,7 +556,7 @@
 }
 
 .chartTitle {
-  font: 750 var(--ros-text-lg) / 1.3 var(--ros-font-display);
+  font: 650 var(--ros-text-lg) / 1.3 var(--ros-font-display);
 }
 
 .chartSubtitle {
@@ -563,7 +574,7 @@
   border-bottom: 1px solid var(--ros-border);
   background-image: linear-gradient(
     to bottom,
-    var(--ros-border) 1px,
+    rgb(255 255 255 / 4%) 1px,
     transparent 1px
   );
   background-size: 100% 25%;
@@ -581,7 +592,7 @@
   width: 100%;
   min-height: 0.25rem;
   border-radius: var(--ros-radius-xs) var(--ros-radius-xs) 0 0;
-  background: linear-gradient(180deg, #6e8dff, var(--ros-brand));
+  background: var(--ros-brand);
 }
 
 .barLabel {
@@ -605,24 +616,24 @@
 }
 
 .alertInfo {
-  color: #173b9c;
+  color: var(--ros-ink-secondary);
   background: var(--ros-info-soft);
-  border-color: #bfd1ff;
+  border-color: var(--ros-border-strong);
 }
 .alertSuccess {
-  color: #006f41;
+  color: #9ceac2;
   background: var(--ros-success-soft);
-  border-color: #abe2c9;
+  border-color: rgb(50 213 131 / 22%);
 }
 .alertWarning {
-  color: #784100;
+  color: #ffda91;
   background: var(--ros-warning-soft);
-  border-color: #f2d487;
+  border-color: rgb(253 176 34 / 22%);
 }
 .alertDanger {
-  color: #8f2119;
+  color: #ffaaa4;
   background: var(--ros-danger-soft);
-  border-color: #f1bbb6;
+  border-color: rgb(240 68 56 / 22%);
 }
 
 .alertIcon {
@@ -654,7 +665,7 @@
   background: linear-gradient(
     90deg,
     var(--ros-surface-muted) 25%,
-    #e6edf5 50%,
+    #30343a 50%,
     var(--ros-surface-muted) 75%
   );
   background-size: 200% 100%;
@@ -669,7 +680,7 @@
   border: 1px dashed var(--ros-border-strong);
   border-radius: var(--ros-radius-md);
   color: var(--ros-ink);
-  background: var(--ros-surface-subtle);
+  background: rgb(255 255 255 / 1.5%);
   text-align: center;
   font-family: var(--ros-font-body);
 }
@@ -686,7 +697,7 @@
   height: 3rem;
   display: grid;
   place-items: center;
-  border: 1px solid #bfd1ff;
+  border: 1px solid var(--ros-border-strong);
   border-radius: var(--ros-radius-md);
   color: var(--ros-brand);
   background: var(--ros-info-soft);
@@ -710,7 +721,7 @@
   display: grid;
   grid-template-columns: var(--ros-sidebar-width) minmax(0, 1fr);
   color: var(--ros-ink);
-  background: var(--ros-surface-subtle);
+  background: var(--ros-bg-secondary);
   font-family: var(--ros-font-body);
 }
 
@@ -720,9 +731,10 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: var(--ros-space-5) var(--ros-space-4);
+  padding: var(--ros-space-6) var(--ros-space-4);
   color: white;
-  background: var(--ros-dark);
+  border-right: 1px solid var(--ros-border);
+  background: var(--ros-bg-primary);
 }
 
 .brand {
@@ -741,7 +753,7 @@
   overflow: hidden;
   border-radius: var(--ros-radius-sm);
   background: var(--ros-brand);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 18%);
+  box-shadow: none;
 }
 
 .brandMark::before,
@@ -765,19 +777,19 @@
 }
 
 .brandName {
-  font: 750 1.0625rem / 1 var(--ros-font-display);
+  font: 680 1.0625rem / 1 var(--ros-font-display);
   letter-spacing: -0.02em;
 }
 
 .nav {
   display: grid;
-  gap: var(--ros-space-1);
+  gap: var(--ros-space-2);
   margin-top: var(--ros-space-8);
 }
 
 .navLabel {
   margin: var(--ros-space-5) var(--ros-space-3) var(--ros-space-2);
-  color: #91acbb;
+  color: #6f737b;
   font-size: 0.6875rem;
   font-weight: 750;
   letter-spacing: 0.09em;
@@ -788,10 +800,10 @@
   display: flex;
   align-items: center;
   gap: var(--ros-space-3);
-  min-height: 2.75rem;
-  padding: 0.625rem var(--ros-space-3);
+  min-height: 2.875rem;
+  padding: 0.6875rem var(--ros-space-3);
   border-radius: var(--ros-radius-sm);
-  color: #c8d7df;
+  color: #8d9097;
   font-size: var(--ros-text-sm);
   font-weight: 600;
   text-decoration: none;
@@ -801,14 +813,14 @@
 }
 
 .navItem:hover {
-  color: white;
-  background: rgb(255 255 255 / 7%);
+  color: #dfe0e3;
+  background: rgb(255 255 255 / 4%);
 }
 
 .navItemActive {
-  color: white;
-  background: var(--ros-brand);
-  box-shadow: 0 5px 14px rgb(0 0 0 / 18%);
+  color: var(--ros-link);
+  background: var(--ros-brand-soft);
+  box-shadow: inset 0 0 0 1px rgb(79 140 255 / 12%);
 }
 
 .navIcon {
@@ -821,7 +833,7 @@
 .sidebarFooter {
   margin-top: auto;
   padding: var(--ros-space-4) var(--ros-space-2) 0;
-  border-top: 1px solid rgb(255 255 255 / 10%);
+  border-top: 1px solid var(--ros-border);
 }
 
 .shellMain {
@@ -837,10 +849,10 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--ros-space-4);
-  padding: var(--ros-space-3) clamp(1rem, 3vw, 2rem);
+  padding: var(--ros-space-3) clamp(1.25rem, 3vw, 2rem);
   border-bottom: 1px solid var(--ros-border);
-  background: rgb(255 255 255 / 94%);
-  backdrop-filter: blur(12px);
+  background: rgb(41 45 50 / 90%);
+  backdrop-filter: blur(18px);
 }
 
 .breadcrumb {
@@ -861,8 +873,9 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #173b9c;
+  color: var(--ros-link);
   background: var(--ros-brand-soft);
+  box-shadow: inset 0 0 0 1px var(--ros-border-strong);
   font-size: var(--ros-text-xs);
   font-weight: 800;
 }
@@ -870,7 +883,7 @@
 .content {
   width: min(100%, 100rem);
   margin-inline: auto;
-  padding: clamp(1.25rem, 3vw, 2.5rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
 }
 
 .mobileHeader {
@@ -887,7 +900,7 @@
 
 .eyebrow {
   margin: 0 0 var(--ros-space-2);
-  color: var(--ros-brand);
+  color: var(--ros-link);
   font-size: var(--ros-text-xs);
   font-weight: 800;
   letter-spacing: 0.09em;
@@ -897,7 +910,7 @@
 .pageTitle {
   margin: 0;
   color: var(--ros-ink-secondary);
-  font: 750 var(--ros-text-2xl) / 1.15 var(--ros-font-display);
+  font: 680 var(--ros-text-2xl) / 1.15 var(--ros-font-display);
   letter-spacing: -0.035em;
 }
 
@@ -913,7 +926,7 @@
 .grid3,
 .grid2 {
   display: grid;
-  gap: var(--ros-space-5);
+  gap: var(--ros-space-4);
 }
 
 .grid4 {
@@ -928,23 +941,21 @@
 
 .stack {
   display: grid;
-  gap: var(--ros-space-5);
+  gap: var(--ros-space-4);
 }
 
 .previewPage {
   min-height: 100vh;
   margin: 0;
   color: var(--ros-ink);
-  background: var(--ros-surface-subtle);
+  background: var(--ros-bg-secondary);
   font-family: var(--ros-font-body);
 }
 
 .previewHero {
   padding: clamp(2rem, 7vw, 6rem) clamp(1.25rem, 5vw, 5rem);
   color: white;
-  background:
-    radial-gradient(circle at 80% 20%, rgb(48 94 255 / 36%), transparent 28rem),
-    var(--ros-dark);
+  background: var(--ros-dark);
 }
 
 .previewHeroInner,
@@ -963,7 +974,7 @@
 .previewHero p {
   max-width: 42rem;
   margin: 0;
-  color: #c8d7df;
+  color: var(--ros-text-muted);
   font-size: var(--ros-text-lg);
   line-height: 1.6;
 }
@@ -1006,7 +1017,7 @@
   justify-content: flex-end;
   gap: var(--ros-space-1);
   padding: var(--ros-space-3);
-  border: 1px solid rgb(0 0 0 / 8%);
+  border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-sm);
   box-shadow: var(--ros-shadow-xs);
   font-size: var(--ros-text-xs);
@@ -1058,7 +1069,8 @@
     gap: var(--ros-space-3);
     padding: var(--ros-space-2) var(--ros-space-4);
     color: white;
-    background: var(--ros-dark);
+    border-bottom: 1px solid var(--ros-border);
+    background: var(--ros-bg-primary);
   }
   .topbar {
     position: static;

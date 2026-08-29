@@ -1,0 +1,83 @@
+.skipLink {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 150ms ease;
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+.brandLink {
+  width: fit-content;
+  color: var(--sidebar-foreground);
+  text-decoration: none;
+}
+
+.brandLink:focus-visible {
+  border-radius: var(--radius-md);
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: 2px;
+}
+
+.brandLink .shellBrand {
+  min-height: 2rem;
+  gap: 0.625rem;
+  padding-inline: 0.25rem;
+}
+
+.shellBrand > span:first-child {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--sidebar-primary);
+  box-shadow: none;
+}
+
+.shellBrand > span:first-child::before,
+.shellBrand > span:first-child::after {
+  background: var(--sidebar);
+}
+
+.shellBrand > span:last-child {
+  color: var(--sidebar-foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.demoGuideSlot {
+  display: inline-flex;
+}
+
+.demoGuideSlot > button {
+  min-height: 2rem;
+  color: var(--secondary-foreground);
+  border-color: var(--border);
+  background: var(--secondary);
+  box-shadow: none;
+}
+
+.demoGuideSlot > button:hover {
+  color: var(--foreground);
+  border-color: var(--border);
+  background: var(--accent);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skipLink {
+    transition-duration: 0.01ms;
+  }
+}

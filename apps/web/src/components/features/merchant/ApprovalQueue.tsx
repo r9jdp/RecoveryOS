@@ -1,27 +1,31 @@
 "use client";
 
+import { CircleAlert, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn/alert";
+import { Badge } from "@/components/shadcn/badge";
+import { Button } from "@/components/shadcn/button";
 import {
-  Alert,
-  Badge,
-  Button,
   Card,
-  CardBody,
+  CardContent,
+  CardDescription,
   CardHeader,
-  EmptyState,
-  Skeleton,
+  CardTitle,
+} from "@/components/shadcn/card";
+import { Input } from "@/components/shadcn/input";
+import { Skeleton } from "@/components/shadcn/skeleton";
+import {
   Table,
   TableBody,
   TableCaption,
   TableCell,
   TableHead,
-  TableHeaderCell,
+  TableHeader,
   TableRow,
-  TableViewport,
-} from "@/components/ui";
+} from "@/components/shadcn/table";
 import { useRecoveryResource } from "@/hooks/use-recovery-resource";
 import { executeCaseCommand, getDashboard } from "@/lib/api/recovery-client";
 import { buildApprovalItems } from "@/lib/merchant-demo";
@@ -34,10 +38,40 @@ import {
 import type { ApprovalItem, CommandResult } from "@/types/recovery";
 
 import { ConfirmDialog } from "./ConfirmDialog";
-import styles from "./merchant.module.css";
 
 interface ApprovalQueueProps {
   runApproval?: (caseId: string) => Promise<CommandResult>;
+}
+
+function QueueEmpty({
+  filtered,
+  onClear,
+}: {
+  filtered: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <div className="grid min-h-48 place-items-center px-4 text-center">
+      <div className="max-w-sm">
+        <div className="mx-auto mb-3 grid size-9 place-items-center rounded-lg border bg-muted/30 text-muted-foreground">
+          <CircleAlert aria-hidden="true" className="size-4" />
+        </div>
+        <h2 className="text-sm font-medium">
+          {filtered ? "No matching approvals" : "Approval queue is clear"}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {filtered
+            ? "Try a different customer, case, or plan."
+            : "Every high-impact recovery action has been reviewed."}
+        </p>
+        {filtered ? (
+          <Button className="mt-4" variant="secondary" onClick={onClear}>
+            Clear filter
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function ApprovalQueue({
@@ -84,154 +118,160 @@ export function ApprovalQueue({
   }
 
   const pending = filtered.filter((item) => !approved.includes(item.case_id));
+
   if (resource.loading) {
     return (
-      <div className={styles.pageStack} aria-busy="true">
-        <Skeleton width="15rem" height="2.5rem" />
-        <Skeleton height="18rem" />
+      <div className="grid gap-4" aria-busy="true">
+        <Skeleton className="h-9 w-60" />
+        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
 
   if (resource.error || !resource.data || !resource.source) {
     return (
-      <EmptyState
-        title="Approval queue could not load"
-        description={resource.error ?? "The approval response was empty."}
-        action={<Button onClick={resource.reload}>Try again</Button>}
-      />
+      <Card className="mx-auto w-full max-w-lg">
+        <CardHeader>
+          <CardTitle>Approval queue could not load</CardTitle>
+          <CardDescription>
+            {resource.error ?? "The approval response was empty."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={resource.reload}>Try again</Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className={styles.pageStack}>
+    <div className="grid gap-4">
       <PageHeader
         eyebrow="Human review"
         title="Approval queue"
-        description="Review the policy evidence and exact customer surface before any recovery action is opened."
-        action={<Badge tone="warning">{pending.length} awaiting review</Badge>}
+        description="Review the exact customer surface before a recovery action is opened."
+        action={
+          <Badge variant="warning">{pending.length} awaiting review</Badge>
+        }
       />
-      {error && (
-        <Alert tone="danger" title="Approval failed">
-          {error} The case remains unchanged and can be retried safely.
+
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Approval failed</AlertTitle>
+          <AlertDescription>
+            {error} The case remains unchanged and can be retried safely.
+          </AlertDescription>
         </Alert>
-      )}
-      {resource.warning && (
-        <Alert tone="info" title="Fallback approval data">
-          {resource.warning}
+      ) : null}
+
+      {resource.warning ? (
+        <Alert variant="info">
+          <AlertTitle>Fallback approval data</AlertTitle>
+          <AlertDescription>{resource.warning}</AlertDescription>
         </Alert>
-      )}
-      <h2 className={styles.srOnly}>Cases awaiting operator approval</h2>
-      <Card>
-        <CardHeader
-          title="Manual approvals"
-          description="Only the exact surface shown below will be authorized."
-          action={
-            <label>
-              <span className={styles.srOnly}>Filter approval queue</span>
-              <input
-                className={styles.filterInput}
-                type="search"
-                placeholder="Customer, case, or plan"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-          }
-        />
-        <CardBody>
+      ) : null}
+
+      <Card size="sm">
+        <CardHeader className="border-b">
+          <CardTitle>Manual approvals</CardTitle>
+          <CardDescription>
+            Only the exact recovery surface shown here can be authorized.
+          </CardDescription>
+          <label className="relative mt-2 block w-full sm:w-64">
+            <span className="sr-only">Filter approval queue</span>
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              className="pl-8"
+              type="search"
+              placeholder="Customer, case, or plan"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        </CardHeader>
+        <CardContent className="px-0">
           {pending.length ? (
-            <TableViewport>
-              <Table>
-                <TableCaption>
-                  Recovery cases waiting for an operator decision.
-                </TableCaption>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Customer</TableHeaderCell>
-                    <TableHeaderCell>Action</TableHeaderCell>
-                    <TableHeaderCell>Amount</TableHeaderCell>
-                    <TableHeaderCell>Evidence</TableHeaderCell>
-                    <TableHeaderCell>Deadline</TableHeaderCell>
-                    <TableHeaderCell>Decision</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {pending.map((item) => (
-                    <TableRow key={item.case_id}>
-                      <TableCell>
-                        <Link
-                          className={styles.caseLink}
-                          href={`/cases/${item.case_id}`}
+            <Table>
+              <TableCaption className="sr-only">
+                Recovery cases waiting for an operator decision.
+              </TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Customer</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Evidence</TableHead>
+                  <TableHead>Deadline</TableHead>
+                  <TableHead className="pr-4 text-right">Decision</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pending.map((item) => (
+                  <TableRow key={item.case_id}>
+                    <TableCell className="pl-4">
+                      <Link
+                        className="font-medium underline-offset-4 hover:underline"
+                        href={`/cases/${item.case_id}`}
+                      >
+                        {item.customer_display_name}
+                      </Link>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {item.plan_name}
+                      </span>
+                    </TableCell>
+                    <TableCell className="max-w-72 whitespace-normal">
+                      <span className="font-medium">
+                        {humanize(
+                          item.payment_surface_type ?? item.recommended_action,
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {item.policy_reason}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums text-destructive">
+                      {formatPaise(item.amount_at_risk_paise)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="info">{humanize(item.provider)}</Badge>
+                        <Badge
+                          variant={
+                            item.evidence_kind === "RAZORPAY_TEST_VERIFIED"
+                              ? "success"
+                              : "warning"
+                          }
                         >
-                          {item.customer_display_name}
-                        </Link>
-                        <p className={styles.quiet}>{item.plan_name}</p>
-                      </TableCell>
-                      <TableCell>
-                        <strong>
-                          {humanize(
-                            item.payment_surface_type ??
-                              item.recommended_action,
-                          )}
-                        </strong>
-                        <p className={styles.quiet}>{item.policy_reason}</p>
-                      </TableCell>
-                      <TableCell>
-                        {formatPaise(item.amount_at_risk_paise)}
-                      </TableCell>
-                      <TableCell>
-                        <div className={styles.badgeStack}>
-                          <Badge tone="neutral">
-                            {humanize(item.provider)}
-                          </Badge>
-                          <Badge
-                            tone={
-                              item.evidence_kind === "SIMULATED"
-                                ? "info"
-                                : "success"
-                            }
-                          >
-                            {formatEvidenceKind(item.evidence_kind)}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {item.deadline
-                          ? formatDateTime(item.deadline)
-                          : "Open case for deadline"}
-                      </TableCell>
-                      <TableCell>
-                        <Button size="sm" onClick={() => setSelected(item)}>
-                          Review
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableViewport>
+                          {formatEvidenceKind(item.evidence_kind)}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.deadline
+                        ? formatDateTime(item.deadline)
+                        : "Open case for deadline"}
+                    </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <Button size="sm" onClick={() => setSelected(item)}>
+                        Review
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <EmptyState
-              title={
-                query ? "No matching approvals" : "Approval queue is clear"
-              }
-              description={
-                query
-                  ? "Try a different customer, case, or plan."
-                  : "Every high-impact recovery action has been reviewed."
-              }
-              action={
-                query ? (
-                  <Button variant="secondary" onClick={() => setQuery("")}>
-                    Clear filter
-                  </Button>
-                ) : undefined
-              }
+            <QueueEmpty
+              filtered={Boolean(query)}
+              onClear={() => setQuery("")}
             />
           )}
-        </CardBody>
+        </CardContent>
       </Card>
+
       <ConfirmDialog
         open={Boolean(selected)}
         title="Approve this recovery surface?"

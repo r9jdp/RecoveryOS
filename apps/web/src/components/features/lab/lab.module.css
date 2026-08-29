@@ -156,9 +156,9 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--ros-space-4);
-  border: 1px solid #bfd1ff;
+  border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-sm);
-  color: #173b9c;
+  color: var(--ros-link);
   background: var(--ros-info-soft);
   font-size: var(--ros-text-sm);
 }

@@ -1,13 +1,32 @@
 "use client";
 
+import { CircleAlertIcon, ShieldCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Brand } from "@/components/layout";
-import { Alert, Button, Input, TestModeBadge } from "@/components/ui";
-import styles from "@/components/features/merchant/merchant.module.css";
+import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn/alert";
+import { Badge } from "@/components/shadcn/badge";
+import { Button } from "@/components/shadcn/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/shadcn/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/shadcn/field";
+import { Input } from "@/components/shadcn/input";
+import { Spinner } from "@/components/shadcn/spinner";
 import { createOperatorSession } from "@/lib/operator-session";
+
+const safeguards = [
+  "Invoice-scoped recovery",
+  "Policy-first decisions",
+  "Complete audit trail",
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,77 +56,121 @@ export default function LoginPage() {
   }
 
   return (
-    <main className={styles.loginPage}>
-      <section className={styles.loginHero} aria-labelledby="login-hero-title">
-        <Link
-          className={styles.brandLink}
-          href="/"
-          aria-label="RecoveryOS home"
-        >
-          <Brand />
-        </Link>
-        <div className={styles.loginHeroCopy}>
-          <p className={styles.loginEyebrow}>Auditable revenue recovery</p>
-          <h1 id="login-hero-title" className={styles.loginTitle}>
-            Recover the payment. Preserve the trust.
-          </h1>
-          <p className={styles.loginDescription}>
-            Understand every failed subscription, choose the safest recovery
-            path, and keep humans in control of consequential actions.
-          </p>
-          <div className={styles.trustRow} aria-label="Product safeguards">
-            <span className={styles.trustPill}>Invoice-scoped recovery</span>
-            <span className={styles.trustPill}>Policy-first decisions</span>
-            <span className={styles.trustPill}>Complete audit trail</span>
-          </div>
-        </div>
-        <p className={styles.environmentCopy}>
-          Independent hackathon demo · not affiliated with Razorpay.
-        </p>
-      </section>
+    <main className="min-h-svh bg-background text-foreground">
+      <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-5 py-5 md:px-8">
+        <header className="flex items-center justify-between gap-4">
+          <Link href="/" aria-label="RecoveryOS home">
+            <Brand />
+          </Link>
+          <Badge variant="outline">Razorpay test mode</Badge>
+        </header>
 
-      <section className={styles.loginPanel} aria-labelledby="login-heading">
-        <div className={styles.loginCard}>
-          <TestModeBadge />
-          <h2 id="login-heading" className={styles.loginHeading}>
-            Open the FitBox workspace
-          </h2>
-          <p className={styles.loginSubheading}>
-            Use the seeded operator account to explore a complete
-            failed-subscription recovery. No real provider action is enabled.
-          </p>
-          <form className={styles.loginForm} onSubmit={submit}>
-            <Input
-              label="Work email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              defaultValue="demo@recoveryos.dev"
-              required
-            />
-            <Input
-              label="Demo access code"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              defaultValue="recovery-demo"
-              required
-            />
-            <div className={styles.loginHint}>
-              The API issues an HttpOnly operator session. Real payment and
-              calling controls remain independently server-side gated.
+        <section className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-14">
+          <div className="flex max-w-xl flex-col items-start gap-5">
+            <Badge variant="secondary">Auditable revenue recovery</Badge>
+            <div className="flex flex-col gap-3">
+              <h1
+                id="login-hero-title"
+                className="text-4xl leading-tight font-semibold tracking-tight text-balance md:text-5xl"
+              >
+                Recover the payment. Preserve the trust.
+              </h1>
+              <p className="max-w-lg text-base leading-7 text-muted-foreground">
+                Understand every failed subscription, choose the safest recovery
+                path, and keep humans in control of consequential actions.
+              </p>
             </div>
-            {error && (
-              <Alert tone="danger" title="Sign-in failed">
-                {error}
-              </Alert>
-            )}
-            <Button fullWidth size="lg" type="submit" loading={submitting}>
-              Enter Control Tower
-            </Button>
-          </form>
-        </div>
-      </section>
+            <div
+              className="flex flex-wrap gap-2"
+              aria-label="Product safeguards"
+            >
+              {safeguards.map((safeguard) => (
+                <Badge key={safeguard} variant="outline">
+                  {safeguard}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Independent hackathon demo · not affiliated with Razorpay.
+            </p>
+          </div>
+
+          <Card aria-labelledby="login-heading">
+            <CardHeader>
+              <CardTitle id="login-heading">
+                Open the FitBox workspace
+              </CardTitle>
+              <CardDescription>
+                Use the seeded operator account to explore a complete
+                failed-subscription recovery. No real provider action is
+                enabled.
+              </CardDescription>
+              <CardAction>
+                <Badge variant="secondary">Demo</Badge>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <form className="flex flex-col gap-4" onSubmit={submit}>
+                <FieldGroup className="gap-4">
+                  <Field>
+                    <FieldLabel htmlFor="operator-email">Work email</FieldLabel>
+                    <Input
+                      id="operator-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      defaultValue="demo@recoveryos.dev"
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="operator-password">
+                      Demo access code
+                    </FieldLabel>
+                    <Input
+                      id="operator-password"
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      defaultValue="recovery-demo"
+                      required
+                    />
+                  </Field>
+                </FieldGroup>
+
+                <Alert>
+                  <ShieldCheckIcon aria-hidden="true" />
+                  <AlertTitle>Server-side safeguards remain active</AlertTitle>
+                  <AlertDescription>
+                    The API issues an HttpOnly operator session. Real payment
+                    and calling controls remain independently server-side gated.
+                  </AlertDescription>
+                </Alert>
+
+                {error && (
+                  <Alert variant="destructive">
+                    <CircleAlertIcon aria-hidden="true" />
+                    <AlertTitle>Sign-in failed</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  type="submit"
+                  disabled={submitting}
+                >
+                  {submitting && <Spinner data-icon="inline-start" />}
+                  {submitting
+                    ? "Opening Control Tower…"
+                    : "Enter Control Tower"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </main>
   );
 }

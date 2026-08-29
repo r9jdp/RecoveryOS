@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { Check, TriangleAlert } from "lucide-react";
+import { useRef } from "react";
 
-import { Button } from "@/components/ui";
-
-import styles from "./merchant.module.css";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/shadcn/alert-dialog";
+import { Spinner } from "@/components/shadcn/spinner";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -29,77 +39,52 @@ export function ConfirmDialog({
   onCancel,
   onConfirm,
 }: ConfirmDialogProps) {
-  const titleId = useId();
-  const descriptionId = useId();
-  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const actionRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
-    const focusable = () => [
-      ...(dialogRef.current?.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
-      ) ?? []),
-    ];
-    focusable().at(-1)?.focus();
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onCancel();
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      const first = elements[0];
-      const last = elements.at(-1);
-      if (!first || !last) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      document.removeEventListener("keydown", keydown);
-      previous?.focus();
-    };
-  }, [busy, onCancel, open]);
-
-  if (!open) return null;
   return (
-    <div className={styles.dialogBackdrop} role="presentation">
-      <section
-        ref={dialogRef}
-        className={styles.dialog}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !busy) onCancel();
+      }}
+    >
+      <AlertDialogContent
+        initialFocus={danger ? cancelRef : actionRef}
+        className="max-w-md"
       >
-        <div className={styles.dialogIcon} aria-hidden="true">
-          {danger ? "!" : "✓"}
-        </div>
-        <h2 id={titleId} className={styles.dialogTitle}>
-          {title}
-        </h2>
-        <p id={descriptionId} className={styles.dialogCopy}>
-          {description}
-        </p>
-        {confirmationText && (
-          <p className={styles.confirmationText}>{confirmationText}</p>
-        )}
-        <div className={styles.dialogActions}>
-          <Button variant="secondary" onClick={onCancel} disabled={busy}>
+        <AlertDialogHeader>
+          <AlertDialogMedia
+            className={danger ? "text-destructive" : "text-success"}
+          >
+            {danger ? <TriangleAlert /> : <Check />}
+          </AlertDialogMedia>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+
+        {confirmationText ? (
+          <p className="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            {confirmationText}
+          </p>
+        ) : null}
+
+        <AlertDialogFooter>
+          <AlertDialogCancel ref={cancelRef} disabled={busy}>
             Cancel
-          </Button>
-          <Button
-            variant={danger ? "danger" : "primary"}
-            loading={busy}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            ref={actionRef}
+            variant={danger ? "destructive" : "default"}
+            disabled={busy}
+            aria-busy={busy}
             onClick={onConfirm}
           >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
             {confirmLabel}
-          </Button>
-        </div>
-      </section>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

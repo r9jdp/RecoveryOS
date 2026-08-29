@@ -1,18 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-import { PageHeader } from "@/components/layout";
 import {
-  Alert,
-  Badge,
-  Button,
+  CircleAlert,
+  CircleCheck,
+  Info,
+  Pause,
+  Play,
+  Save,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn/alert";
+import { Badge } from "@/components/shadcn/badge";
+import { Button } from "@/components/shadcn/button";
+import {
   Card,
-  CardBody,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
   CardHeader,
-  Input,
+  CardTitle,
+} from "@/components/shadcn/card";
+import { Checkbox } from "@/components/shadcn/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle,
+} from "@/components/shadcn/field";
+import { Input } from "@/components/shadcn/input";
+import {
   Select,
-} from "@/components/ui";
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/shadcn/select";
+import { Spinner } from "@/components/shadcn/spinner";
 import {
   getPolicySettings,
   updatePolicySettings,
@@ -22,7 +54,6 @@ import { formatPaise, humanize } from "@/lib/recovery-format";
 import type { PolicySettings, RecoveryAction } from "@/types/recovery";
 
 import { ConfirmDialog } from "./ConfirmDialog";
-import styles from "./merchant.module.css";
 
 const approvalActions: Array<{ action: RecoveryAction; label: string }> = [
   {
@@ -35,6 +66,8 @@ const approvalActions: Array<{ action: RecoveryAction; label: string }> = [
     label: "Send to the customer agent",
   },
 ];
+
+const timezoneItems = [{ label: "Asia/Kolkata", value: "Asia/Kolkata" }];
 
 export function PolicySettingsPanel({
   saveSettings = updatePolicySettings,
@@ -89,195 +122,311 @@ export function PolicySettingsPanel({
   }
 
   return (
-    <div className={styles.pageStack}>
-      <PageHeader
-        eyebrow="Platform safety"
-        title="Recovery policy"
-        description="Configure operator approval, contact limits, quiet hours, and the global recovery kill switch."
-        action={
-          <Badge
-            tone={settings.recovery_kill_switch ? "danger" : "success"}
-            showDot
-          >
-            {settings.recovery_kill_switch
-              ? "Recovery paused"
-              : "Recovery active"}
-          </Badge>
-        }
-      />
-      {notice && (
-        <Alert tone="success" title="Policy updated">
-          {notice}
-        </Alert>
-      )}
-      {readWarning && (
-        <Alert tone="info" title="Fallback policy data">
-          {readWarning}
-        </Alert>
-      )}
-      {error && (
-        <Alert tone="danger" title="Policy update failed">
-          {error} Existing settings remain active.
-        </Alert>
-      )}
-      {settings.recovery_kill_switch && (
-        <Alert tone="danger" title="Global kill switch is on">
-          New provider actions are blocked. Existing cases remain visible and
-          payment reconciliation continues.
-        </Alert>
-      )}
-      <h2 className={styles.srOnly}>Policy controls</h2>
-      <div className={styles.settingsGrid}>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-medium tracking-wide text-info uppercase">
+            Platform safety
+          </p>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+            Recovery policy
+          </h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Configure operator approval, contact limits, quiet hours, and the
+            global recovery kill switch.
+          </p>
+        </div>
+        <Badge
+          variant={settings.recovery_kill_switch ? "destructive" : "success"}
+        >
+          {settings.recovery_kill_switch ? (
+            <ShieldAlert data-icon="inline-start" />
+          ) : (
+            <ShieldCheck data-icon="inline-start" />
+          )}
+          {settings.recovery_kill_switch
+            ? "Recovery paused"
+            : "Recovery active"}
+        </Badge>
+      </header>
+
+      <div className="space-y-2" aria-live="polite">
+        {notice && (
+          <Alert variant="success">
+            <CircleCheck />
+            <AlertTitle>Policy updated</AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        )}
+        {readWarning && (
+          <Alert variant="warning">
+            <Info />
+            <AlertTitle>Fallback policy data</AlertTitle>
+            <AlertDescription>{readWarning}</AlertDescription>
+          </Alert>
+        )}
+        {error && (
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertTitle>Policy update failed</AlertTitle>
+            <AlertDescription>
+              {error} Existing settings remain active.
+            </AlertDescription>
+          </Alert>
+        )}
+        {settings.recovery_kill_switch && (
+          <Alert variant="destructive">
+            <ShieldAlert />
+            <AlertTitle>Global kill switch is on</AlertTitle>
+            <AlertDescription>
+              New provider actions are blocked. Existing cases remain visible
+              and payment reconciliation continues.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+
+      <h2 className="sr-only">Policy controls</h2>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)]">
         <Card>
-          <CardHeader
-            title="Contact safeguards"
-            description="Merchant timezone and customer-contact boundaries."
-          />
-          <CardBody className={styles.formGrid}>
-            <Select
-              label="Merchant timezone"
-              value={settings.timezone}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  timezone: event.target.value,
-                }))
-              }
-            >
-              <option value="Asia/Kolkata">Asia/Kolkata</option>
-            </Select>
-            <div className={styles.fieldPair}>
-              <Input
-                label="Quiet hours begin"
-                type="time"
-                value={settings.quiet_hours_start ?? ""}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    quiet_hours_start: event.target.value || null,
-                    quiet_hours_end: event.target.value
-                      ? (current.quiet_hours_end ?? "09:00")
-                      : null,
-                  }))
-                }
-              />
-              <Input
-                label="Quiet hours end"
-                type="time"
-                value={settings.quiet_hours_end ?? ""}
-                onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    quiet_hours_start: event.target.value
-                      ? (current.quiet_hours_start ?? "20:00")
-                      : null,
-                    quiet_hours_end: event.target.value || null,
-                  }))
-                }
-              />
-            </div>
-            <Input
-              label="Maximum contacts in 7 days"
-              type="number"
-              min={1}
-              max={7}
-              value={settings.max_contacts_per_7_days ?? ""}
-              hint="Leave empty to disable the rolling contact cap."
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  max_contacts_per_7_days:
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                }))
-              }
-            />
-            <Input
-              label="Require approval above (paise)"
-              type="number"
-              min={0}
-              step={100}
-              value={settings.require_approval_above_paise ?? ""}
-              hint={
-                settings.require_approval_above_paise === null
-                  ? "Amount-based approval is disabled."
-                  : `Currently ${formatPaise(settings.require_approval_above_paise)}`
-              }
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  require_approval_above_paise:
-                    event.target.value === ""
-                      ? null
-                      : Number(event.target.value),
-                }))
-              }
-            />
-            <fieldset className={styles.checkboxGroup}>
-              <legend>Always require approval for</legend>
-              <p className={styles.quiet}>
-                These actions enter the approval queue regardless of amount.
-              </p>
-              {approvalActions.map(({ action, label }) => (
-                <label className={styles.checkboxRow} key={action}>
-                  <input
-                    type="checkbox"
-                    checked={settings.require_approval_actions.includes(action)}
+          <CardHeader className="border-b border-border">
+            <CardTitle>Contact safeguards</CardTitle>
+            <CardDescription>
+              Merchant timezone and customer-contact boundaries.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-1">
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="policy-timezone">
+                  Merchant timezone
+                </FieldLabel>
+                <Select
+                  items={timezoneItems}
+                  value={settings.timezone}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setSettings((current) => ({
+                      ...current,
+                      timezone: value,
+                    }));
+                  }}
+                >
+                  <SelectTrigger id="policy-timezone" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {timezoneItems.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <FieldGroup className="grid gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="quiet-hours-start">
+                    Quiet hours begin
+                  </FieldLabel>
+                  <Input
+                    id="quiet-hours-start"
+                    type="time"
+                    value={settings.quiet_hours_start ?? ""}
                     onChange={(event) =>
                       setSettings((current) => ({
                         ...current,
-                        require_approval_actions: event.target.checked
-                          ? [...current.require_approval_actions, action]
-                          : current.require_approval_actions.filter(
-                              (candidate) => candidate !== action,
-                            ),
+                        quiet_hours_start: event.target.value || null,
+                        quiet_hours_end: event.target.value
+                          ? (current.quiet_hours_end ?? "09:00")
+                          : null,
                       }))
                     }
                   />
-                  <span>
-                    <strong>{label}</strong>
-                    <small>{humanize(action)}</small>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <div>
-              <Button
-                loading={busy}
-                onClick={() =>
-                  persist(
-                    settings,
-                    source === "api"
-                      ? "Contact and approval safeguards were saved."
-                      : "Contact and approval safeguards were saved in simulated mode.",
-                  )
-                }
-              >
-                Save policy
-              </Button>
-            </div>
-          </CardBody>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="quiet-hours-end">
+                    Quiet hours end
+                  </FieldLabel>
+                  <Input
+                    id="quiet-hours-end"
+                    type="time"
+                    value={settings.quiet_hours_end ?? ""}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        quiet_hours_start: event.target.value
+                          ? (current.quiet_hours_start ?? "20:00")
+                          : null,
+                        quiet_hours_end: event.target.value || null,
+                      }))
+                    }
+                  />
+                </Field>
+              </FieldGroup>
+
+              <Field>
+                <FieldLabel htmlFor="max-contacts">
+                  Maximum contacts in 7 days
+                </FieldLabel>
+                <Input
+                  id="max-contacts"
+                  type="number"
+                  min={1}
+                  max={7}
+                  value={settings.max_contacts_per_7_days ?? ""}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      max_contacts_per_7_days:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    }))
+                  }
+                />
+                <FieldDescription>
+                  Leave empty to disable the rolling contact cap.
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="approval-threshold">
+                  Require approval above (paise)
+                </FieldLabel>
+                <Input
+                  id="approval-threshold"
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={settings.require_approval_above_paise ?? ""}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      require_approval_above_paise:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    }))
+                  }
+                />
+                <FieldDescription>
+                  {settings.require_approval_above_paise === null
+                    ? "Amount-based approval is disabled."
+                    : `Currently ${formatPaise(settings.require_approval_above_paise)}`}
+                </FieldDescription>
+              </Field>
+
+              <FieldSet className="rounded-lg border bg-muted/20 p-3 md:col-span-2">
+                <FieldLegend variant="label">
+                  Always require approval for
+                </FieldLegend>
+                <FieldDescription>
+                  These actions enter the approval queue regardless of amount.
+                </FieldDescription>
+                <FieldGroup
+                  data-slot="checkbox-group"
+                  className="grid gap-1 md:grid-cols-3"
+                >
+                  {approvalActions.map(({ action, label }) => {
+                    const id = `approval-action-${action}`;
+                    return (
+                      <FieldLabel htmlFor={id} key={action}>
+                        <Field orientation="horizontal">
+                          <Checkbox
+                            id={id}
+                            checked={settings.require_approval_actions.includes(
+                              action,
+                            )}
+                            onCheckedChange={(checked) =>
+                              setSettings((current) => ({
+                                ...current,
+                                require_approval_actions: checked
+                                  ? [
+                                      ...current.require_approval_actions,
+                                      action,
+                                    ]
+                                  : current.require_approval_actions.filter(
+                                      (candidate) => candidate !== action,
+                                    ),
+                              }))
+                            }
+                          />
+                          <FieldContent>
+                            <FieldTitle>{label}</FieldTitle>
+                            <FieldDescription>
+                              {humanize(action)}
+                            </FieldDescription>
+                          </FieldContent>
+                        </Field>
+                      </FieldLabel>
+                    );
+                  })}
+                </FieldGroup>
+              </FieldSet>
+            </FieldGroup>
+          </CardContent>
+          <CardFooter className="justify-end bg-transparent">
+            <Button
+              aria-busy={busy}
+              aria-label="Save policy"
+              disabled={busy}
+              onClick={() =>
+                persist(
+                  settings,
+                  source === "api"
+                    ? "Contact and approval safeguards were saved."
+                    : "Contact and approval safeguards were saved in simulated mode.",
+                )
+              }
+            >
+              {busy ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <Save data-icon="inline-start" />
+              )}
+              Save policy
+            </Button>
+          </CardFooter>
         </Card>
-        <Card className={styles.dangerCard}>
-          <CardHeader
-            title="Global recovery kill switch"
-            description="Emergency control for all new payment, voice, and customer-agent actions."
-            action={
+
+        <Card size="sm">
+          <CardHeader className="border-b border-border">
+            <CardTitle>Global recovery kill switch</CardTitle>
+            <CardDescription>
+              Emergency control for all new payment, voice, and customer-agent
+              actions.
+            </CardDescription>
+            <CardAction>
               <Badge
-                tone={settings.recovery_kill_switch ? "danger" : "neutral"}
+                variant={
+                  settings.recovery_kill_switch ? "destructive" : "success"
+                }
               >
                 {settings.recovery_kill_switch ? "ON" : "OFF"}
               </Badge>
-            }
-          />
-          <CardBody className={styles.stack}>
-            <p className={styles.cardCopy}>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-1">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               Reconciliation stays active so authoritative late payments can
               still close cases safely.
             </p>
+            <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
+              Pausing blocks new actions only. It does not hide cases or stop
+              payment verification.
+            </div>
+          </CardContent>
+          <CardFooter className="bg-transparent">
             <Button
-              variant={settings.recovery_kill_switch ? "secondary" : "danger"}
+              className="w-full"
+              variant={
+                settings.recovery_kill_switch ? "outline" : "destructive"
+              }
+              disabled={busy}
               onClick={() =>
                 settings.recovery_kill_switch
                   ? persist(
@@ -287,13 +436,19 @@ export function PolicySettingsPanel({
                   : setKillConfirm(true)
               }
             >
+              {settings.recovery_kill_switch ? (
+                <Play data-icon="inline-start" />
+              ) : (
+                <Pause data-icon="inline-start" />
+              )}
               {settings.recovery_kill_switch
                 ? "Resume recovery actions"
                 : "Pause all recovery actions"}
             </Button>
-          </CardBody>
+          </CardFooter>
         </Card>
       </div>
+
       <ConfirmDialog
         open={killConfirm}
         danger

@@ -106,7 +106,7 @@
 
 .scenarioOption:hover .scenarioContent {
   border-color: var(--ros-border-strong);
-  background: white;
+  background: var(--ros-bg-hover);
 }
 
 .scenarioOption input:checked + .scenarioContent {
@@ -211,7 +211,7 @@
   place-items: center;
   border: 1px solid var(--ros-brand);
   border-radius: 50%;
-  color: white;
+  color: var(--ros-bg-primary);
   background: var(--ros-brand);
   font: 800 var(--ros-text-xs) / 1 var(--ros-font-mono);
 }
@@ -262,7 +262,7 @@
   margin-top: var(--ros-space-1);
   padding: 0.15rem 0.4rem;
   border-radius: var(--ros-radius-pill);
-  color: #006f41;
+  color: var(--ros-success);
   background: var(--ros-success-soft);
   font-family: var(--ros-font-body);
   font-weight: 750;

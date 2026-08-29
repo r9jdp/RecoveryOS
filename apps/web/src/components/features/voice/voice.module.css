@@ -8,9 +8,9 @@
   justify-content: space-between;
   gap: var(--ros-space-6);
   padding: clamp(1.5rem, 4vw, 2.5rem);
-  border: 1px solid #bfd1ff;
+  border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-md);
-  background: linear-gradient(145deg, #fff, var(--ros-info-soft));
+  background: var(--ros-bg-card);
 }
 .hero h1 {
   max-width: 48rem;
@@ -68,7 +68,7 @@
   place-items: center;
   border-radius: 50%;
   color: var(--ros-danger);
-  background: #fde9e7;
+  background: var(--ros-danger-soft);
 }
 .field {
   display: grid;
@@ -84,7 +84,7 @@
   border: 1px solid var(--ros-border-strong);
   border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
-  background: #fff;
+  background: var(--ros-bg-secondary);
   font: inherit;
   font-weight: 450;
   line-height: 1.5;
@@ -109,10 +109,10 @@
   gap: var(--ros-space-3);
   align-items: start;
   padding: var(--ros-space-4);
-  border: 1px solid #f2d487;
+  border: 1px solid rgb(253 176 34 / 24%);
   border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
-  background: #fff9e8;
+  background: var(--ros-warning-soft);
   font-size: var(--ros-text-sm);
   font-weight: 650;
 }

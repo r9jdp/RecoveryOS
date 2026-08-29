@@ -1,7 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
-import styles from "../../styles/recovery-ui.module.css";
-import { cx } from "../ui/class-names";
+import { cn } from "@/lib/utils";
 
 export interface PageHeaderProps extends HTMLAttributes<HTMLElement> {
   eyebrow?: string;
@@ -19,11 +18,23 @@ export function PageHeader({
   ...props
 }: PageHeaderProps) {
   return (
-    <header className={cx(styles.sectionHeader, className)} {...props}>
-      <div>
-        {eyebrow && <p className={styles.eyebrow}>{eyebrow}</p>}
-        <h1 className={styles.pageTitle}>{title}</h1>
-        {description && <p className={styles.pageDescription}>{description}</p>}
+    <header
+      className={cn(
+        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+        className,
+      )}
+      {...props}
+    >
+      <div className="min-w-0">
+        {eyebrow ? (
+          <p className="text-xs font-medium text-info">{eyebrow}</p>
+        ) : null}
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
+        {description ? (
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
       {action}
     </header>

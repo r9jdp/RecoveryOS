@@ -5,13 +5,7 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   color: var(--ros-ink);
-  background:
-    radial-gradient(
-      circle at 10% 10%,
-      rgb(208 224 255 / 62%),
-      transparent 30rem
-    ),
-    linear-gradient(180deg, #f8faff 0%, var(--ros-canvas) 44%);
+  background: var(--ros-bg-primary);
 }
 
 .header {
@@ -22,7 +16,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--ros-space-4);
-  border-bottom: 1px solid rgb(223 227 233 / 75%);
+  border-bottom: 1px solid var(--ros-border);
 }
 
 .brand {
@@ -47,9 +41,9 @@
   display: grid;
   place-items: center;
   border-radius: 0.7rem 0.2rem 0.7rem 0.2rem;
-  color: white;
-  background: var(--ros-brand);
-  box-shadow: 0 8px 20px rgb(48 94 255 / 25%);
+  color: var(--ros-ink);
+  background: var(--ros-surface-strong);
+  box-shadow: none;
 }
 
 .stage {
@@ -63,7 +57,7 @@
 .loadingCard {
   border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-lg);
-  background: rgb(255 255 255 / 96%);
+  background: var(--ros-bg-card);
   box-shadow: var(--ros-shadow-md);
 }
 

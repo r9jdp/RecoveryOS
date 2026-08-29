@@ -1,12 +1,28 @@
 "use client";
 
+import {
+  CheckIcon,
+  Clock3Icon,
+  RotateCcwIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui";
-
-import styles from "./merchant.module.css";
+import { Alert, AlertDescription, AlertTitle } from "@/components/shadcn/alert";
+import { Badge } from "@/components/shadcn/badge";
+import { Button } from "@/components/shadcn/button";
+import { Separator } from "@/components/shadcn/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/shadcn/sheet";
 
 const STORAGE_KEY = "recoveryos-fitbox-demo-progress-v1";
 
@@ -68,9 +84,6 @@ function readVisitedSteps(): string[] {
 export function DemoGuide() {
   const pathname = usePathname();
   const router = useRouter();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState<string[]>([]);
   const [announcement, setAnnouncement] = useState("");
@@ -88,36 +101,6 @@ export function DemoGuide() {
     return () => window.clearTimeout(updateProgress);
   }, [pathname]);
 
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus({ preventScroll: true });
-        return;
-      }
-      if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus({ preventScroll: true });
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus({ preventScroll: true });
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
   const currentIndex = demoSteps.findIndex((step) => step.matches(pathname));
   const nextStep = useMemo(
     () => demoSteps.find((step) => !visited.includes(step.id)),
@@ -133,102 +116,82 @@ export function DemoGuide() {
     router.push("/dashboard");
   };
 
-  const closeGuide = () => {
-    setOpen(false);
-    triggerRef.current?.focus({ preventScroll: true });
-  };
-
   return (
-    <>
-      <button
-        ref={triggerRef}
-        className={styles.demoTrigger}
-        type="button"
-        aria-label="Open 5-min demo guide for FitBox"
-        aria-expanded={open}
-        aria-controls="fitbox-demo-guide"
-        onClick={() => setOpen(true)}
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Open 5-min demo guide for FitBox"
+          />
+        }
       >
-        <span className={styles.demoTriggerDot} aria-hidden="true" />
-        <span>5-min demo</span>
-        <span className={styles.demoTriggerProgress}>
+        <Clock3Icon data-icon="inline-start" />
+        5-min demo
+        <Badge variant="info">
           {visited.length}/{demoSteps.length}
-        </span>
-      </button>
+        </Badge>
+      </SheetTrigger>
 
-      {open && (
-        <div className={styles.demoBackdrop} role="presentation">
-          <aside
-            ref={panelRef}
-            id="fitbox-demo-guide"
-            className={styles.demoPanel}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fitbox-demo-title"
-            aria-describedby="fitbox-demo-description"
-          >
-            <div className={styles.demoPanelHeader}>
-              <div>
-                <div className={styles.demoPanelEyebrow}>
-                  <Badge tone="info">Mock-only walkthrough</Badge>
-                  <span>5:00 total</span>
-                </div>
-                <h2 id="fitbox-demo-title" className={styles.demoPanelTitle}>
-                  FitBox judge route
-                </h2>
-                <p
-                  id="fitbox-demo-description"
-                  className={styles.demoPanelDescription}
-                >
-                  Five focused stops from failure to auditable recovery. This
-                  guide only navigates and tracks progress in this browser tab.
-                </p>
-              </div>
-              <button
-                ref={closeRef}
-                className={styles.demoClose}
-                type="button"
-                aria-label="Close five-minute demo guide"
-                onClick={closeGuide}
-              >
-                ×
-              </button>
-            </div>
+      <SheetContent id="fitbox-demo-guide" side="right">
+        <SheetHeader className="gap-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="info">Mock-only walkthrough</Badge>
+            <span className="text-xs text-muted-foreground">5:00 total</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <SheetTitle>FitBox judge route</SheetTitle>
+            <SheetDescription>
+              Five focused stops from failure to auditable recovery. This guide
+              only navigates and tracks progress in this browser tab.
+            </SheetDescription>
+          </div>
+        </SheetHeader>
 
-            <div className={styles.demoSafetyStrip}>
-              <span className={styles.demoSafetyIcon} aria-hidden="true">
-                ✓
-              </span>
-              <div>
-                <strong>External actions stay locked</strong>
-                <p>
-                  Navigation and reset cannot enable Razorpay, Twilio, or any
-                  other provider action.
-                </p>
-              </div>
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
+          <Alert variant="info">
+            <ShieldCheckIcon />
+            <AlertTitle>External actions stay locked</AlertTitle>
+            <AlertDescription>
+              Navigation and reset cannot enable Razorpay, Twilio, or any other
+              provider action.
+            </AlertDescription>
+          </Alert>
 
-            <ol className={styles.demoSteps}>
-              {demoSteps.map((step, index) => {
-                const isCurrent = index === currentIndex;
-                const isVisited = visited.includes(step.id);
-                return (
-                  <li
-                    className={`${styles.demoStep} ${isCurrent ? styles.demoStepCurrent : ""}`}
-                    key={step.id}
-                  >
-                    <span className={styles.demoStepNumber} aria-hidden="true">
-                      {isVisited && !isCurrent ? "✓" : index + 1}
-                    </span>
-                    <div className={styles.demoStepBody}>
-                      <div className={styles.demoStepHeading}>
-                        <Link href={step.href} onClick={() => setOpen(false)}>
-                          {step.label}
-                        </Link>
-                        <span>{step.duration}</span>
-                      </div>
-                      <p>{step.detail}</p>
-                      <span className={styles.demoStepStatus}>
+          <Separator />
+
+          <ol className="flex flex-col">
+            {demoSteps.map((step, index) => {
+              const isCurrent = index === currentIndex;
+              const isVisited = visited.includes(step.id);
+              return (
+                <li key={step.id} aria-current={isCurrent ? "step" : undefined}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 py-3">
+                    <Badge
+                      variant={
+                        isCurrent ? "info" : isVisited ? "success" : "outline"
+                      }
+                    >
+                      {isVisited && !isCurrent ? (
+                        <CheckIcon data-icon="inline-start" />
+                      ) : (
+                        index + 1
+                      )}
+                    </Badge>
+
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <Link
+                        className="text-sm font-medium text-foreground transition-colors hover:text-muted-foreground"
+                        href={step.href}
+                        onClick={() => setOpen(false)}
+                      >
+                        {step.label}
+                      </Link>
+                      <p className="text-sm text-muted-foreground">
+                        {step.detail}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
                         {isCurrent
                           ? "Current stop"
                           : isVisited
@@ -236,38 +199,43 @@ export function DemoGuide() {
                             : "Ready"}
                       </span>
                     </div>
-                  </li>
-                );
-              })}
-            </ol>
 
-            <div className={styles.demoPanelFooter}>
-              <div className={styles.demoStatus} role="status">
-                <strong>
-                  {visited.length === demoSteps.length
-                    ? "Walkthrough complete"
-                    : `${visited.length} of ${demoSteps.length} stops visited`}
-                </strong>
-                <span>
-                  {nextStep
-                    ? `Next: ${nextStep.label}`
-                    : "Ready to reset and replay."}
-                </span>
-              </div>
-              <button
-                className={styles.demoReset}
-                type="button"
-                onClick={resetGuide}
-              >
-                Reset guided demo
-              </button>
-            </div>
-            <p className={styles.srOnly} aria-live="polite">
-              {announcement}
-            </p>
-          </aside>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {step.duration}
+                    </span>
+                  </div>
+                  {index < demoSteps.length - 1 ? <Separator /> : null}
+                </li>
+              );
+            })}
+          </ol>
         </div>
-      )}
-    </>
+
+        <Separator />
+
+        <SheetFooter>
+          <div className="flex flex-col gap-1" role="status">
+            <strong className="text-sm font-medium">
+              {visited.length === demoSteps.length
+                ? "Walkthrough complete"
+                : `${visited.length} of ${demoSteps.length} stops visited`}
+            </strong>
+            <span className="text-xs text-muted-foreground">
+              {nextStep
+                ? `Next: ${nextStep.label}`
+                : "Ready to reset and replay."}
+            </span>
+          </div>
+          <Button variant="outline" onClick={resetGuide}>
+            <RotateCcwIcon data-icon="inline-start" />
+            Reset guided demo
+          </Button>
+        </SheetFooter>
+
+        <p className="sr-only" aria-live="polite">
+          {announcement}
+        </p>
+      </SheetContent>
+    </Sheet>
   );
 }
