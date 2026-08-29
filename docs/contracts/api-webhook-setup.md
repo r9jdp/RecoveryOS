@@ -6,15 +6,13 @@ sit outside the recovery OpenAPI contract.
 
 ## Local setup
 
-Prerequisites are Node 22, pnpm 10.15.1, Python 3.12, uv, Docker, and Docker Compose. From the
-repository root:
+Prerequisites are Node 22, pnpm 10.15.1, Python 3.12, uv, Supabase PostgreSQL, and Temporal Cloud.
+Fill the root `.env`, then run from the repository root:
 
 ```powershell
 pnpm bootstrap
-pnpm infra
-$env:DATABASE_URL = "postgresql+psycopg://recovery:recovery@localhost:55432/recovery_os"
-$env:TEMPORAL_ADDRESS = "localhost:7233"
-uv run alembic -c services/api/alembic.ini upgrade head
+pnpm db:check
+pnpm migrate
 pnpm reset
 pnpm dev:api
 pnpm dev:worker
@@ -22,11 +20,11 @@ pnpm dev:customer-agent
 pnpm dev:web
 ```
 
-Keep the database and Temporal variables in every API/worker/migration terminal; `.env.example` is a
-contract template and is not loaded automatically by the processes. The development origins are web `http://localhost:3000`, API/docs
-`http://localhost:8000/docs`, customer agent `http://localhost:8010`, and Temporal UI
-`http://localhost:8233`. Run each long-lived command in its own terminal. Mock payment and voice are
-the default; A2A delegation and real mandate signing are off.
+The development commands load the root `.env` automatically. The development origins are web
+`http://localhost:3000`, API/docs `http://localhost:8000/docs`, and customer agent
+`http://localhost:8010`. Temporal history is inspected in Temporal Cloud. Run each long-lived
+command in its own terminal. Mock payment and voice are the default; A2A delegation and real
+mandate signing are off.
 
 ## Recovery API surface
 

@@ -1,4 +1,9 @@
-# RecoveryOS deployment foundation
+# RecoveryOS legacy VM deployment
+
+> [!WARNING]
+> This OCI/Docker deployment design is retired and is not part of the supported runtime. Current
+> development uses Supabase PostgreSQL and Temporal Cloud. A replacement Python-service hosting
+> target must be selected before these legacy deployment documents and scripts are removed.
 
 RecoveryOS uses a deliberately small free-tier topology:
 

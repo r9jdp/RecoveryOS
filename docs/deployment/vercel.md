@@ -28,7 +28,6 @@ Never add any of the following as public variables:
 - Temporal API key.
 - ElevenLabs or Twilio credential.
 - Mandate signing private key.
-- GHCR or OCI token.
 
 ## Validation
 

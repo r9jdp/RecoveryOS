@@ -9,7 +9,5 @@ container health check:
   bounded Temporal service health check succeeds. Before polling, after worker
   shutdown, or while Temporal is unavailable it returns a sanitized `503`.
 
-The endpoint is intentionally not published or routed by the edge proxy. The
-Docker image uses readiness, rather than PID existence, for its `HEALTHCHECK`.
-Mock activity providers remain the default and readiness does not require
-Razorpay, A2A, or telephony credentials.
+The endpoint should remain private on the worker host. Mock activity providers remain the default,
+and readiness does not require Razorpay, A2A, or telephony credentials.

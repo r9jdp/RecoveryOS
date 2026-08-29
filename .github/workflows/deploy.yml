@@ -1,25 +1,14 @@
-name: Deploy VM services
+name: Hosted release validation
 
 on:
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: Stop after staging or promote the same image to production
-        required: true
-        type: choice
-        options: [staging, production]
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: recoveryos-deploy-${{ inputs.target_environment }}
+  group: recoveryos-release-validation
   cancel-in-progress: false
-
-env:
-  IMAGE_TAG: ${{ github.sha }}
-  GHCR_REPOSITORY: recovery-os
 
 jobs:
   validate:
@@ -55,98 +44,3 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push immutable ARM64 services
-        run: bash deploy/scripts/build-and-push.sh "${{ github.repository_owner }}" "$GHCR_REPOSITORY" "$IMAGE_TAG"
-
-  scan-images:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [api, worker, customer-agent]
-    steps:
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Scan ${{ matrix.service }} image
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/recovery-os-${{ matrix.service }}:${{ github.sha }}
-          scanners: vuln,secret
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-
-  deploy-staging:
-    runs-on: ubuntu-latest
-    needs: scan-images
-    environment:
-      name: staging
-      url: ${{ vars.API_BASE_URL }}
-    env:
-      DEPLOY_ENV: staging
-      API_BASE_URL: ${{ vars.API_BASE_URL }}
-      AGENT_BASE_URL: ${{ vars.AGENT_BASE_URL }}
-      PUBLIC_DEMO: ${{ vars.RECOVERYOS_PUBLIC_DEMO || 'false' }}
-    steps:
-      - name: Deploy and smoke the immutable image in staging
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: IMAGE_TAG,DEPLOY_ENV,API_BASE_URL,AGENT_BASE_URL,PUBLIC_DEMO
-          script: |
-            set -eu
-            test -n "$API_BASE_URL"
-            cd /opt/recoveryos/current
-            git diff --quiet
-            git diff --cached --quiet
-            git fetch --depth 1 origin "$IMAGE_TAG"
-            git checkout --detach "$IMAGE_TAG"
-            RECOVERYOS_PUBLIC_DEMO="$PUBLIC_DEMO" bash deploy/scripts/deploy.sh \
-              "$DEPLOY_ENV" "$IMAGE_TAG" "$API_BASE_URL" "$AGENT_BASE_URL"
-
-  deploy-production:
-    if: inputs.target_environment == 'production'
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    environment:
-      name: production
-      url: ${{ vars.API_BASE_URL }}
-    env:
-      DEPLOY_ENV: production
-      API_BASE_URL: ${{ vars.API_BASE_URL }}
-      AGENT_BASE_URL: ${{ vars.AGENT_BASE_URL }}
-      PUBLIC_DEMO: ${{ vars.RECOVERYOS_PUBLIC_DEMO || 'false' }}
-    steps:
-      - name: Promote the staging-verified image to production
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: IMAGE_TAG,DEPLOY_ENV,API_BASE_URL,AGENT_BASE_URL,PUBLIC_DEMO
-          script: |
-            set -eu
-            test -n "$API_BASE_URL"
-            cd /opt/recoveryos/current
-            test "$(git rev-parse HEAD)" = "$IMAGE_TAG"
-            RECOVERYOS_PUBLIC_DEMO="$PUBLIC_DEMO" bash deploy/scripts/deploy.sh \
-              "$DEPLOY_ENV" "$IMAGE_TAG" "$API_BASE_URL" "$AGENT_BASE_URL"

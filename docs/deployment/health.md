@@ -61,7 +61,7 @@ The worker has no public HTTP surface. It binds a small health server to
 | `/health/live`  | worker process and loopback health server can respond                     | Container/runtime error |
 | `/health/ready` | Temporal worker is running and the Temporal service health probe succeeds | HTTP 503                |
 
-The worker Docker and Compose `HEALTHCHECK` call `/health/ready`, so a worker that has stopped
-polling or cannot reach Temporal is unhealthy even if PID 1 is still present. Responses use
+The hosting platform must probe `/health/ready`, so a worker that has stopped polling or cannot
+reach Temporal is unhealthy even if its process still exists. Responses use
 sanitized `not_polling` or `probe_failed` reasons; provider credentials and connection details are
 never returned.

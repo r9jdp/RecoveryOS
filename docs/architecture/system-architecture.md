@@ -8,22 +8,18 @@ Temporal workflow code contains only deterministic state and timers.
 flowchart LR
     Browser[Merchant or customer browser]
     Web[Next.js 16 web app]
-    Caddy[Caddy TLS edge]
-    Gateway[HAProxy rate and body limits]
     API[FastAPI recovery API]
     Agent[Customer A2A agent]
-    DB[(PostgreSQL / Neon)]
-    Temporal[Temporal service]
+    DB[(Supabase PostgreSQL)]
+    Temporal[Temporal Cloud]
     Worker[Temporal worker]
     Razorpay[Razorpay test APIs]
     Voice[Twilio and ElevenLabs]
     Lab[RecoveryBench artifact]
 
     Browser --> Web
-    Web -->|HTTPS JSON| Caddy
-    Caddy --> Gateway
-    Gateway --> API
-    Gateway --> Agent
+    Web -->|HTTPS JSON| API
+    Browser -->|customer approval| Agent
     API --> DB
     API -->|start / signal| Temporal
     Temporal --> Worker
@@ -39,10 +35,9 @@ flowchart LR
     Lab -->|versioned report| API
 ```
 
-The checked-in deployment topology places the web app on Vercel and the API, worker, customer-agent,
-Caddy, and HAProxy on an OCI ARM64 VM. Staging and production are isolated Compose projects with
-separate Neon roles/branches and Temporal namespaces. Templates do not prove those resources exist;
-credentialed provisioning remains an external gate.
+The target hosted topology places the web app on Vercel, stores application state in Supabase
+PostgreSQL, and uses Temporal Cloud for workflow history. The API, worker, and customer-agent still
+require a non-sleeping Python hosting platform; that platform has not yet been selected or verified.
 
 ## Runtime responsibilities
 
@@ -86,7 +81,7 @@ exact scope, consumes its nonce atomically, opens only the bound provider-owned 
 idempotent receipt after authoritative recovery.
 
 That composition passes local service-level gates; it does not prove hosted infrastructure or a
-credentialed provider path. Public origins, OCI/Vercel/Neon/Temporal Cloud resources, Razorpay test
+credentialed provider path. Public origins, backend hosting, Temporal Cloud, Razorpay test
 credentials, and allowlisted Twilio/ElevenLabs credentials remain external gates. Production also
 requires real identity, tenant authorization, privacy/retention operations, and provider/regulatory
 review.

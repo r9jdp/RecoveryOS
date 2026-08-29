@@ -25,7 +25,14 @@ async def run() -> None:
     address = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
     namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
     task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "recovery-os")
-    client = await Client.connect(address, namespace=namespace)
+    api_key = os.getenv("TEMPORAL_API_KEY", "").strip() or None
+    use_tls = _truthy(os.getenv("TEMPORAL_TLS"))
+    client = await Client.connect(
+        address,
+        namespace=namespace,
+        api_key=api_key,
+        tls=use_tls,
+    )
     activity_services = create_activity_services_from_env()
     a2a_services = (
         create_live_a2a_services_from_env()

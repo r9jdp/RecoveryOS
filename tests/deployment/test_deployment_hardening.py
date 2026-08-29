@@ -113,27 +113,6 @@ def test_secret_scanner_rejects_live_token_and_browser_server_name(tmp_path: Pat
     )
 
 
-def test_edge_gateway_is_only_app_service_on_edge_network() -> None:
-    compose = (ROOT / "infra" / "compose" / "compose.base.yml").read_text(encoding="utf-8")
-    assert "haproxy:3.2.22-alpine" in compose
-    assert "${STACK_SLUG}-api" in compose
-    assert "${STACK_SLUG}-customer-agent" in compose
-    api_section = compose.split("  api:\n", 1)[1].split("  worker:\n", 1)[0]
-    agent_section = compose.split("  customer-agent:\n", 1)[1].split("  edge-gateway:\n", 1)[0]
-    assert "edge:" not in api_section
-    assert "edge:" not in agent_section
-
-
-def test_hosted_operator_cookie_is_secure_and_cross_site_capable() -> None:
-    for environment in ("staging", "production"):
-        compose = (ROOT / "infra" / "compose" / f"compose.{environment}.yml").read_text(
-            encoding="utf-8"
-        )
-        assert 'OPERATOR_AUTH_REQUIRED: "true"' in compose
-        assert 'OPERATOR_COOKIE_SECURE: "true"' in compose
-        assert "OPERATOR_COOKIE_SAMESITE: none" in compose
-
-
 def test_shell_scripts_enable_strict_error_handling() -> None:
     scripts = [
         *sorted((ROOT / "deploy" / "scripts").glob("*.sh")),
@@ -155,16 +134,9 @@ def test_agent_card_smoke_uses_supported_interface_and_exact_rpc_origin() -> Non
 
 
 def test_hosted_customer_agent_checks_sql_readiness_before_promotion() -> None:
-    compose = (ROOT / "infra" / "compose" / "compose.base.yml").read_text(encoding="utf-8")
-    haproxy = (ROOT / "infra" / "haproxy" / "haproxy.cfg").read_text(encoding="utf-8")
     smoke = (ROOT / "deploy" / "scripts" / "smoke.sh").read_text(encoding="utf-8")
     monitor = (ROOT / "deploy" / "scripts" / "monitor.sh").read_text(encoding="utf-8")
 
-    customer_agent = compose.split("  customer-agent:\n", 1)[1].split("  edge-gateway:\n", 1)[0]
-    customer_backend = haproxy.split("backend customer_agent_upstream\n", 1)[1]
-    assert "http://127.0.0.1:8010/health/ready" in customer_agent
-    assert "CUSTOMER_AGENT_TASK_STORE" in customer_agent
-    assert "option httpchk GET /health/ready" in customer_backend
     assert 'retry_json "${agent_base_url}/health/ready" agent-ready' in smoke
     assert 'payload.get("store") == "sql"' in smoke
     assert 'probe_agent_ready agent-ready "${agent_base_url}/health/ready"' in monitor

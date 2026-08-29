@@ -14,7 +14,7 @@ From this directory, with the repository environment installed:
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8010
 ```
 
-The Dockerfile uses the same `app.main:app` entry point. Its public service endpoints are:
+Its public service endpoints are:
 
 - `GET /.well-known/agent-card.json`
 - `POST /rpc` for `SendMessage`, `GetTask`, and `CancelTask`

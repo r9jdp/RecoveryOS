@@ -64,8 +64,9 @@ sequenceDiagram
 ```
 
 The mandate authorizes one exact payment surface; it does not authorize an LLM to charge. The
-customer still completes the provider-owned surface. Hosted Compose selects the SQL-backed
-customer-agent task store, so task, approval, artifact, and receipt state survives process restart.
+customer still completes the provider-owned surface. Hosted environments select the SQL-backed
+customer-agent task store in Supabase, so task, approval, artifact, and receipt state survives
+process restart.
 Nonce consumption is independently atomic in PostgreSQL. Only an authoritative recovered result
 causes the worker to send the idempotent, exact-scope `recovery.receipt.v1` message and complete the
 customer task.

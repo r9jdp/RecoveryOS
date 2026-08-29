@@ -26,25 +26,22 @@ Evidence is always labelled `SIMULATED` or `RAZORPAY TEST VERIFIED`; synthetic r
 as verified merchant revenue. See the [implementation status](docs/development/implementation-status.md)
 and [Phase 5 audit](docs/audit/phase-5-final-audit.md) for the exact verified boundary.
 
-## Five-minute local demo
+## Local development
 
-Prerequisites: Node.js 22 LTS, pnpm 10.15.1, Python 3.12, `uv`, and Docker.
+Prerequisites: Node.js 22 LTS, pnpm 10.15.1, Python 3.12, `uv`, a verified
+Supabase PostgreSQL project, and a Temporal Cloud namespace. Docker is not used.
 
 ```powershell
 pnpm install --frozen-lockfile
 uv sync --all-groups
-pnpm infra
-
-$env:DATABASE_URL = "postgresql+psycopg://recovery:recovery@localhost:55432/recovery_os"
-$env:TEMPORAL_ADDRESS = "localhost:7233"
-$env:TEMPORAL_NAMESPACE = "default"
-$env:TEMPORAL_TASK_QUEUE = "recovery-os"
-
+pnpm db:check
 pnpm migrate
 pnpm seed
 ```
 
-Start each process in a separate terminal with the same server-side environment:
+The root `.env` is loaded automatically by the development commands. Fill `DATABASE_URL`,
+`TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and `TEMPORAL_API_KEY` before starting the complete
+stack. Start each process in a separate terminal:
 
 ```powershell
 pnpm dev:api
@@ -89,7 +86,7 @@ browser callbacks never prove payment.
 - [RecoveryBench model card](docs/model/recoverybench-model-card.md)
 - [Threat model](docs/security/threat-model.md)
 - [Failure-demo checklist](docs/demo/failure-demo-checklist.md)
-- [Staged deployment](docs/runbooks/staged-deployment.md) and [database recovery](docs/runbooks/database-backup-restore.md)
+- [Vercel frontend deployment](docs/deployment/vercel.md) and [uptime monitoring](docs/runbooks/uptime-monitoring.md)
 - [Independent-project disclaimer](docs/submission/disclaimer.md)
 
 ## Validation
@@ -102,7 +99,6 @@ pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm e2e
-pnpm e2e:service
 pnpm build
 pnpm generate:openapi
 git diff --exit-code -- packages/contracts/openapi.json
