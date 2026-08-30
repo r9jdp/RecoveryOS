@@ -7,7 +7,7 @@ test("opt-out is confirmed before suppression and immediately changes dispositio
 }) => {
   await mockMerchantMutations(page);
   await page.goto(FITBOX_CASE_PATH);
-  await expect(page.getByText("SIMULATED evidence")).toBeVisible();
+  await expect(page.getByText("Seeded demo data").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Record opt-out" }).click();
   const dialog = page.getByRole("alertdialog", {
@@ -40,7 +40,7 @@ test("already-paid statement pauses action without claiming proof", async ({
 }) => {
   await mockMerchantMutations(page);
   await page.goto(FITBOX_CASE_PATH);
-  await expect(page.getByText("SIMULATED evidence")).toBeVisible();
+  await expect(page.getByText("Seeded demo data").first()).toBeVisible();
 
   await page
     .getByRole("button", { name: "Customer says already paid" })

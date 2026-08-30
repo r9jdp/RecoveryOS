@@ -9,7 +9,7 @@ export async function expectMockDashboard(page: Page): Promise<void> {
   ).toBeVisible();
   await expect(page.getByText("Demo data active")).toBeVisible();
   await expect(
-    page.getByText("Simulated", { exact: true }).first(),
+    page.getByText("Seeded demo data", { exact: true }).first(),
   ).toBeVisible();
 }
 
@@ -53,7 +53,7 @@ export async function mockMerchantMutations(page: Page): Promise<void> {
         contentType: "application/json",
         body: JSON.stringify({
           disposition: body.disposition,
-          message: `${body.disposition.replaceAll("_", " ")} recorded in simulated mode. No provider action was taken.`,
+          message: `${body.disposition.replaceAll("_", " ")} recorded in local demo mode. No provider action was taken.`,
           occurred_at: "2026-08-28T10:00:00Z",
           status: "ACCEPTED",
         }),

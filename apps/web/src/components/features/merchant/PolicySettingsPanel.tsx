@@ -33,7 +33,6 @@ import {
   FieldLabel,
   FieldLegend,
   FieldSet,
-  FieldTitle,
 } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import {
@@ -122,16 +121,16 @@ export function PolicySettingsPanel({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-medium tracking-wide text-info uppercase">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium tracking-wide text-info uppercase">
             Platform safety
           </p>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             Recovery policy
           </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+          <p className="max-w-2xl text-base leading-6 text-muted-foreground">
             Configure operator approval, contact limits, quiet hours, and the
             global recovery kill switch.
           </p>
@@ -150,7 +149,7 @@ export function PolicySettingsPanel({
         </Badge>
       </header>
 
-      <div className="space-y-2" aria-live="polite">
+      <div className="flex flex-col gap-2" aria-live="polite">
         {notice && (
           <Alert variant="success">
             <CircleCheck />
@@ -187,16 +186,16 @@ export function PolicySettingsPanel({
       </div>
 
       <h2 className="sr-only">Policy controls</h2>
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.75fr)]">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader className="border-b border-border">
-            <CardTitle>Contact safeguards</CardTitle>
+            <CardTitle>Contact window and limits</CardTitle>
             <CardDescription>
-              Merchant timezone and customer-contact boundaries.
+              Set when RecoveryOS may contact a customer and how often.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-1">
-            <FieldGroup className="grid gap-4 md:grid-cols-2">
+          <CardContent className="flex flex-col gap-6">
+            <FieldGroup className="grid gap-5 md:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="policy-timezone">
                   Merchant timezone
@@ -227,7 +226,38 @@ export function PolicySettingsPanel({
                 </Select>
               </Field>
 
-              <FieldGroup className="grid gap-3 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="max-contacts">
+                  Maximum contacts in 7 days
+                </FieldLabel>
+                <Input
+                  id="max-contacts"
+                  type="number"
+                  min={1}
+                  max={7}
+                  value={settings.max_contacts_per_7_days ?? ""}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      max_contacts_per_7_days:
+                        event.target.value === ""
+                          ? null
+                          : Number(event.target.value),
+                    }))
+                  }
+                />
+                <FieldDescription>
+                  Leave empty to disable the rolling contact cap.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+
+            <FieldSet>
+              <FieldLegend>Quiet hours</FieldLegend>
+              <FieldDescription>
+                Block customer outreach during this local time window.
+              </FieldDescription>
+              <FieldGroup className="grid gap-5 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="quiet-hours-start">
                     Quiet hours begin
@@ -267,32 +297,20 @@ export function PolicySettingsPanel({
                   />
                 </Field>
               </FieldGroup>
+            </FieldSet>
+          </CardContent>
+        </Card>
 
-              <Field>
-                <FieldLabel htmlFor="max-contacts">
-                  Maximum contacts in 7 days
-                </FieldLabel>
-                <Input
-                  id="max-contacts"
-                  type="number"
-                  min={1}
-                  max={7}
-                  value={settings.max_contacts_per_7_days ?? ""}
-                  onChange={(event) =>
-                    setSettings((current) => ({
-                      ...current,
-                      max_contacts_per_7_days:
-                        event.target.value === ""
-                          ? null
-                          : Number(event.target.value),
-                    }))
-                  }
-                />
-                <FieldDescription>
-                  Leave empty to disable the rolling contact cap.
-                </FieldDescription>
-              </Field>
-
+        <Card>
+          <CardHeader className="border-b border-border">
+            <CardTitle>Approval rules</CardTitle>
+            <CardDescription>
+              Decide which recovery actions need a human decision before they
+              run.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="approval-threshold">
                   Require approval above (paise)
@@ -320,56 +338,49 @@ export function PolicySettingsPanel({
                 </FieldDescription>
               </Field>
 
-              <FieldSet className="rounded-lg border bg-muted/20 p-3 md:col-span-2">
-                <FieldLegend variant="label">
-                  Always require approval for
-                </FieldLegend>
+              <FieldSet>
+                <FieldLegend>Always require approval for</FieldLegend>
                 <FieldDescription>
                   These actions enter the approval queue regardless of amount.
                 </FieldDescription>
-                <FieldGroup
-                  data-slot="checkbox-group"
-                  className="grid gap-1 md:grid-cols-3"
-                >
+                <FieldGroup data-slot="checkbox-group" className="grid gap-2">
                   {approvalActions.map(({ action, label }) => {
                     const id = `approval-action-${action}`;
                     return (
-                      <FieldLabel htmlFor={id} key={action}>
-                        <Field orientation="horizontal">
-                          <Checkbox
-                            id={id}
-                            checked={settings.require_approval_actions.includes(
-                              action,
-                            )}
-                            onCheckedChange={(checked) =>
-                              setSettings((current) => ({
-                                ...current,
-                                require_approval_actions: checked
-                                  ? [
-                                      ...current.require_approval_actions,
-                                      action,
-                                    ]
-                                  : current.require_approval_actions.filter(
-                                      (candidate) => candidate !== action,
-                                    ),
-                              }))
-                            }
-                          />
-                          <FieldContent>
-                            <FieldTitle>{label}</FieldTitle>
-                            <FieldDescription>
-                              {humanize(action)}
-                            </FieldDescription>
-                          </FieldContent>
-                        </Field>
-                      </FieldLabel>
+                      <Field orientation="horizontal" key={action}>
+                        <Checkbox
+                          id={id}
+                          checked={settings.require_approval_actions.includes(
+                            action,
+                          )}
+                          onCheckedChange={(checked) =>
+                            setSettings((current) => ({
+                              ...current,
+                              require_approval_actions: checked
+                                ? [...current.require_approval_actions, action]
+                                : current.require_approval_actions.filter(
+                                    (candidate) => candidate !== action,
+                                  ),
+                            }))
+                          }
+                        />
+                        <FieldContent>
+                          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                          <FieldDescription>
+                            {humanize(action)}
+                          </FieldDescription>
+                        </FieldContent>
+                      </Field>
                     );
                   })}
                 </FieldGroup>
               </FieldSet>
             </FieldGroup>
           </CardContent>
-          <CardFooter className="justify-end bg-transparent">
+          <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm leading-5 text-muted-foreground">
+              Saving applies both the contact safeguards and approval rules.
+            </p>
             <Button
               aria-busy={busy}
               aria-label="Save policy"
@@ -379,7 +390,7 @@ export function PolicySettingsPanel({
                   settings,
                   source === "api"
                     ? "Contact and approval safeguards were saved."
-                    : "Contact and approval safeguards were saved in simulated mode.",
+                    : "Contact and approval safeguards were saved in local demo mode.",
                 )
               }
             >
@@ -388,66 +399,71 @@ export function PolicySettingsPanel({
               ) : (
                 <Save data-icon="inline-start" />
               )}
-              Save policy
-            </Button>
-          </CardFooter>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="border-b border-border">
-            <CardTitle>Global recovery kill switch</CardTitle>
-            <CardDescription>
-              Emergency control for all new payment, voice, and customer-agent
-              actions.
-            </CardDescription>
-            <CardAction>
-              <Badge
-                variant={
-                  settings.recovery_kill_switch ? "destructive" : "success"
-                }
-              >
-                {settings.recovery_kill_switch ? "ON" : "OFF"}
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-1">
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Reconciliation stays active so authoritative late payments can
-              still close cases safely.
-            </p>
-            <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
-              Pausing blocks new actions only. It does not hide cases or stop
-              payment verification.
-            </div>
-          </CardContent>
-          <CardFooter className="bg-transparent">
-            <Button
-              className="w-full"
-              variant={
-                settings.recovery_kill_switch ? "outline" : "destructive"
-              }
-              disabled={busy}
-              onClick={() =>
-                settings.recovery_kill_switch
-                  ? persist(
-                      { ...settings, recovery_kill_switch: false },
-                      "Recovery actions were resumed.",
-                    )
-                  : setKillConfirm(true)
-              }
-            >
-              {settings.recovery_kill_switch ? (
-                <Play data-icon="inline-start" />
-              ) : (
-                <Pause data-icon="inline-start" />
-              )}
-              {settings.recovery_kill_switch
-                ? "Resume recovery actions"
-                : "Pause all recovery actions"}
+              Save all policy settings
             </Button>
           </CardFooter>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="border-b border-border">
+          <CardTitle>Emergency kill switch</CardTitle>
+          <CardDescription>
+            Immediately block all new payment, voice, and customer-agent actions
+            when recovery operations must pause.
+          </CardDescription>
+          <CardAction>
+            <Badge
+              variant={
+                settings.recovery_kill_switch ? "destructive" : "success"
+              }
+            >
+              {settings.recovery_kill_switch ? "ON" : "OFF"}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-2">
+          <p className="text-base leading-6 text-muted-foreground">
+            The kill switch blocks new provider actions only. Cases remain
+            visible, and RecoveryOS continues watching for authoritative late
+            payment events.
+          </p>
+          <Alert
+            variant={settings.recovery_kill_switch ? "destructive" : "warning"}
+          >
+            <ShieldAlert />
+            <AlertTitle>Payment verification stays active</AlertTitle>
+            <AlertDescription>
+              Pausing recovery never disables webhook ingestion or payment
+              reconciliation.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button
+            className="w-full sm:w-auto"
+            variant={settings.recovery_kill_switch ? "outline" : "destructive"}
+            disabled={busy}
+            onClick={() =>
+              settings.recovery_kill_switch
+                ? persist(
+                    { ...settings, recovery_kill_switch: false },
+                    "Recovery actions were resumed.",
+                  )
+                : setKillConfirm(true)
+            }
+          >
+            {settings.recovery_kill_switch ? (
+              <Play data-icon="inline-start" />
+            ) : (
+              <Pause data-icon="inline-start" />
+            )}
+            {settings.recovery_kill_switch
+              ? "Resume recovery actions"
+              : "Pause all recovery actions"}
+          </Button>
+        </CardFooter>
+      </Card>
 
       <ConfirmDialog
         open={killConfirm}

@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Search } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -10,11 +10,13 @@ import { Badge } from "@/components/shadcn/badge";
 import { Button } from "@/components/shadcn/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/card";
+import { Field, FieldDescription, FieldLabel } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import { Skeleton } from "@/components/shadcn/skeleton";
 import {
@@ -56,10 +58,10 @@ function QueueEmpty({
         <div className="mx-auto mb-3 grid size-9 place-items-center rounded-lg border bg-muted/30 text-muted-foreground">
           <CircleAlert aria-hidden="true" className="size-4" />
         </div>
-        <h2 className="text-sm font-medium">
+        <h2 className="text-base font-medium">
           {filtered ? "No matching approvals" : "Approval queue is clear"}
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-base leading-6 text-muted-foreground">
           {filtered
             ? "Try a different customer, case, or plan."
             : "Every high-impact recovery action has been reviewed."}
@@ -117,7 +119,17 @@ export function ApprovalQueue({
     }
   }
 
+  const awaitingReview = approvalItems.filter(
+    (item) => !approved.includes(item.case_id),
+  );
   const pending = filtered.filter((item) => !approved.includes(item.case_id));
+  const amountAtRiskPaise = awaitingReview.reduce(
+    (total, item) => total + item.amount_at_risk_paise,
+    0,
+  );
+  const verifiedEvidenceCount = awaitingReview.filter(
+    (item) => item.evidence_kind === "RAZORPAY_TEST_VERIFIED",
+  ).length;
 
   if (resource.loading) {
     return (
@@ -151,7 +163,9 @@ export function ApprovalQueue({
         title="Approval queue"
         description="Review the exact customer surface before a recovery action is opened."
         action={
-          <Badge variant="warning">{pending.length} awaiting review</Badge>
+          <Badge variant="warning">
+            {awaitingReview.length} awaiting review
+          </Badge>
         }
       />
 
@@ -171,28 +185,80 @@ export function ApprovalQueue({
         </Alert>
       ) : null}
 
-      <Card size="sm">
+      <section aria-labelledby="approval-overview-title">
+        <h2 id="approval-overview-title" className="sr-only">
+          Approval overview
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardDescription>Awaiting review</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl leading-tight font-semibold">
+                {awaitingReview.length}
+              </p>
+              <p className="text-base leading-6 text-muted-foreground">
+                Recovery surfaces that still need an operator decision.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardDescription>Amount at risk</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl leading-tight font-semibold text-destructive">
+                {formatPaise(amountAtRiskPaise)}
+              </p>
+              <p className="text-base leading-6 text-muted-foreground">
+                Total unpaid value across approvals still in the queue.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardDescription>Provider-verified evidence</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl leading-tight font-semibold">
+                {verifiedEvidenceCount}
+              </p>
+              <p className="text-base leading-6 text-muted-foreground">
+                Items backed by a verified Razorpay test-mode event.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <Card>
         <CardHeader className="border-b">
           <CardTitle>Manual approvals</CardTitle>
           <CardDescription>
             Only the exact recovery surface shown here can be authorized.
           </CardDescription>
-          <label className="relative mt-2 block w-full sm:w-64">
-            <span className="sr-only">Filter approval queue</span>
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-            />
+          <CardAction>
+            <Badge variant="secondary">{pending.length} shown</Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 px-0">
+          <Field className="px-(--card-spacing) sm:max-w-md">
+            <FieldLabel htmlFor="approval-filter">Filter approvals</FieldLabel>
             <Input
-              className="pl-8"
+              id="approval-filter"
               type="search"
               placeholder="Customer, case, or plan"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-          </label>
-        </CardHeader>
-        <CardContent className="px-0">
+            <FieldDescription>
+              Search by customer name, case ID, or subscription plan.
+            </FieldDescription>
+          </Field>
+
           {pending.length ? (
             <Table>
               <TableCaption className="sr-only">
@@ -218,7 +284,7 @@ export function ApprovalQueue({
                       >
                         {item.customer_display_name}
                       </Link>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                      <span className="mt-1 block text-sm text-muted-foreground">
                         {item.plan_name}
                       </span>
                     </TableCell>
@@ -228,7 +294,7 @@ export function ApprovalQueue({
                           item.payment_surface_type ?? item.recommended_action,
                         )}
                       </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                      <span className="mt-1 block text-sm text-muted-foreground">
                         {item.policy_reason}
                       </span>
                     </TableCell>

@@ -459,7 +459,7 @@ export async function executeSafetyDisposition(
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     return {
       disposition,
-      message: `${disposition.replaceAll("_", " ")} recorded in simulated mode. No provider action was taken.`,
+      message: `${disposition.replaceAll("_", " ")} recorded in local demo mode. No provider action was taken.`,
       occurred_at: new Date().toISOString(),
       source: "mock",
       status: "ACCEPTED",

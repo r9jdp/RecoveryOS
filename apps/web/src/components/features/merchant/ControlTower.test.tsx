@@ -13,7 +13,7 @@ describe("ControlTower", () => {
       await screen.findByRole("heading", { name: "Control Tower" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("₹1,499")).toHaveLength(2);
-    expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Seeded demo data").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("link", { name: /REC-FITBOX-AUG-2026/i }),
     ).toHaveAttribute("href", "/cases/case_fitbox_aug_2026");

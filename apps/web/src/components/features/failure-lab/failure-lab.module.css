@@ -6,7 +6,7 @@
 }
 
 .page {
-  gap: var(--ros-space-6);
+  gap: var(--ros-space-5);
 }
 
 .workspace {
@@ -45,7 +45,7 @@
 .deliveryHeader p {
   margin: 0;
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   line-height: 1.5;
 }
 
@@ -90,13 +90,17 @@
 
 .scenarioContent strong {
   color: var(--ros-ink);
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
 }
 
-.scenarioContent > span,
+.scenarioContent > span {
+  font-size: var(--ros-text-md);
+  line-height: 1.55;
+}
+
 .scenarioContent small {
-  font-size: var(--ros-text-xs);
-  line-height: 1.45;
+  font-size: var(--ros-text-sm);
+  line-height: 1.5;
 }
 
 .scenarioContent small {
@@ -131,6 +135,15 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.metricCard {
+  min-height: 9.5rem;
+}
+
+.metricCard p:last-child {
+  font-size: var(--ros-text-sm);
+  line-height: 1.5;
+}
+
 .selectedContract {
   display: grid;
   gap: var(--ros-space-1);
@@ -138,12 +151,13 @@
   border-left: 3px solid var(--ros-brand);
   color: var(--ros-text-muted);
   background: var(--ros-brand-soft);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   line-height: 1.5;
 }
 
 .selectedContract strong {
   color: var(--ros-ink-secondary);
+  font-size: var(--ros-text-md);
 }
 
 .output:focus-visible {
@@ -227,7 +241,7 @@
 .deliveryHeader h3 {
   margin: 0 0 var(--ros-space-1);
   color: var(--ros-ink);
-  font: 750 var(--ros-text-base) / 1.35 var(--ros-font-body);
+  font: 750 var(--ros-text-lg) / 1.35 var(--ros-font-body);
 }
 
 .deliveryDetails {
@@ -243,7 +257,7 @@
 
 .deliveryDetails dt {
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   font-weight: 700;
 }
 
@@ -251,7 +265,7 @@
   margin: var(--ros-space-1) 0 0;
   color: var(--ros-ink);
   font-family: var(--ros-font-mono);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }

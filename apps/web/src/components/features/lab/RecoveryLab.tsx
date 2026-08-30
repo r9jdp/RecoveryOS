@@ -126,7 +126,7 @@ export function RecoveryLabView({
         description="Inspect a fixed-seed, paired-cohort evaluation of recoverability ranking and calibration before any model is considered for recovery decisions."
         action={
           <div className={styles.badges}>
-            <Badge tone="warning">Simulated evidence</Badge>
+            <Badge tone="warning">Synthetic evaluation</Badge>
             <Badge tone={source === "api" ? "success" : "neutral"} showDot>
               {source === "api" ? "Live report" : "Bundled report"}
             </Badge>
@@ -137,10 +137,7 @@ export function RecoveryLabView({
       {warning && (
         <Alert title="Live evaluation report unavailable">{warning}</Alert>
       )}
-      <Alert
-        tone="warning"
-        title="Simulated incremental recovery — not merchant revenue"
-      >
+      <Alert tone="warning" title="Synthetic evaluation — not merchant revenue">
         Treatment and baseline outcomes come from the same hidden customer-state
         model and shared outcome draw. These results never modify verified
         recovered revenue.
@@ -152,21 +149,25 @@ export function RecoveryLabView({
         aria-label="Model evaluation metrics"
       >
         <MetricCard
+          className={styles.metricCard}
           label="Precision–recall AUC"
           value={formatMetric(report.metrics.pr_auc)}
           delta="Higher is better for recovery ranking"
         />
         <MetricCard
+          className={styles.metricCard}
           label="Brier score"
           value={formatMetric(report.metrics.brier_score)}
           delta="Lower is better for probability accuracy"
         />
         <MetricCard
+          className={styles.metricCard}
           label="Top-decile lift"
           value={`${formatMetric(report.metrics.top_decile_lift, 2)}×`}
           delta="Recovery rate versus the full cohort"
         />
         <MetricCard
+          className={styles.metricCard}
           label="Amount-weighted lift"
           value={`${formatMetric(report.metrics.amount_weighted_lift, 2)}×`}
           delta="Paise-weighted top decile versus cohort"
@@ -236,8 +237,8 @@ export function RecoveryLabView({
       <Card>
         <CardHeader
           title="Recovery by action"
-          description="Observed paired-cohort outcomes and simulated incremental recovery. Values are integer paise before display formatting."
-          action={<Badge tone="warning">Simulated only</Badge>}
+          description="Observed paired-cohort outcomes and synthetic incremental recovery. Values are integer paise before display formatting."
+          action={<Badge tone="warning">Synthetic evaluation</Badge>}
         />
         <CardBody>
           <TableViewport>
@@ -252,7 +253,7 @@ export function RecoveryLabView({
                   <TableHeaderCell>Treatment / baseline</TableHeaderCell>
                   <TableHeaderCell>Predicted</TableHeaderCell>
                   <TableHeaderCell>Observed</TableHeaderCell>
-                  <TableHeaderCell>Simulated incremental</TableHeaderCell>
+                  <TableHeaderCell>Synthetic incremental</TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -281,7 +282,7 @@ export function RecoveryLabView({
             </Table>
           </TableViewport>
           <div className={styles.incrementalTotal}>
-            <span>Simulated incremental recovery across evaluation cohort</span>
+            <span>Synthetic incremental recovery across evaluation cohort</span>
             <strong>
               {formatPaise(report.metrics.simulated_incremental_recovery_paise)}
             </strong>

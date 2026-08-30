@@ -19,7 +19,7 @@ describe("recovery formatting", () => {
     expect(humanize("SUBSCRIPTION_CARD_UPDATE")).toBe(
       "Subscription Card Update",
     );
-    expect(formatEvidenceKind("SIMULATED")).toBe("SIMULATED");
+    expect(formatEvidenceKind("SIMULATED")).toBe("Seeded demo data");
     expect(formatEvidenceKind("RAZORPAY_TEST_VERIFIED")).toBe(
       "RAZORPAY TEST VERIFIED",
     );

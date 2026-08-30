@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: var(--ros-space-6);
+  gap: var(--ros-space-5);
 }
 
 .srOnly {
@@ -34,6 +34,15 @@
   gap: var(--ros-space-4);
 }
 
+.metricCard {
+  min-height: 9.5rem;
+}
+
+.metricCard p:last-child {
+  font-size: var(--ros-text-sm);
+  line-height: 1.5;
+}
+
 .twoColumn {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.85fr);
@@ -48,7 +57,7 @@
 .legend {
   justify-content: flex-end;
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
 }
 
 .predictedKey,
@@ -83,7 +92,7 @@
 .binLabel,
 .binCount {
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   font-weight: 700;
 }
 
@@ -160,7 +169,8 @@
   border-radius: var(--ros-radius-sm);
   color: var(--ros-link);
   background: var(--ros-info-soft);
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
+  line-height: 1.5;
 }
 
 .incrementalTotal strong {

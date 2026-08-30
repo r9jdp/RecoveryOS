@@ -50,11 +50,11 @@ describe("FailureLab", () => {
     ).toBeChecked();
     expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(
-      screen.getByText(/RAZORPAY TEST VERIFIED evidence is unavailable/i),
+      screen.getByText(/Provider verification is unavailable here/i),
     ).toBeInTheDocument();
   });
 
-  it("submits integer paise with simulated evidence and renders convergence", async () => {
+  it("submits integer paise with synthetic test data and renders convergence", async () => {
     const simulate = vi.fn().mockResolvedValue(result);
     render(<FailureLab simulate={simulate} />);
 
@@ -83,7 +83,9 @@ describe("FailureLab", () => {
       expect.any(AbortSignal),
     );
     expect(screen.getByText("Provider fetch wins")).toBeInTheDocument();
-    expect(screen.getAllByText("Simulated").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Synthetic test data").length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("evt_failure")).toBeInTheDocument();
   });
 

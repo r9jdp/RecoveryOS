@@ -2,7 +2,7 @@
 
 import {
   CheckIcon,
-  Clock3Icon,
+  MapIcon,
   RotateCcwIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -32,7 +32,6 @@ const demoSteps = [
     href: "/dashboard",
     label: "Frame the failure",
     detail: "Open the Control Tower and confirm ₹1,499 is at risk.",
-    duration: "0:45",
     matches: (pathname: string) => pathname === "/dashboard",
   },
   {
@@ -40,15 +39,14 @@ const demoSteps = [
     href: "/cases/case_fitbox_aug_2026",
     label: "Inspect the decision",
     detail: "Show authentication evidence, policy, and the native surface.",
-    duration: "1:30",
     matches: (pathname: string) => pathname.startsWith("/cases/"),
   },
   {
     id: "approval",
     href: "/approvals",
     label: "Demonstrate control",
-    detail: "Review the exact surface and the mock-only approval guardrail.",
-    duration: "0:45",
+    detail:
+      "Review the exact surface and its provider-safe approval guardrail.",
     matches: (pathname: string) => pathname === "/approvals",
   },
   {
@@ -56,15 +54,13 @@ const demoSteps = [
     href: "/voice",
     label: "Rehearse safe outreach",
     detail: "Use browser rehearsal to show opt-out and intent precedence.",
-    duration: "0:45",
     matches: (pathname: string) => pathname === "/voice",
   },
   {
     id: "lab",
     href: "/lab",
     label: "Close with evidence",
-    detail: "Explain the fixed-seed evaluation and simulated-only metrics.",
-    duration: "1:15",
+    detail: "Explain the fixed-seed evaluation and its metric safeguards.",
     matches: (pathname: string) => pathname === "/lab",
   },
 ] as const;
@@ -111,7 +107,7 @@ export function DemoGuide() {
     window.sessionStorage.removeItem(STORAGE_KEY);
     setVisited([]);
     setAnnouncement(
-      "Guided demo progress reset. Case data and provider safety settings were not changed.",
+      "Product tour progress reset. Case data and provider safety settings were not changed.",
     );
     router.push("/dashboard");
   };
@@ -123,28 +119,28 @@ export function DemoGuide() {
           <Button
             variant="outline"
             size="sm"
-            aria-label="Open 5-min demo guide for FitBox"
+            aria-label="Open the RecoveryOS product tour"
           />
         }
       >
-        <Clock3Icon data-icon="inline-start" />
-        5-min demo
+        <MapIcon data-icon="inline-start" />
+        Product tour
         <Badge variant="info">
-          {visited.length}/{demoSteps.length}
+          {visited.length}/{demoSteps.length} pages
         </Badge>
       </SheetTrigger>
 
       <SheetContent id="fitbox-demo-guide" side="right">
         <SheetHeader className="gap-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="info">Mock-only walkthrough</Badge>
-            <span className="text-xs text-muted-foreground">5:00 total</span>
-          </div>
+          <Badge className="w-fit" variant="info">
+            Navigation-only walkthrough
+          </Badge>
           <div className="flex flex-col gap-1">
-            <SheetTitle>FitBox judge route</SheetTitle>
+            <SheetTitle>RecoveryOS product tour</SheetTitle>
             <SheetDescription>
-              Five focused stops from failure to auditable recovery. This guide
-              only navigates and tracks progress in this browser tab.
+              Visit five product pages to follow a failed payment from detection
+              to auditable recovery. The tour only navigates and tracks page
+              visits in this browser tab.
             </SheetDescription>
           </div>
         </SheetHeader>
@@ -167,7 +163,7 @@ export function DemoGuide() {
               const isVisited = visited.includes(step.id);
               return (
                 <li key={step.id} aria-current={isCurrent ? "step" : undefined}>
-                  <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 py-3">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3 py-3">
                     <Badge
                       variant={
                         isCurrent ? "info" : isVisited ? "success" : "outline"
@@ -199,10 +195,6 @@ export function DemoGuide() {
                             : "Ready"}
                       </span>
                     </div>
-
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {step.duration}
-                    </span>
                   </div>
                   {index < demoSteps.length - 1 ? <Separator /> : null}
                 </li>
@@ -217,8 +209,8 @@ export function DemoGuide() {
           <div className="flex flex-col gap-1" role="status">
             <strong className="text-sm font-medium">
               {visited.length === demoSteps.length
-                ? "Walkthrough complete"
-                : `${visited.length} of ${demoSteps.length} stops visited`}
+                ? "Product tour complete"
+                : `${visited.length} of ${demoSteps.length} pages visited`}
             </strong>
             <span className="text-xs text-muted-foreground">
               {nextStep
@@ -228,7 +220,7 @@ export function DemoGuide() {
           </div>
           <Button variant="outline" onClick={resetGuide}>
             <RotateCcwIcon data-icon="inline-start" />
-            Reset guided demo
+            Reset tour
           </Button>
         </SheetFooter>
 

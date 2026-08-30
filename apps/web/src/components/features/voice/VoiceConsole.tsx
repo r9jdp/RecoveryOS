@@ -188,6 +188,9 @@ export function VoiceConsole({
             )}
             <label className={styles.field}>
               <span>Transcript fallback</span>
+              <small>
+                Enter only the words you want RecoveryOS to analyze.
+              </small>
               <textarea
                 value={transcript}
                 onChange={(event) => setTranscript(event.target.value)}
@@ -279,7 +282,7 @@ export function VoiceConsole({
               {
                 id: "prepared",
                 title: "Browser rehearsal prepared",
-                timestamp: "Now · SIMULATED",
+                timestamp: "Now · Local rehearsal",
                 description:
                   "No external provider contacted; recording remains local until submitted.",
                 tone: "info",

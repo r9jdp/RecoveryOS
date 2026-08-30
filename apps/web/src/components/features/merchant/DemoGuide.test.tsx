@@ -28,14 +28,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DemoGuide", () => {
-  it("presents a five-minute mock-only route and tracks the current stop", async () => {
+  it("presents a product tour and tracks the current page", async () => {
     render(<DemoGuide />);
 
-    await waitFor(() => expect(screen.getByText("1/5")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /5-min demo/i }));
+    await waitFor(() =>
+      expect(screen.getByText("1/5 pages")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /product tour/i }));
 
     expect(
-      screen.getByRole("dialog", { name: "FitBox judge route" }),
+      screen.getByRole("dialog", { name: "RecoveryOS product tour" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("External actions stay locked"),
@@ -52,13 +54,13 @@ describe("DemoGuide", () => {
       JSON.stringify(["control-tower", "fitbox-case"]),
     );
     render(<DemoGuide />);
-    fireEvent.click(screen.getByRole("button", { name: /5-min demo/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset guided demo" }));
+    fireEvent.click(screen.getByRole("button", { name: /product tour/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset tour" }));
 
     expect(navigation.push).toHaveBeenCalledWith("/dashboard");
     expect(
       screen.getByText(
-        "Guided demo progress reset. Case data and provider safety settings were not changed.",
+        "Product tour progress reset. Case data and provider safety settings were not changed.",
       ),
     ).toBeInTheDocument();
   });

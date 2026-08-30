@@ -138,7 +138,7 @@ export default function HomePage() {
               </ol>
             </CardContent>
             <CardFooter className="justify-between gap-3">
-              <Badge variant="outline">Simulated</Badge>
+              <Badge variant="outline">Seeded demo data</Badge>
               <span className="text-xs text-muted-foreground">
                 Default evidence · no external action
               </span>

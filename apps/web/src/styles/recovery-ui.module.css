@@ -314,7 +314,7 @@
 .cardDescription {
   margin-top: var(--ros-space-1);
   color: var(--ros-text-muted);
-  font: 450 var(--ros-text-sm) / 1.5 var(--ros-font-body);
+  font: 450 var(--ros-text-md) / 1.55 var(--ros-font-body);
 }
 
 .metricValue {
@@ -518,7 +518,7 @@
 .timelineTitle {
   margin: 0;
   color: var(--ros-ink);
-  font: 700 var(--ros-text-sm) / 1.4 var(--ros-font-body);
+  font: 700 var(--ros-text-md) / 1.4 var(--ros-font-body);
 }
 
 .timelineMeta,
@@ -529,12 +529,12 @@
 
 .timelineMeta {
   margin: var(--ros-space-1) 0 0;
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
 }
 
 .timelineDescription {
   margin: var(--ros-space-2) 0 0;
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
   line-height: 1.55;
 }
 
@@ -649,14 +649,14 @@
 
 .alertTitle {
   margin: 0;
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
   font-weight: 750;
 }
 
 .alertDescription {
   margin: var(--ros-space-1) 0 0;
-  font-size: var(--ros-text-sm);
-  line-height: 1.5;
+  font-size: var(--ros-text-md);
+  line-height: 1.55;
 }
 
 .skeleton {
@@ -712,7 +712,7 @@
 .emptyStateDescription {
   margin: 0;
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
   line-height: 1.55;
 }
 

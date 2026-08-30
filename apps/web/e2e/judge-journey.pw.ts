@@ -7,7 +7,7 @@ import {
   mockMerchantMutations,
 } from "./support/fixtures";
 
-test("five-minute judge journey stays simulated and auditable", async ({
+test("five-minute judge journey stays seeded and auditable", async ({
   page,
 }) => {
   await mockMerchantMutations(page);
@@ -47,7 +47,7 @@ test("five-minute judge journey stays simulated and auditable", async ({
       name: "Aarav Sharma · FitBox Annual",
     }),
   ).toBeVisible();
-  await expect(page.getByText("SIMULATED evidence")).toBeVisible();
+  await expect(page.getByText("Seeded demo data").first()).toBeVisible();
   await expect(
     page.getByText("Standalone collection is blocked"),
   ).toBeVisible();
@@ -81,7 +81,7 @@ test("five-minute judge journey stays simulated and auditable", async ({
     page.getByRole("heading", { level: 1, name: "RecoveryBench" }),
   ).toBeVisible();
   await expect(
-    page.getByText("simulated incremental recovery", { exact: false }).first(),
+    page.getByText("synthetic incremental recovery", { exact: false }).first(),
   ).toBeVisible();
   await expect(page.getByText("1,200").first()).toBeVisible();
 
@@ -104,29 +104,29 @@ test("dashboard filters recover cleanly from an empty result", async ({
   ).toBeVisible();
 });
 
-test("five-minute FitBox guide tracks navigation and resets only local progress", async ({
+test("product tour tracks navigation and resets only local progress", async ({
   page,
 }) => {
   await page.goto("/dashboard");
   await expectMockDashboard(page);
 
-  const trigger = page.getByRole("button", { name: /5-min demo/i });
-  await expect(trigger).toContainText("1/5");
+  const trigger = page.getByRole("button", { name: /product tour/i });
+  await expect(trigger).toContainText("1/5 pages");
   await trigger.click();
-  const guide = page.getByRole("dialog", { name: "FitBox judge route" });
+  const guide = page.getByRole("dialog", { name: "RecoveryOS product tour" });
   await expect(guide).toBeVisible();
   await expect(guide.getByText("External actions stay locked")).toBeVisible();
-  await expect(guide.getByText("1 of 5 stops visited")).toBeVisible();
+  await expect(guide.getByText("1 of 5 pages visited")).toBeVisible();
 
   await guide.getByRole("link", { name: "Inspect the decision" }).click();
   await expect(page).toHaveURL(new RegExp(`${FITBOX_CASE_PATH}$`));
-  await page.getByRole("button", { name: /5-min demo/i }).click();
-  await expect(guide.getByText("2 of 5 stops visited")).toBeVisible();
-  await guide.getByRole("button", { name: "Reset guided demo" }).click();
+  await page.getByRole("button", { name: /product tour/i }).click();
+  await expect(guide.getByText("2 of 5 pages visited")).toBeVisible();
+  await guide.getByRole("button", { name: "Reset tour" }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("button", { name: /5-min demo/i })).toContainText(
-    "1/5",
-  );
+  await expect(
+    page.getByRole("button", { name: /product tour/i }),
+  ).toContainText("1/5 pages");
   await assertNoHorizontalOverflow(page);
 });

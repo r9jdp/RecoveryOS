@@ -203,7 +203,7 @@ export default function DesignSystemPage() {
           <div className={styles.previewRow}>
             <TestModeBadge />
             <Badge tone="neutral" showDot>
-              Simulated
+              Seeded demo data
             </Badge>
             <Badge tone="info" showDot>
               Waiting

@@ -51,7 +51,7 @@ describe("CaseWorkspace", () => {
     );
 
     expect(
-      await screen.findAllByText(/MARK OPT OUT recorded in simulated mode/i),
+      await screen.findAllByText(/MARK OPT OUT recorded in local demo mode/i),
     ).toHaveLength(2);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
   });

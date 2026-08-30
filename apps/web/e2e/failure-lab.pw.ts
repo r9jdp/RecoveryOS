@@ -5,7 +5,7 @@ import {
   scanSemanticAccessibility,
 } from "./support/fixtures";
 
-test("failure lab runs a simulated contract with keyboard and responsive safety evidence", async ({
+test("failure lab runs a synthetic test contract with keyboard and responsive safety evidence", async ({
   page,
 }, testInfo) => {
   let submitted: Record<string, unknown> | null = null;
@@ -57,7 +57,7 @@ test("failure lab runs a simulated contract with keyboard and responsive safety 
     page.getByRole("heading", { level: 1, name: "Failure Injection Lab" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/RAZORPAY TEST VERIFIED evidence is unavailable/),
+    page.getByText(/Provider verification is unavailable here/),
   ).toBeVisible();
 
   const duplicate = page.getByRole("radio", { name: /Duplicate webhook/i });

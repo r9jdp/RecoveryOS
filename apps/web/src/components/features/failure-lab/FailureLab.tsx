@@ -75,22 +75,25 @@ function Result({ result }: { result: FailureSimulationResponse }) {
           <h2 id="simulation-result">Expected convergence</h2>
         </div>
         <Badge tone="warning" showDot>
-          Simulated evidence
+          Synthetic test data
         </Badge>
       </div>
 
       <div className={styles.metricGrid}>
         <MetricCard
+          className={styles.metricCard}
           label="Final payment state"
           value={humanize(result.expected_final_payment_state)}
           delta="Authoritative state after every delivery"
         />
         <MetricCard
+          className={styles.metricCard}
           label="Revenue entries"
           value={String(result.expected_revenue_entries)}
           delta="Idempotent ledger rows expected"
         />
         <MetricCard
+          className={styles.metricCard}
           label="Amount under test"
           value={formatPaise(result.amount_paise)}
           delta="Transported as integer paise"
@@ -102,7 +105,7 @@ function Result({ result }: { result: FailureSimulationResponse }) {
         {humanize(result.expected_final_payment_state)} with{" "}
         {result.expected_revenue_entries} recovered-revenue{" "}
         {result.expected_revenue_entries === 1 ? "entry" : "entries"}. This lab
-        generates evidence only; it does not mutate a case or contact a
+        produces an expected result only; it does not mutate a case or contact a
         provider.
       </Alert>
 
@@ -115,7 +118,7 @@ function Result({ result }: { result: FailureSimulationResponse }) {
         <CardBody>
           <ol
             className={styles.deliveryList}
-            aria-label="Simulated delivery sequence"
+            aria-label="Synthetic test delivery sequence"
           >
             {result.deliveries.map((delivery, index) => {
               const diverged =
@@ -138,9 +141,7 @@ function Result({ result }: { result: FailureSimulationResponse }) {
                           )}
                         </p>
                       </div>
-                      <Badge tone="warning">
-                        {humanize(delivery.evidence_kind)}
-                      </Badge>
+                      <Badge tone="warning">Synthetic test data</Badge>
                     </div>
                     <dl className={styles.deliveryDetails}>
                       <div>
@@ -255,13 +256,13 @@ export function FailureLab({
         eyebrow="Safety verification"
         title="Failure Injection Lab"
         description="Exercise the fixed backend failure contracts without sending a payment, changing merchant revenue, or contacting a customer. Every run is reproducible from its seed."
-        action={<Badge tone="warning">Simulation only</Badge>}
+        action={<Badge tone="warning">Test scenarios only</Badge>}
       />
 
       <Alert tone="info" title="Evidence boundary">
-        Results on this page are always labelled SIMULATED. RAZORPAY TEST
-        VERIFIED evidence is unavailable here and can only originate from
-        validated Razorpay test-mode webhooks.
+        Results on this page are always labelled synthetic test data. Provider
+        verification is unavailable here and can only originate from validated
+        Razorpay test-mode webhooks.
       </Alert>
 
       <div className={styles.workspace}>

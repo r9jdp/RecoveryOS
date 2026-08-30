@@ -2,12 +2,13 @@
   display: grid;
   gap: var(--ros-space-5);
 }
+
 .hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--ros-space-6);
-  padding: clamp(1.5rem, 4vw, 2.5rem);
+  padding: clamp(1.25rem, 3vw, 1.5rem);
   border: 1px solid var(--ros-border);
   border-radius: var(--ros-radius-md);
   background: var(--ros-bg-card);
@@ -16,19 +17,20 @@
   max-width: 48rem;
   margin: var(--ros-space-2) 0 var(--ros-space-3);
   color: var(--ros-ink-secondary);
-  font: 760 clamp(2rem, 5vw, 3.5rem) / 1.02 var(--ros-font-display);
-  letter-spacing: -0.05em;
+  font: 760 var(--ros-text-2xl) / 1.08 var(--ros-font-display);
+  letter-spacing: -0.035em;
 }
 .hero p:not(.eyebrow) {
   max-width: 48rem;
   margin: 0;
   color: var(--ros-text-muted);
+  font-size: var(--ros-text-md);
   line-height: 1.65;
 }
 .eyebrow {
   margin: 0;
   color: var(--ros-brand);
-  font-size: var(--ros-text-xs);
+  font-size: var(--ros-text-sm);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -60,6 +62,12 @@
 .recorder small {
   margin-top: var(--ros-space-1);
   color: var(--ros-text-muted);
+  font-size: var(--ros-text-sm);
+  line-height: 1.5;
+}
+
+.recorder strong {
+  font-size: var(--ros-text-md);
 }
 .mic {
   width: 2.5rem;
@@ -73,9 +81,20 @@
 .field {
   display: grid;
   gap: var(--ros-space-2);
+  padding: var(--ros-space-4);
+  border: 1px solid var(--ros-border);
+  border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
   font-size: var(--ros-text-sm);
   font-weight: 750;
+  background: var(--ros-surface-subtle);
+}
+
+.field small {
+  color: var(--ros-text-muted);
+  font-size: var(--ros-text-sm);
+  font-weight: 450;
+  line-height: 1.5;
 }
 .field textarea {
   resize: vertical;
@@ -85,9 +104,8 @@
   border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
   background: var(--ros-bg-secondary);
-  font: inherit;
+  font: 450 var(--ros-text-md) / 1.55 var(--ros-font-body);
   font-weight: 450;
-  line-height: 1.5;
 }
 .field textarea:focus-visible {
   outline: none;
@@ -100,8 +118,8 @@
   margin: 0;
   padding-left: 1.25rem;
   color: var(--ros-text-muted);
-  font-size: var(--ros-text-sm);
-  line-height: 1.5;
+  font-size: var(--ros-text-md);
+  line-height: 1.6;
 }
 .confirmation {
   display: grid;
@@ -113,8 +131,13 @@
   border-radius: var(--ros-radius-sm);
   color: var(--ros-ink);
   background: var(--ros-warning-soft);
-  font-size: var(--ros-text-sm);
+  font-size: var(--ros-text-md);
   font-weight: 650;
+  line-height: 1.55;
+}
+
+.stack audio {
+  width: 100%;
 }
 .confirmation input {
   width: 1.125rem;

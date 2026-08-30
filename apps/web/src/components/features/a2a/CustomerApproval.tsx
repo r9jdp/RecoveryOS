@@ -142,12 +142,14 @@ export function CustomerApproval({
         )}
         {viewState === "ready" && summary && (
           <article className={styles.approvalCard}>
-            <div className={styles.eyebrow}>Customer authorization</div>
-            <h1 id="approval-title">Review recovery authorization</h1>
-            <p className={styles.intro}>
-              {summary.merchant_display_name} is asking you to approve one exact
-              payment surface for a failed subscription renewal.
-            </p>
+            <header className={styles.requestHeader}>
+              <div className={styles.eyebrow}>Customer authorization</div>
+              <h1 id="approval-title">Review recovery authorization</h1>
+              <p className={styles.intro}>
+                {summary.merchant_display_name} is asking you to approve one
+                exact payment surface for a failed subscription renewal.
+              </p>
+            </header>
 
             {error && (
               <Alert tone="danger" title="Your decision was not saved">
@@ -155,38 +157,47 @@ export function CustomerApproval({
               </Alert>
             )}
 
-            <dl className={styles.summary}>
-              <div className={styles.amountRow}>
-                <dt>Exact amount</dt>
-                <dd>
-                  {formatPaise(summary.exact_amount_paise, summary.currency)}
-                </dd>
+            <section
+              className={styles.summaryCard}
+              aria-labelledby="request-details"
+            >
+              <div className={styles.sectionHeading}>
+                <h2 id="request-details">Payment request</h2>
+                <p>Confirm the exact amount, merchant, and payment surface.</p>
               </div>
-              <div>
-                <dt>Merchant</dt>
-                <dd>{summary.merchant_display_name}</dd>
-              </div>
-              <div>
-                <dt>Reason</dt>
-                <dd>{summary.recovery_reason}</dd>
-              </div>
-              <div>
-                <dt>Payment surface</dt>
-                <dd>{surfaceLabel(summary.payment_surface_type)}</dd>
-              </div>
-              <div>
-                <dt>Reference</dt>
-                <dd className={styles.mono}>
-                  {summary.payment_surface_reference}
-                </dd>
-              </div>
-              <div>
-                <dt>Authorization expires</dt>
-                <dd>{formatExpiry(summary.expires_at)}</dd>
-              </div>
-            </dl>
+              <dl className={styles.summary}>
+                <div className={styles.amountRow}>
+                  <dt>Exact amount</dt>
+                  <dd>
+                    {formatPaise(summary.exact_amount_paise, summary.currency)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Merchant</dt>
+                  <dd>{summary.merchant_display_name}</dd>
+                </div>
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{summary.recovery_reason}</dd>
+                </div>
+                <div>
+                  <dt>Payment surface</dt>
+                  <dd>{surfaceLabel(summary.payment_surface_type)}</dd>
+                </div>
+                <div>
+                  <dt>Reference</dt>
+                  <dd className={styles.mono}>
+                    {summary.payment_surface_reference}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Authorization expires</dt>
+                  <dd>{formatExpiry(summary.expires_at)}</dd>
+                </div>
+              </dl>
+            </section>
 
-            <div className={styles.safetyPanel}>
+            <section className={styles.safetyPanel}>
               <h2>What this approval means</h2>
               <ul>
                 <li>
@@ -204,40 +215,48 @@ export function CustomerApproval({
                   A browser callback is never accepted as proof of payment.
                 </li>
               </ul>
-            </div>
+            </section>
 
-            <label className={styles.confirmation} htmlFor={confirmationId}>
-              <input
-                id={confirmationId}
-                type="checkbox"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-              <span>
-                I approve this exact{" "}
-                {formatPaise(summary.exact_amount_paise, summary.currency)}
-                {" payment surface."}
-              </span>
-            </label>
+            <section
+              className={styles.decisionPanel}
+              aria-labelledby="decision-heading"
+            >
+              <div className={styles.sectionHeading}>
+                <h2 id="decision-heading">Your decision</h2>
+                <p>No charge happens on this page.</p>
+              </div>
+              <label className={styles.confirmation} htmlFor={confirmationId}>
+                <input
+                  id={confirmationId}
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                />
+                <span>
+                  I approve this exact{" "}
+                  {formatPaise(summary.exact_amount_paise, summary.currency)}
+                  {" payment surface."}
+                </span>
+              </label>
 
-            <div className={styles.actions}>
-              <Button
-                variant="secondary"
-                disabled={submitting !== null}
-                loading={submitting === "REJECT"}
-                onClick={() => void decide("REJECT")}
-              >
-                Decline
-              </Button>
-              <Button
-                disabled={!confirmed || submitting !== null}
-                loading={submitting === "APPROVE"}
-                onClick={() => void decide("APPROVE")}
-              >
-                Approve exact surface
-              </Button>
-            </div>
-            <p className={styles.footnote}>No charge happens on this page.</p>
+              <div className={styles.actions}>
+                <Button
+                  variant="secondary"
+                  disabled={submitting !== null}
+                  loading={submitting === "REJECT"}
+                  onClick={() => void decide("REJECT")}
+                >
+                  Decline
+                </Button>
+                <Button
+                  disabled={!confirmed || submitting !== null}
+                  loading={submitting === "APPROVE"}
+                  onClick={() => void decide("APPROVE")}
+                >
+                  Approve exact surface
+                </Button>
+              </div>
+            </section>
           </article>
         )}
         {viewState === "approved" && (

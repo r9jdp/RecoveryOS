@@ -17,7 +17,6 @@ import { Badge } from "@/components/shadcn/badge";
 import { Button } from "@/components/shadcn/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -199,10 +198,10 @@ function Disclosure({
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <strong className="text-sm font-medium">{title}</strong>
-          <small className="truncate text-xs text-muted-foreground">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 flex-col gap-1">
+          <strong className="text-base font-medium">{title}</strong>
+          <small className="text-sm leading-5 text-muted-foreground">
             {description}
           </small>
         </span>
@@ -212,8 +211,39 @@ function Disclosure({
         />
       </summary>
       <Separator />
-      <div className="flex flex-col gap-4 p-4">{children}</div>
+      <div className="flex flex-col gap-5 p-4">{children}</div>
     </details>
+  );
+}
+
+function SummaryMetricCard({
+  emphasized = false,
+  label,
+  tone,
+  value,
+}: {
+  emphasized?: boolean;
+  label: string;
+  tone: string;
+  value: ReactNode;
+}) {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardDescription className="text-sm">{label}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p
+          className={cn(
+            "font-semibold leading-tight",
+            emphasized ? "text-2xl" : "text-lg",
+            tone,
+          )}
+        >
+          {value}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -223,11 +253,13 @@ function DetailGrid({
   items: Array<{ label: string; value: ReactNode }>;
 }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <div className="min-w-0" key={item.label}>
-          <dt className="text-xs text-muted-foreground">{item.label}</dt>
-          <dd className="mt-1 break-words text-sm font-medium">{item.value}</dd>
+          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dd className="mt-1 break-words text-base leading-6 font-medium">
+            {item.value}
+          </dd>
         </div>
       ))}
     </dl>
@@ -246,41 +278,40 @@ export function CaseLoading() {
         <Skeleton className="h-8 w-full max-w-lg" />
         <Skeleton className="h-4 w-full max-w-xl" />
       </div>
-      <Card size="sm">
-        <CardHeader>
-          <CardTitle>
-            <Skeleton className="h-4 w-28" />
-          </CardTitle>
-          <CardDescription>
-            <Skeleton className="h-3 w-44" />
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <div className="flex flex-col gap-2" key={index}>
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-5 w-28 max-w-full" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card size="sm" key={index}>
+            <CardHeader>
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-6 w-28 max-w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+        {Array.from({ length: 2 }, (_, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-full max-w-md" />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-3/4" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
       <Card>
         <CardHeader>
-          <CardTitle>
-            <Skeleton className="h-5 w-48" />
-          </CardTitle>
-          <CardDescription>
-            <Skeleton className="h-4 w-full max-w-md" />
-          </CardDescription>
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-64 max-w-full" />
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-3/4" />
-        </CardContent>
         <CardFooter className="gap-2">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-9 w-32" />
         </CardFooter>
       </Card>
     </div>
@@ -489,7 +520,7 @@ function CaseContent({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-3">
         <Button
           variant="ghost"
@@ -503,18 +534,19 @@ function CaseContent({
         </Button>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               Payment recovery case
             </p>
-            <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight">
+            <h1 className="mt-1 break-words text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
               {fixture.customer.display_name} · {fixture.subscription.plan_name}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-base leading-6 text-muted-foreground">
               One failed subscription payment and its safest next action.
             </p>
           </div>
           <div
             className="flex flex-wrap items-center gap-2"
+            role="group"
             aria-label="Case status"
           >
             <Badge variant={caseOutcomeVariant(displayedOutcome)}>
@@ -532,134 +564,128 @@ function CaseContent({
             >
               {displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
                 ? "Razorpay test verified"
-                : "Simulated data"}
+                : "Seeded demo data"}
             </Badge>
           </div>
         </div>
       </header>
 
-      <Card size="sm" aria-label="Case summary">
-        <CardHeader className="sr-only">
-          <CardTitle>Case summary</CardTitle>
-          <CardDescription>Current payment and recovery state.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
-            <div>
-              <dt className="text-xs text-muted-foreground">
-                Amount to recover
-              </dt>
-              <dd
-                className={cn(
-                  "mt-1 text-lg font-semibold",
-                  paymentStateTone(recoveryCase.payment_state),
-                )}
-              >
-                {formatPaise(recoveryCase.amount_at_risk_paise)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Payment</dt>
-              <dd
-                className={cn(
-                  "mt-1 text-sm font-medium",
-                  paymentStateTone(recoveryCase.payment_state),
-                )}
-              >
-                {humanize(recoveryCase.payment_state)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Subscription</dt>
-              <dd
-                className={cn(
-                  "mt-1 text-sm font-medium",
-                  subscriptionStateTone(recoveryCase.subscription_state),
-                )}
-              >
-                {humanize(recoveryCase.subscription_state)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Act before</dt>
-              <dd className="mt-1 text-sm font-medium text-warning">
-                {formatDateTime(recoveryCase.recovery_deadline)}
-              </dd>
-            </div>
-          </dl>
-        </CardContent>
-      </Card>
+      <section className="flex flex-col gap-3" aria-labelledby="summary-title">
+        <div>
+          <h2 id="summary-title" className="text-lg font-medium">
+            At a glance
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            The four facts that define this recovery window.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryMetricCard
+            emphasized
+            label="Amount to recover"
+            tone={paymentStateTone(recoveryCase.payment_state)}
+            value={formatPaise(recoveryCase.amount_at_risk_paise)}
+          />
+          <SummaryMetricCard
+            label="Payment"
+            tone={paymentStateTone(recoveryCase.payment_state)}
+            value={humanize(recoveryCase.payment_state)}
+          />
+          <SummaryMetricCard
+            label="Subscription"
+            tone={subscriptionStateTone(recoveryCase.subscription_state)}
+            value={humanize(recoveryCase.subscription_state)}
+          />
+          <SummaryMetricCard
+            label="Act before"
+            tone="text-warning"
+            value={formatDateTime(recoveryCase.recovery_deadline)}
+          />
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>Recommended recovery action</h2>
-          </CardTitle>
-          <CardDescription>
-            Selected by the backend after diagnosis, ranking, and policy checks.
-          </CardDescription>
-          <CardAction>
-            <Badge variant={policyVariant(fixture.policy.disposition)}>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">
+              <h2>Recommended next step</h2>
+            </CardTitle>
+            <CardDescription className="text-base leading-6">
+              The safest action selected after diagnosis, ranking, and policy
+              checks.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Badge
+              className="self-start"
+              variant={policyVariant(fixture.policy.disposition)}
+            >
               {fixture.policy.disposition === "ALLOW"
                 ? "Ready for approval"
                 : humanize(fixture.policy.disposition)}
             </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.7fr)]">
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">
-                  Proposed recovery surface
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-primary">
-                  {recommendedSurface}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {customerInstruction(
-                    fixture.recommendation.payment_surface_type,
-                  )}
-                  . RecoveryOS then waits for authoritative Razorpay proof
-                  before changing the payment state.
-                </p>
-              </div>
 
-              <Alert variant="info">
-                <ShieldCheck />
-                <AlertTitle>Subscription-safe recovery</AlertTitle>
-                <AlertDescription>
-                  <span>
-                    Standalone collection is blocked while gateway retries are
-                    active
-                  </span>
-                  <span className="mt-0.5 block">
-                    Use the subscription-native surface above so invoice
-                    correlation is preserved.
-                  </span>
-                </AlertDescription>
-              </Alert>
-
-              {fixture.payment_surface.customer_url && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="self-start"
-                  render={
-                    <a
-                      href={fixture.payment_surface.customer_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    />
-                  }
-                  nativeButton={false}
-                >
-                  Open customer payment surface
-                  <ExternalLink data-icon="inline-end" />
-                </Button>
-              )}
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">
+                Proposed recovery surface
+              </p>
+              <p className="mt-1 text-2xl leading-tight font-semibold text-primary">
+                {recommendedSurface}
+              </p>
+              <p className="mt-2 text-base leading-6 text-muted-foreground">
+                {customerInstruction(
+                  fixture.recommendation.payment_surface_type,
+                )}
+                . RecoveryOS then waits for authoritative Razorpay proof before
+                changing the payment state.
+              </p>
             </div>
 
+            <Alert variant="info">
+              <ShieldCheck />
+              <AlertTitle>Subscription-safe recovery</AlertTitle>
+              <AlertDescription className="text-base leading-6">
+                <span>
+                  Standalone collection is blocked while gateway retries are
+                  active.
+                </span>
+                <span className="mt-1 block">
+                  Use the subscription-native surface above so invoice
+                  correlation is preserved.
+                </span>
+              </AlertDescription>
+            </Alert>
+
+            {fixture.payment_surface.customer_url && (
+              <Button
+                variant="outline"
+                className="self-start"
+                render={
+                  <a
+                    href={fixture.payment_surface.customer_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  />
+                }
+                nativeButton={false}
+              >
+                Open customer payment surface
+                <ExternalLink data-icon="inline-end" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">
+              <h2>Why this step</h2>
+            </CardTitle>
+            <CardDescription className="text-base leading-6">
+              Three facts explain the recommendation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <ol className="flex flex-col" aria-label="Situation summary">
               {[
                 {
@@ -678,8 +704,8 @@ function CaseContent({
                   value: `Contact status: ${humanize(displayedContactDisposition)}`,
                 },
               ].map((item, index) => (
-                <li className="flex flex-col gap-2" key={item.label}>
-                  {index > 0 && <Separator className="mb-3" />}
+                <li className="flex flex-col gap-3 py-1" key={item.label}>
+                  {index > 0 && <Separator />}
                   <div className="flex items-start gap-3">
                     <Badge
                       variant={
@@ -693,8 +719,8 @@ function CaseContent({
                       {index + 1}
                     </Badge>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-base font-medium">{item.label}</p>
+                      <p className="text-sm leading-5 text-muted-foreground">
                         {item.value}
                       </p>
                     </div>
@@ -702,18 +728,39 @@ function CaseContent({
                 </li>
               ))}
             </ol>
-          </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          <div className="flex flex-col gap-2" aria-live="polite">
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-lg">
+            <h2>Your decision</h2>
+          </CardTitle>
+          <CardDescription className="text-base leading-6">
+            Approve the recommendation, send it to a person, or stop this
+            recovery safely.
+          </CardDescription>
+          <Badge className="mt-2 self-start" variant="warning">
+            Waiting for review
+          </Badge>
+        </CardHeader>
+        {pendingCommand || result || safetyResult || actionError ? (
+          <CardContent className="flex flex-col gap-2">
+            {pendingCommand && (
+              <p className="sr-only" role="status">
+                Submitting {humanize(pendingCommand)}
+              </p>
+            )}
             {result && (
-              <Alert variant="success">
+              <Alert variant="success" role="status">
                 <CheckCircle2 />
                 <AlertTitle>{humanize(result.command)} accepted</AlertTitle>
                 <AlertDescription>{result.message}</AlertDescription>
               </Alert>
             )}
             {safetyResult && (
-              <Alert variant="success">
+              <Alert variant="success" role="status">
                 <CheckCircle2 />
                 <AlertTitle>
                   {humanize(safetyResult.disposition)} recorded
@@ -728,10 +775,15 @@ function CaseContent({
                 <AlertDescription>{actionError}</AlertDescription>
               </Alert>
             )}
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-wrap gap-2">
+          </CardContent>
+        ) : null}
+        <CardFooter
+          className="grid grid-cols-1 gap-2 bg-transparent sm:grid-cols-2 xl:flex"
+          aria-busy={pendingCommand !== null}
+        >
           <Button
+            size="lg"
+            className="w-full xl:w-auto"
             disabled={!canRun("APPROVE") || pendingCommand !== null}
             onClick={() => execute("APPROVE")}
           >
@@ -741,6 +793,8 @@ function CaseContent({
             />
           </Button>
           <Button
+            size="lg"
+            className="w-full xl:w-auto"
             variant="outline"
             disabled={!canRun("ESCALATE_TO_HUMAN") || pendingCommand !== null}
             onClick={() => execute("ESCALATE_TO_HUMAN")}
@@ -751,6 +805,8 @@ function CaseContent({
             />
           </Button>
           <Button
+            size="lg"
+            className="w-full xl:w-auto"
             variant="ghost"
             disabled={!canRun("REJECT") || pendingCommand !== null}
             onClick={() => execute("REJECT")}
@@ -761,6 +817,8 @@ function CaseContent({
             />
           </Button>
           <Button
+            size="lg"
+            className="w-full xl:w-auto"
             variant="destructive"
             disabled={!canRun("STOP") || pendingCommand !== null}
             onClick={() => execute("STOP")}
@@ -773,14 +831,19 @@ function CaseContent({
         </CardFooter>
       </Card>
 
-      <div className="flex flex-col gap-2">
-        <Disclosure
-          title="Evidence and payment details"
-          description="Diagnosis, provider state, identifiers, and payment proof"
-        >
-          <div className="flex flex-col gap-1">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">
+              <h2>Diagnosis</h2>
+            </CardTitle>
+            <CardDescription className="text-base leading-6">
+              The provider evidence that explains why this payment failed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-warning">
+              <p className="text-lg font-medium text-warning">
                 {diagnosisLabel}
               </p>
               <Badge
@@ -793,17 +856,87 @@ function CaseContent({
                 {formatEvidenceKind(displayedEvidenceKind)}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base leading-6 text-muted-foreground">
               {failureReason} during{" "}
               {humanize(fixture.payment_failure.error_step)}. The customer must
               authenticate again; browser callbacks are not treated as proof of
               payment.
             </p>
-          </div>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="text-lg">
+              <h2>Customer safeguards</h2>
+            </CardTitle>
+            <CardDescription className="text-base leading-6">
+              Record a dispute, opt-out, already-paid claim, or wrong person.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div
+              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              role="group"
+              aria-label="Customer safety actions"
+            >
+              <Button
+                variant="destructive"
+                disabled={safetyPending}
+                onClick={() => setSelectedSafety("MARK_DISPUTE")}
+              >
+                Mark dispute
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={safetyPending}
+                onClick={() => setSelectedSafety("MARK_OPT_OUT")}
+              >
+                Record opt-out
+              </Button>
+              <Button
+                variant="outline"
+                disabled={safetyPending}
+                onClick={() => setSelectedSafety("MARK_ALREADY_PAID")}
+              >
+                Customer says already paid
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={safetyPending}
+                onClick={() => setSelectedSafety("MARK_WRONG_PERSON")}
+              >
+                Mark wrong person
+              </Button>
+              <Button
+                className="sm:col-span-2"
+                variant="outline"
+                disabled={safetyPending}
+                onClick={() => setSelectedSafety("ESCALATE_TO_HUMAN")}
+              >
+                Escalate for review
+              </Button>
+            </div>
+            <Alert variant="warning">
+              <ShieldCheck />
+              <AlertTitle>Safety controls run first</AlertTitle>
+              <AlertDescription className="text-base leading-6">
+                Disputes and opt-outs stop incompatible outreach immediately.
+                “Already paid” pauses recovery until Razorpay confirms payment.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Disclosure
+          title="Provider evidence and payment details"
+          description="Raw evidence, provider state, identifiers, and payment proof"
+        >
           {fixture.evidence.length > 0 && (
             <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-sm font-medium text-muted-foreground">
                 Evidence received
               </p>
               <ul className="grid gap-2 sm:grid-cols-2">
@@ -813,7 +946,7 @@ function CaseContent({
                     key={`${item.source_event}-${item.field}`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium">
+                      <span className="text-sm font-medium">
                         {humanize(item.field)}
                       </span>
                       <Badge
@@ -826,7 +959,7 @@ function CaseContent({
                         {formatEvidenceKind(item.kind)}
                       </Badge>
                     </div>
-                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                    <p className="mt-1 break-words text-sm leading-5 text-muted-foreground">
                       {item.value} · {humanize(item.source_event)}
                     </p>
                   </li>
@@ -841,7 +974,7 @@ function CaseContent({
           <Alert variant="success">
             <ShieldCheck />
             <AlertTitle>Payment proof is authoritative</AlertTitle>
-            <AlertDescription>
+            <AlertDescription className="text-base leading-6">
               RecoveryOS waits for a Razorpay fetch or signed webhook. A browser
               callback alone never marks the invoice as paid.
             </AlertDescription>
@@ -901,14 +1034,14 @@ function CaseContent({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Why it was selected</p>
+              <p className="text-base font-medium">Why it was selected</p>
               <ul className="flex flex-col gap-2">
                 {fixture.policy.reasons.map((reason, index) => (
                   <li
                     className="flex items-start justify-between gap-3"
                     key={fixture.policy.reason_codes[index] ?? reason}
                   >
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-base leading-6 text-muted-foreground">
                       {reason}
                     </span>
                     <Badge variant="info">
@@ -921,7 +1054,7 @@ function CaseContent({
                     className="flex items-start justify-between gap-3"
                     key={fixture.recommendation.reason_codes[index] ?? reason}
                   >
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-base leading-6 text-muted-foreground">
                       {reason}
                     </span>
                     <Badge variant="info">
@@ -933,9 +1066,9 @@ function CaseContent({
             </div>
 
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Not selected</p>
+              <p className="text-base font-medium">Not selected</p>
               {fixture.recommendation.rejected_alternatives.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base leading-6 text-muted-foreground">
                   No alternative actions were returned.
                 </p>
               ) : (
@@ -947,7 +1080,7 @@ function CaseContent({
                         key={`${alternative.action}-${alternative.reason_code}`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium">
+                          <p className="text-base font-medium">
                             {humanize(alternative.action)}
                             {alternative.payment_surface_type
                               ? ` · ${humanize(alternative.payment_surface_type)}`
@@ -957,7 +1090,7 @@ function CaseContent({
                             {alternative.reason_code}
                           </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 text-sm leading-5 text-muted-foreground">
                           {alternative.reason}
                         </p>
                       </li>
@@ -970,70 +1103,10 @@ function CaseContent({
         </Disclosure>
 
         <Disclosure
-          title="Customer safeguards"
-          description="Record a dispute, opt-out, already-paid claim, or wrong person"
-          defaultOpen
-        >
-          <div
-            className="flex flex-wrap gap-2"
-            aria-label="Customer safety actions"
-          >
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={safetyPending}
-              onClick={() => setSelectedSafety("MARK_DISPUTE")}
-            >
-              Mark dispute
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={safetyPending}
-              onClick={() => setSelectedSafety("MARK_OPT_OUT")}
-            >
-              Record opt-out
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={safetyPending}
-              onClick={() => setSelectedSafety("MARK_ALREADY_PAID")}
-            >
-              Customer says already paid
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={safetyPending}
-              onClick={() => setSelectedSafety("MARK_WRONG_PERSON")}
-            >
-              Mark wrong person
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={safetyPending}
-              onClick={() => setSelectedSafety("ESCALATE_TO_HUMAN")}
-            >
-              Escalate for review
-            </Button>
-          </div>
-          <Alert variant="warning">
-            <ShieldCheck />
-            <AlertTitle>Safety controls run first</AlertTitle>
-            <AlertDescription>
-              Disputes and opt-outs stop incompatible outreach immediately.
-              “Already paid” pauses recovery until Razorpay confirms payment.
-            </AlertDescription>
-          </Alert>
-        </Disclosure>
-
-        <Disclosure
           title="Full case history"
           description={`${timeline.length} provider and RecoveryOS event${timeline.length === 1 ? "" : "s"}`}
         >
-          <ol className="flex flex-col" aria-live="polite">
+          <ol className="flex flex-col">
             {timeline.map((event, index) => (
               <li className="flex flex-col gap-3" key={event.id}>
                 {index > 0 && <Separator />}
@@ -1043,15 +1116,15 @@ function CaseContent({
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{event.title}</p>
+                      <p className="text-base font-medium">{event.title}</p>
                       <Badge variant={event.optimistic ? "warning" : "success"}>
                         {event.optimistic ? "Pending" : "Recorded"}
                       </Badge>
                     </div>
-                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                    <p className="mt-1 break-words text-sm leading-5 text-muted-foreground">
                       {event.meta}
                     </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
                       {event.description}
                     </p>
                   </div>
