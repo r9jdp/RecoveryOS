@@ -9,7 +9,7 @@
   "scripts": {
     "bootstrap": "pnpm install --frozen-lockfile=false && uv sync --all-groups",
     "dev": "node --env-file-if-exists=.env scripts/run-with-env.mjs pnpm --parallel --stream --filter @recovery-os/web dev",
-    "dev:web": "node --env-file-if-exists=.env scripts/run-with-env.mjs pnpm --filter @recovery-os/web dev",
+    "dev:web": "pnpm --filter @recovery-os/web dev",
     "dev:api": "node --env-file-if-exists=.env scripts/run-with-env.mjs uv run uvicorn services.api.app.main:app --reload --host 0.0.0.0 --port 8000",
     "dev:worker": "node --env-file-if-exists=.env scripts/run-with-env.mjs uv run python -m services.worker.app.main",
     "dev:customer-agent": "node --env-file-if-exists=.env scripts/run-with-env.mjs uv run uvicorn app.main:app --app-dir services/customer-agent --reload --host 0.0.0.0 --port 8010",
