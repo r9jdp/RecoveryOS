@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from services.api.app.a2a import router as a2a_router
 from services.api.app.api import install_core_api
 from services.api.app.demo import router as demo_router
+from services.api.app.embedded_worker import lifespan
 from services.api.app.health.router import router as health_router
 from services.api.app.http_security import install_credentialed_cors
 from services.api.app.lab import install_lab_api
@@ -17,6 +18,7 @@ app = FastAPI(
     title="RecoveryOS API",
     version="0.1.0",
     description="Auditable subscription-recovery orchestration.",
+    lifespan=lifespan,
 )
 install_credentialed_cors(
     app,

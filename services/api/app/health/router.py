@@ -9,6 +9,8 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from services.api.app.embedded_worker import embedded_worker_component
+
 from .checks import run_readiness_checks
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -36,6 +38,9 @@ async def ready() -> JSONResponse:
     """Return 200 only when PostgreSQL and Temporal are usable."""
 
     components = await run_readiness_checks()
+    embedded_worker = embedded_worker_component()
+    if embedded_worker is not None:
+        components.append(embedded_worker)
     is_ready = all(component.status == "ok" for component in components)
     payload = _base_payload("ready" if is_ready else "not_ready")
     payload["components"] = [component.public_dict() for component in components]

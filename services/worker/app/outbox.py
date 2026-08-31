@@ -255,14 +255,15 @@ async def run_worker_services(
     tasks: set[asyncio.Task[None]] = {worker_task}
     if os.getenv("PAYMENT_PROVIDER", "mock").strip().lower() == "razorpay":
         tasks.add(asyncio.create_task(run_razorpay_outbox_poller(client, task_queue=task_queue)))
-    if len(tasks) == 1:
-        await worker_task
-        return
-    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     try:
+        if len(tasks) == 1:
+            await worker_task
+            return
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             task.result()
     finally:
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

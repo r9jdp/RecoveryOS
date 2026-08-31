@@ -39,6 +39,8 @@ projects:
                 value: production
               - key: RECOVERY_ALLOW_REAL_PAYMENT_ACTIONS
                 value: "true"
+              - key: RECOVERY_EMBEDDED_WORKER
+                value: "true"
               - key: RECOVERY_GLOBAL_KILL_SWITCH
                 value: "false"
               - key: RAZORPAY_API_BASE_URL
@@ -87,79 +89,3 @@ projects:
                 sync: false
               - key: OPERATOR_DEMO_TOKEN
                 sync: false
-
-          - type: worker
-            name: recoveryos-worker
-            runtime: python
-            plan: starter
-            buildCommand: uv sync --frozen --no-dev
-            startCommand: uv run --no-sync python -m services.worker.app.main
-            maxShutdownDelaySeconds: 60
-            envVars:
-              - key: PYTHON_VERSION
-                value: 3.12.11
-              - key: APP_ENV
-                value: production
-              - key: SERVICE_NAME
-                value: recoveryos-worker
-              - key: APP_VERSION
-                value: render
-              - key: TEMPORAL_TASK_QUEUE
-                value: recovery-os
-              - key: TEMPORAL_TLS
-                value: "true"
-              - key: RECOVERY_ACTIVITY_MODE
-                value: production
-              - key: PAYMENT_PROVIDER
-                value: razorpay
-              - key: RECOVERY_ALLOW_REAL_PAYMENT_ACTIONS
-                value: "true"
-              - key: RAZORPAY_API_BASE_URL
-                value: https://api.razorpay.com
-              - key: RAZORPAY_CHECKOUT_ORIGIN
-                value: http://localhost:3000
-              - key: RAZORPAY_OUTBOX_POLL_SECONDS
-                value: "0.5"
-              - key: RAZORPAY_TEST_MODE_REQUIRED
-                value: "true"
-              - key: A2A_ENABLED
-                value: "false"
-              - key: VOICE_PROVIDER
-                value: mock
-              - key: VOICE_REAL_CALLS_ENABLED
-                value: "false"
-              - key: DATABASE_URL
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: DATABASE_URL
-              - key: TEMPORAL_ADDRESS
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: TEMPORAL_ADDRESS
-              - key: TEMPORAL_NAMESPACE
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: TEMPORAL_NAMESPACE
-              - key: TEMPORAL_API_KEY
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: TEMPORAL_API_KEY
-              - key: RAZORPAY_KEY_ID
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: RAZORPAY_KEY_ID
-              - key: RAZORPAY_KEY_SECRET
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: RAZORPAY_KEY_SECRET
-              - key: RAZORPAY_WEBHOOK_SECRET
-                fromService:
-                  type: web
-                  name: recoveryos-api
-                  envVarKey: RAZORPAY_WEBHOOK_SECRET

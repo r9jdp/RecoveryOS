@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import dataclass
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -21,7 +22,18 @@ def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-async def run() -> None:
+@dataclass(frozen=True, slots=True)
+class WorkerRuntime:
+    """Connected Temporal worker components shared by standalone and embedded modes."""
+
+    client: Client
+    worker: Worker
+    task_queue: str
+
+
+async def create_worker_runtime() -> WorkerRuntime:
+    """Build the worker without starting its standalone health server."""
+
     address = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
     namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
     task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "recovery-os")
@@ -46,10 +58,19 @@ async def run() -> None:
         workflows=[RecoveryCaseWorkflow],
         activities=activities.registrations(),
     )
-    health_server = WorkerHealthServer(client, worker)
+    return WorkerRuntime(client=client, worker=worker, task_queue=task_queue)
+
+
+async def run() -> None:
+    runtime = await create_worker_runtime()
+    health_server = WorkerHealthServer(runtime.client, runtime.worker)
     await health_server.start()
     try:
-        await run_worker_services(worker.run(), client, task_queue=task_queue)
+        await run_worker_services(
+            runtime.worker.run(),
+            runtime.client,
+            task_queue=runtime.task_queue,
+        )
     finally:
         await health_server.close()
 
