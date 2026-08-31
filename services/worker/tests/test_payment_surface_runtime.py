@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -17,6 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from services.api.app.db import Base
 from services.api.app.domain.enums import ActionStatus, PaymentSurfaceType, PolicyDisposition
+from services.api.app.integrations.razorpay.client import RazorpayClient, RazorpayConfig
 from services.api.app.integrations.razorpay.errors import RazorpayUncertainSubmissionError
 from services.api.app.models import (  # noqa: F401
     Merchant,
@@ -30,6 +34,7 @@ from services.api.app.providers.contracts import (
     RecoveryScoreRequest,
     RecoveryScoreResult,
 )
+from services.api.app.reliability.registry import CircuitBreakerRegistry
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
 from services.worker.app.contracts import CancelActionInput, ExecuteActionInput
 from services.worker.app.runtime import ProductionRecoveryActivityServices
@@ -138,6 +143,8 @@ def _command() -> ExecuteActionInput:
         payment_surface_type="STANDARD_PAYMENT_LINK",
         recovery_deadline="2026-08-30T10:00:01+00:00",
         idempotency_key="case:case_fitbox_aug_2026:surface:standard:v1",
+        provider_subscription_id="sub_provider_fitbox_annual_001",
+        provider_invoice_id="inv_provider_fitbox_aug_2026",
     )
 
 
@@ -198,6 +205,71 @@ async def test_initial_uncertain_create_reconciles_existing_without_activity_fai
     assert result.status == "SUCCEEDED"
     assert result.reason_code == "SUBMISSION_RECONCILED"
     assert len(provider.opens) == len(provider.lookups) == 1
+
+
+async def test_real_razorpay_post_uses_provider_scope_and_persists_result(
+    runtime_sessions: async_sessionmaker[AsyncSession], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed_standard_action(runtime_sessions, status=ActionStatus.PROPOSED)
+    monkeypatch.setattr("services.worker.app.runtime.get_session_factory", lambda: runtime_sessions)
+    posted: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            assert request.url.path == "/v1/subscriptions/sub_provider_fitbox_annual_001"
+            return httpx.Response(200, json={"status": "halted"})
+        assert request.method == "POST"
+        assert request.url.path == "/v1/payment_links"
+        posted.update(cast(dict[str, Any], json.loads(request.content)))
+        return httpx.Response(
+            200,
+            json={
+                "id": "plink_real_test_persisted",
+                "short_url": "https://rzp.io/i/real-test-persisted",
+            },
+        )
+
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://api.razorpay.test",
+    )
+    provider = RazorpayClient(
+        RazorpayConfig(
+            key_id="rzp_test_real",
+            key_secret="server-secret",
+            checkout_origin="https://recovery.test",
+            base_url="https://api.razorpay.test",
+        ),
+        client=http_client,
+        breaker_registry=CircuitBreakerRegistry(),
+    )
+    services = ProductionRecoveryActivityServices(
+        payment_provider=provider,
+        scorer=FixedScorer(),
+        clock=lambda: NOW,
+    )
+
+    result = await services.execute_recovery_action(_command())
+
+    assert result.status == "SUCCEEDED"
+    assert result.provider_reference == "plink_real_test_persisted"
+    assert posted["amount"] == 149_900
+    assert posted["accept_partial"] is False
+    assert posted["notify"] == {"sms": False, "email": False}
+    assert posted["notes"] == {
+        "case_id": FITBOX_CASE_ID,
+        "invoice_id": "inv_provider_fitbox_aug_2026",
+        "subscription_id": "sub_provider_fitbox_annual_001",
+    }
+    async with runtime_sessions() as session:
+        action = await session.scalar(
+            select(RecoveryActionRecord).where(RecoveryActionRecord.case_id == FITBOX_CASE_ID)
+        )
+        assert action is not None
+        assert action.status == ActionStatus.SUCCEEDED
+        assert action.external_reference == "plink_real_test_persisted"
+        assert action.customer_url == "https://rzp.io/i/real-test-persisted"
+    await http_client.aclose()
 
 
 async def test_initial_uncertain_create_resubmits_only_after_confirmed_absence(

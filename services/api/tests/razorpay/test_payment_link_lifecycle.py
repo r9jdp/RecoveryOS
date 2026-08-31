@@ -188,8 +188,18 @@ async def test_uncertain_create_requires_reference_lookup_before_retry() -> None
         httpx.Response(200, content=b"not-json"),
         httpx.Response(200, json=[{"id": "plink_unusable"}]),
         httpx.Response(200, json={"id": "plink_missing_url"}),
+        httpx.Response(
+            200,
+            json={"id": "plink_insecure", "short_url": "http://unsafe.example/link"},
+        ),
     ],
-    ids=["server-5xx", "invalid-json-2xx", "non-object-2xx", "incomplete-object-2xx"],
+    ids=[
+        "server-5xx",
+        "invalid-json-2xx",
+        "non-object-2xx",
+        "incomplete-object-2xx",
+        "insecure-url-2xx",
+    ],
 )
 async def test_ambiguous_create_responses_require_reference_reconciliation(
     ambiguous_response: httpx.Response,

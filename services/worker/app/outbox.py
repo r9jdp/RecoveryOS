@@ -22,6 +22,7 @@ from services.api.app.models import (
     PolicyDecisionRecord,
     RecoveryActionRecord,
     RecoveryCase,
+    Subscription,
 )
 from services.api.app.webhooks import RazorpayDownstreamSignal, RazorpayOutboxProcessor
 
@@ -108,6 +109,11 @@ class TemporalRazorpaySignalDispatcher:
         )
         if invoice is None:
             raise RuntimeError("Razorpay recovery workflow requires a trusted failed invoice")
+        subscription = await self.session.get(Subscription, recovery_case.subscription_id)
+        if subscription is None or subscription.merchant_id != recovery_case.merchant_id:
+            raise RuntimeError("Razorpay recovery workflow requires a trusted subscription")
+        if invoice.subscription_id != subscription.id:
+            raise RuntimeError("Razorpay recovery workflow invoice scope is inconsistent")
 
         candidate_action = "OPEN_CUSTOMER_PAYMENT_SURFACE"
         payment_surface_type: str | None = "SUBSCRIPTION_INVOICE_LINK"
@@ -189,6 +195,8 @@ class TemporalRazorpaySignalDispatcher:
             ),
             candidate_action=candidate_action,
             payment_surface_type=payment_surface_type,
+            provider_subscription_id=subscription.provider_subscription_id,
+            provider_invoice_id=invoice.provider_invoice_id,
         )
 
     @staticmethod

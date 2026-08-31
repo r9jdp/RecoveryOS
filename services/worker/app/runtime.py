@@ -276,6 +276,20 @@ class ProductionRecoveryActivityServices:
         action = claim.action
 
         surface_type = PaymentSurfaceType(command.payment_surface_type)
+        provider_subscription_id: str | None
+        provider_invoice_id: str | None
+        if isinstance(self._payment_provider, MockPaymentProvider):
+            provider_subscription_id = command.provider_subscription_id or command.subscription_id
+            provider_invoice_id = command.provider_invoice_id or command.failed_invoice_id
+        else:
+            provider_subscription_id = command.provider_subscription_id
+            provider_invoice_id = command.provider_invoice_id
+            if provider_subscription_id is None or provider_invoice_id is None:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="PAYMENT_PROVIDER_SCOPE_MISSING",
+                )
         deadline = _instant(command.recovery_deadline)
         reference_id: str | None = None
         expires_at: datetime | None = None
@@ -283,15 +297,19 @@ class ProductionRecoveryActivityServices:
         if surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
             reference_id = self._standard_payment_link_reference(action.idempotency_key)
             expires_at = deadline
-            notes = {"case_id": command.case_id, "invoice_id": command.failed_invoice_id}
+            notes = {
+                "case_id": command.case_id,
+                "invoice_id": provider_invoice_id,
+                "subscription_id": provider_subscription_id,
+            }
 
         request = OpenPaymentSurfaceRequest(
             idempotency_key=action.idempotency_key,
             case_id=command.case_id,
             merchant_id=command.merchant_id,
             customer_id=command.customer_id,
-            subscription_id=command.subscription_id,
-            failed_invoice_id=command.failed_invoice_id,
+            subscription_id=provider_subscription_id,
+            failed_invoice_id=provider_invoice_id,
             surface_type=surface_type,
             exact_amount_paise=command.amount_paise,
             currency=command.currency,

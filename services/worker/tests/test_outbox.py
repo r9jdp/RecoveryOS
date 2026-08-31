@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from temporalio.client import Client
 
@@ -14,7 +15,12 @@ from services.api.app.domain.enums import (
     RecoveryActionType,
 )
 from services.api.app.integrations.razorpay.normalizer import normalize_webhook
-from services.api.app.models import PolicyDecisionRecord, RecoveryActionRecord
+from services.api.app.models import (
+    Invoice,
+    PolicyDecisionRecord,
+    RecoveryActionRecord,
+    Subscription,
+)
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
 from services.api.app.webhooks import RazorpayDownstreamSignal
 from services.worker.app.contracts import PaymentEventSignal, RecoveryWorkflowInput
@@ -57,6 +63,11 @@ async def test_captured_outbox_starts_invoice_workflow_and_signals_payment() -> 
     try:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             await seed_fitbox(session)
+            subscription = await session.scalar(select(Subscription))
+            invoice = await session.scalar(select(Invoice))
+            assert subscription is not None and invoice is not None
+            subscription.provider_subscription_id = "sub_provider_worker_capture"
+            invoice.provider_invoice_id = "inv_provider_worker_capture"
             raw = json.loads((FIXTURES / "payment.captured.json").read_text(encoding="utf-8"))
             event = normalize_webhook(provider_event_id="evt_worker_capture", payload=raw)
             reconciliation_action = RecoveryActionRecord(
@@ -112,6 +123,10 @@ async def test_captured_outbox_starts_invoice_workflow_and_signals_payment() -> 
         assert command.case_id == FITBOX_CASE_ID
         assert command.candidate_action == "WAIT_FOR_GATEWAY_RETRY"
         assert command.payment_surface_type is None
+        assert command.subscription_id == "sub_fitbox_annual_001"
+        assert command.failed_invoice_id == "inv_fitbox_aug_2026"
+        assert command.provider_subscription_id == "sub_provider_worker_capture"
+        assert command.provider_invoice_id == "inv_provider_worker_capture"
         assert command.failure_event.payload["payment_state"] == "FAILED"
         assert fake_client.handle.signals == [
             (

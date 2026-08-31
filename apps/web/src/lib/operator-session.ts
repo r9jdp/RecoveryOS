@@ -1,9 +1,10 @@
-const CSRF_STORAGE_KEY = "recoveryos-operator-csrf";
+import {
+  demoDataEnabled,
+  recoveryApiOrigin,
+  requireRecoveryApiOrigin,
+} from "@/lib/runtime-config";
 
-function apiBaseUrl(): string | null {
-  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  return configured ? configured.replace(/\/$/, "") : null;
-}
+const CSRF_STORAGE_KEY = "recoveryos-operator-csrf";
 
 interface SessionResponse {
   csrf_token: string;
@@ -20,10 +21,13 @@ export async function createOperatorSession(
   email: string,
   password: string,
 ): Promise<"api" | "fixture"> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) return "fixture";
+  const baseUrl = recoveryApiOrigin();
+  if (!baseUrl) {
+    if (demoDataEnabled()) return "fixture";
+    requireRecoveryApiOrigin("Operator login");
+  }
 
-  const response = await fetch(`${baseUrl}/v1/operator/session`, {
+  const response = await fetch(`${baseUrl!}/v1/operator/session`, {
     method: "POST",
     credentials: "include",
     headers: {

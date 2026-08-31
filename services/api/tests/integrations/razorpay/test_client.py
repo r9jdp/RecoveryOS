@@ -76,18 +76,14 @@ async def test_card_update_checkout_contains_no_secret_and_opens_local_surface()
 
 async def test_exact_unpaid_invoice_short_url_is_selected() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["subscription_id"] == "sub_fitbox_annual_001"
+        assert request.url.path == "/v1/invoices/inv_fitbox_aug_2026"
         return httpx.Response(
             200,
             json={
-                "items": [
-                    {"id": "inv_old", "status": "paid", "short_url": "https://wrong"},
-                    {
-                        "id": "inv_fitbox_aug_2026",
-                        "status": "issued",
-                        "short_url": "https://rzp.test/i/right",
-                    },
-                ]
+                "id": "inv_fitbox_aug_2026",
+                "subscription_id": "sub_fitbox_annual_001",
+                "status": "issued",
+                "short_url": "https://rzp.test/i/right",
             },
         )
 
@@ -208,7 +204,10 @@ async def test_authoritative_fetch_and_late_success_keep_lifecycle_axes_separate
                 200,
                 json={"id": "pay_success", "status": "captured", "amount": 149_900},
             )
-        return httpx.Response(200, json={"status": "halted"})
+        return httpx.Response(
+            200,
+            json={"id": "sub_fitbox_annual_001", "status": "halted"},
+        )
 
     client = _client(handler)
     snapshot = await client.fetch_payment_snapshot(

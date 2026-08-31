@@ -233,6 +233,13 @@ class RecoveryCaseWorkflow:
                 else "AWAITING_RECOVERY"
             )
         while not self._terminal:
+            # Provider success can be signalled immediately after workflow
+            # start. Process an already-delivered authoritative signal before
+            # expiring the case, including when a late webhook starts a workflow
+            # whose original recovery deadline is already in the past.
+            await self._drain_signals()
+            if self._terminal:
+                break
             if self._deadline is not None and workflow.now() >= self._deadline:
                 await self._cancel_active_action("RECOVERY_DEADLINE_EXPIRED")
                 self._finish(self._deadline_outcome(), "DEADLINE_EXPIRED")
@@ -705,6 +712,8 @@ class RecoveryCaseWorkflow:
                 recovery_deadline=command.recovery_deadline,
                 idempotency_key=f"{command.case_id}:{policy.action}:1",
                 mandate=mandate,
+                provider_subscription_id=command.provider_subscription_id,
+                provider_invoice_id=command.provider_invoice_id,
             ),
             ActionExecutionResult,
             provider_submission=True,
@@ -732,7 +741,7 @@ class RecoveryCaseWorkflow:
         if command.payment_surface_reference:
             return command.payment_surface_reference
         if command.payment_surface_type == "SUBSCRIPTION_INVOICE_LINK":
-            return command.failed_invoice_id
+            return command.provider_invoice_id or command.failed_invoice_id
         if command.payment_surface_type == "SUBSCRIPTION_CARD_UPDATE":
             return command.subscription_id
         # A standard Payment Link must already exist before it can be authorized.

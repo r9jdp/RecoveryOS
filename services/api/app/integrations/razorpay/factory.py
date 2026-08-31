@@ -19,9 +19,10 @@ def create_razorpay_client_from_env() -> RazorpayClient:
             "Razorpay test credentials are not configured.",
             status_code=503,
         )
-    if os.getenv(
-        "RAZORPAY_TEST_MODE_REQUIRED", "true"
-    ).strip().lower() == "true" and not key_id.startswith("rzp_test_"):
+    test_mode_required = os.getenv("RAZORPAY_TEST_MODE_REQUIRED", "true").strip().lower()
+    if test_mode_required in {"1", "true", "yes", "on"} and not key_id.startswith(
+        "rzp_test_"
+    ):
         raise RazorpayIntegrationError(
             "RAZORPAY_TEST_MODE_REQUIRED",
             "Only Razorpay test-mode credentials are accepted.",

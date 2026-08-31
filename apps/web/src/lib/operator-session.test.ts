@@ -14,10 +14,21 @@ afterEach(() => {
 describe("operator session", () => {
   it("keeps fixture-only development available without an API origin", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "demo");
 
     await expect(
       createOperatorSession("demo@recoveryos.dev", "recovery-demo"),
     ).resolves.toBe("fixture");
+    expect(operatorMutationHeaders()).toEqual({});
+  });
+
+  it("does not invent an operator session in live mode", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+
+    await expect(
+      createOperatorSession("demo@recoveryos.dev", "recovery-demo"),
+    ).rejects.toThrow("Operator login requires NEXT_PUBLIC_API_BASE_URL");
     expect(operatorMutationHeaders()).toEqual({});
   });
 

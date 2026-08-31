@@ -21,6 +21,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import { Spinner } from "@/components/shadcn/spinner";
 import { createOperatorSession } from "@/lib/operator-session";
+import { demoDataEnabled } from "@/lib/runtime-config";
 
 const safeguards = [
   "Invoice-scoped recovery",
@@ -32,6 +33,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const demoMode = demoDataEnabled();
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,15 +100,14 @@ export default function LoginPage() {
           <Card aria-labelledby="login-heading">
             <CardHeader>
               <CardTitle id="login-heading">
-                Open the FitBox workspace
+                Sign in to RecoveryOS
               </CardTitle>
               <CardDescription>
-                Use the seeded operator account to explore a complete
-                failed-subscription recovery. No real provider action is
-                enabled.
+                Use the server-configured operator account. Consequential
+                actions require this signed session and a matching CSRF token.
               </CardDescription>
               <CardAction>
-                <Badge variant="secondary">Demo</Badge>
+                <Badge variant="secondary">{demoMode ? "Demo" : "Operator"}</Badge>
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -119,20 +120,20 @@ export default function LoginPage() {
                       name="email"
                       type="email"
                       autoComplete="email"
-                      defaultValue="demo@recoveryos.dev"
+                      defaultValue={demoMode ? "demo@recoveryos.dev" : undefined}
                       required
                     />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="operator-password">
-                      Demo access code
+                      Access code
                     </FieldLabel>
                     <Input
                       id="operator-password"
                       name="password"
                       type="password"
                       autoComplete="current-password"
-                      defaultValue="recovery-demo"
+                      defaultValue={demoMode ? "recovery-demo" : undefined}
                       required
                     />
                   </Field>

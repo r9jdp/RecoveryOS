@@ -29,6 +29,19 @@ def test_factory_rejects_live_keys_when_test_mode_is_required(
     assert caught.value.code == "RAZORPAY_TEST_MODE_REQUIRED"
 
 
+def test_factory_does_not_bypass_test_guard_with_truthy_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_live_forbidden")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "server-secret")
+    monkeypatch.setenv("RAZORPAY_TEST_MODE_REQUIRED", "yes")
+
+    with pytest.raises(RazorpayIntegrationError) as caught:
+        create_razorpay_client_from_env()
+
+    assert caught.value.code == "RAZORPAY_TEST_MODE_REQUIRED"
+
+
 async def test_factory_builds_test_client_and_uses_first_allowed_origin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

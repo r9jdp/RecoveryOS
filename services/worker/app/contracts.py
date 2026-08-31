@@ -34,6 +34,10 @@ class RecoveryWorkflowInput:
     candidate_action: str = "OPEN_CUSTOMER_PAYMENT_SURFACE"
     payment_surface_type: str | None = "SUBSCRIPTION_INVOICE_LINK"
     payment_surface_reference: str | None = None
+    # Provider identifiers are additive for Temporal history compatibility.
+    # The unsuffixed fields above remain local database identifiers.
+    provider_subscription_id: str | None = None
+    provider_invoice_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -123,6 +127,8 @@ class ExecuteActionInput:
     recovery_deadline: str
     idempotency_key: str
     mandate: dict[str, Any] | None = None
+    provider_subscription_id: str | None = None
+    provider_invoice_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ import {
   CircleDot,
   FlaskConical,
   Mic,
+  PlugZap,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -38,7 +39,6 @@ import {
   useSidebar,
 } from "@/components/shadcn/sidebar";
 
-import { DemoGuide } from "./DemoGuide";
 import styles from "./merchant-shell.module.css";
 
 interface MerchantShellProps {
@@ -54,9 +54,9 @@ interface NavigationItem {
 const primaryItems: NavigationItem[] = [
   { href: "/dashboard", icon: BarChart3, label: "Control Tower" },
   {
-    href: "/cases/case_fitbox_aug_2026",
+    href: "/dashboard#cases",
     icon: Briefcase,
-    label: "FitBox case",
+    label: "Recovery cases",
   },
   { href: "/approvals", icon: ShieldCheck, label: "Approval queue" },
   { href: "/dashboard#audit", icon: Activity, label: "Audit trail" },
@@ -66,6 +66,7 @@ const primaryItems: NavigationItem[] = [
 ];
 
 const utilityItems: NavigationItem[] = [
+  { href: "/setup", icon: PlugZap, label: "Razorpay setup" },
   { href: "/settings", icon: Settings, label: "Policy settings" },
 ];
 
@@ -158,6 +159,7 @@ function getPageLabel(pathname: string) {
   if (pathname === "/lab") return "Recovery Lab";
   if (pathname === "/failure-lab") return "Failure Injection Lab";
   if (pathname === "/voice") return "Voice outreach";
+  if (pathname === "/setup") return "Razorpay setup";
   if (pathname === "/settings") return "Policy settings";
   return "Control Tower";
 }
@@ -213,7 +215,7 @@ function MerchantWorkspace({ children }: MerchantShellProps) {
           <SidebarSeparator className="mx-0" />
           <TestEnvironmentBadge />
           <p className="m-0 text-xs leading-5 text-muted-foreground">
-            FitBox demo workspace · external actions disabled by default.
+            Provider actions remain operator-gated and fully auditable.
           </p>
         </SidebarFooter>
       </Sidebar>
@@ -237,9 +239,6 @@ function MerchantWorkspace({ children }: MerchantShellProps) {
           </div>
 
           <div className="flex min-w-0 items-center gap-2">
-            <div className={styles.demoGuideSlot}>
-              <DemoGuide />
-            </div>
             <span className="hidden sm:inline-flex">
               <TestEnvironmentBadge />
             </span>

@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -38,6 +38,15 @@ class RazorpayConfig:
     timeout_seconds: float = 4.0
 
 
+@dataclass(frozen=True, slots=True)
+class RazorpaySubscriptionOnboardingBundle:
+    """Read-only provider state used to establish local webhook correlation."""
+
+    subscription: dict[str, Any]
+    plan: dict[str, Any]
+    invoices: tuple[dict[str, Any], ...]
+
+
 def build_reference_id(*, case_id: str, idempotency_key: str) -> str:
     """Create a stable, unique provider reference within Razorpay's 40-char limit."""
 
@@ -58,6 +67,38 @@ def _text(value: Any) -> str | None:
 
 def _integer(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _provider_https_url(value: Any, *, code: str) -> str:
+    if not isinstance(value, str) or len(value) > 2_048:
+        raise RazorpayContractError(code, "Razorpay returned an invalid customer URL.")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise RazorpayContractError(code, "Razorpay customer URLs must use HTTPS.")
+    return value
+
+
+def _checkout_origin(value: str) -> str:
+    parsed = urlsplit(value)
+    is_local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}
+    if (
+        (parsed.scheme != "https" and not is_local_http)
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RazorpayContractError(
+            "RAZORPAY_CHECKOUT_ORIGIN_INVALID",
+            "Checkout origin must be HTTPS (localhost HTTP is allowed for development).",
+        )
+    return value.rstrip("/")
 
 
 def _payment_state(value: Any) -> PaymentState:
@@ -119,6 +160,56 @@ class RazorpayClient:
     async def aclose(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    async def fetch_test_subscription_onboarding_bundle(
+        self, *, subscription_id: str
+    ) -> RazorpaySubscriptionOnboardingBundle:
+        """Fetch one test subscription and all of its current invoices.
+
+        This method is intentionally read-only at Razorpay. Local onboarding is
+        therefore safe to repeat, and an uncertain provider write can never be
+        introduced by the sync endpoint.
+        """
+
+        if not self.config.key_id.startswith("rzp_test_"):
+            raise RazorpayContractError(
+                "RAZORPAY_TEST_MODE_REQUIRED",
+                "Subscription onboarding accepts only Razorpay test-mode credentials.",
+            )
+        subscription = await self._request_json("GET", f"/v1/subscriptions/{subscription_id}")
+        if subscription.get("id") != subscription_id:
+            raise RazorpayContractError(
+                "RAZORPAY_SUBSCRIPTION_RESPONSE_MISMATCH",
+                "Razorpay returned a different subscription than requested.",
+                requested_subscription_id=subscription_id,
+            )
+        plan_id = _text(subscription.get("plan_id"))
+        if plan_id is None:
+            raise RazorpayContractError(
+                "RAZORPAY_SUBSCRIPTION_PLAN_MISSING",
+                "Razorpay subscription has no plan_id.",
+                subscription_id=subscription_id,
+            )
+        plan = await self._request_json("GET", f"/v1/plans/{plan_id}")
+        if plan.get("id") != plan_id:
+            raise RazorpayContractError(
+                "RAZORPAY_PLAN_RESPONSE_MISMATCH",
+                "Razorpay returned a different plan than requested.",
+                requested_plan_id=plan_id,
+            )
+
+        invoices = await self._list_objects(
+            "/v1/invoices",
+            params={"subscription_id": subscription_id},
+            collection_field="items",
+            invalid_code="RAZORPAY_INVOICE_COLLECTION_INVALID",
+            maximum_items=1_000,
+        )
+        return RazorpaySubscriptionOnboardingBundle(
+            subscription=subscription,
+            plan=plan,
+            invoices=invoices,
+        )
 
     @property
     def _auth(self) -> httpx.BasicAuth:
@@ -184,6 +275,51 @@ class RazorpayClient:
                 "RAZORPAY_RESPONSE_INVALID", "Razorpay returned invalid JSON."
             ) from error
 
+    async def _list_objects(
+        self,
+        path: str,
+        *,
+        params: dict[str, str],
+        collection_field: str,
+        invalid_code: str,
+        maximum_items: int,
+    ) -> tuple[dict[str, Any], ...]:
+        """Read a Razorpay collection completely, with an explicit safety bound."""
+
+        items: list[dict[str, Any]] = []
+        while len(items) <= maximum_items:
+            page_size = min(100, maximum_items + 1 - len(items))
+            collection = await self._request_json(
+                "GET",
+                path,
+                params={
+                    **params,
+                    "count": str(page_size),
+                    "skip": str(len(items)),
+                },
+            )
+            page = collection.get(collection_field)
+            if not isinstance(page, list):
+                raise RazorpayContractError(
+                    invalid_code,
+                    f"Razorpay collection has no {collection_field} array.",
+                )
+            if len(page) > page_size or any(not isinstance(item, dict) for item in page):
+                raise RazorpayContractError(
+                    invalid_code,
+                    "Razorpay collection returned an invalid page.",
+                )
+            items.extend(cast(list[dict[str, Any]], page))
+            if len(items) > maximum_items:
+                raise RazorpayContractError(
+                    f"{invalid_code.removesuffix('_INVALID')}_TOO_LARGE",
+                    "Razorpay collection exceeds the bounded read limit.",
+                    maximum_items=maximum_items,
+                )
+            if len(page) < page_size:
+                return tuple(items)
+        raise AssertionError("bounded Razorpay collection read did not return")
+
     def build_subscription_card_update_checkout(
         self, request: OpenPaymentSurfaceRequest
     ) -> dict[str, str | bool]:
@@ -214,7 +350,8 @@ class RazorpayClient:
             }
         )
         customer_url = (
-            f"{self.config.checkout_origin.rstrip('/')}/payments/razorpay/card-update?{query}"
+            f"{_checkout_origin(self.config.checkout_origin)}"
+            f"/payments/razorpay/card-update?{query}"
         )
         return PaymentSurfaceResult(
             provider="razorpay",
@@ -226,26 +363,20 @@ class RazorpayClient:
         )
 
     async def _open_invoice_link(self, request: OpenPaymentSurfaceRequest) -> PaymentSurfaceResult:
-        collection = await self._request_json(
-            "GET", "/v1/invoices", params={"subscription_id": request.subscription_id}
-        )
-        items = collection.get("items")
-        if not isinstance(items, list):
+        invoice = await self._request_json("GET", f"/v1/invoices/{request.failed_invoice_id}")
+        if (
+            invoice.get("id") != request.failed_invoice_id
+            or invoice.get("subscription_id") != request.subscription_id
+        ):
             raise RazorpayContractError(
-                "RAZORPAY_INVOICE_COLLECTION_INVALID",
-                "Razorpay invoice collection has no items array.",
+                "RAZORPAY_INVOICE_SCOPE_MISMATCH",
+                "The requested invoice does not belong to the requested subscription.",
+                invoice_id=request.failed_invoice_id,
+                subscription_id=request.subscription_id,
             )
-        matching = next(
-            (
-                item
-                for item in items
-                if isinstance(item, dict)
-                and item.get("id") == request.failed_invoice_id
-                and item.get("status") not in {"paid", "cancelled"}
-            ),
-            None,
-        )
-        if not isinstance(matching, dict) or not _text(matching.get("short_url")):
+        if invoice.get("status") in {"paid", "cancelled"} or not _text(
+            invoice.get("short_url")
+        ):
             raise RazorpayContractError(
                 "RAZORPAY_UNPAID_INVOICE_LINK_NOT_FOUND",
                 "The exact failed invoice has no payable short_url.",
@@ -255,7 +386,9 @@ class RazorpayClient:
             provider="razorpay",
             provider_reference=request.failed_invoice_id,
             surface_type=request.surface_type,
-            customer_url=cast(str, matching["short_url"]),
+            customer_url=_provider_https_url(
+                invoice["short_url"], code="RAZORPAY_INVOICE_URL_INVALID"
+            ),
             expires_at=request.recovery_deadline,
             authoritative=True,
         )
@@ -277,6 +410,14 @@ class RazorpayClient:
             raise RazorpayContractError(
                 "RAZORPAY_PAYMENT_LINK_CONTRACT_INVALID",
                 "A standalone Payment Link requires expiry and reference_id.",
+            )
+        if len(request.notes) > 15 or any(
+            not key or len(key) > 256 or len(value) > 256
+            for key, value in request.notes.items()
+        ):
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_LINK_NOTES_INVALID",
+                "Payment Link notes exceed Razorpay's bounded notes contract.",
             )
         expires_at = min(request.expires_at, request.recovery_deadline)
         body: dict[str, Any] = {
@@ -324,17 +465,31 @@ class RazorpayClient:
             raise
         link_id = _text(link.get("id"))
         short_url = _text(link.get("short_url"))
-        if link_id is None or short_url is None:
+        if (
+            link_id is None
+            or not link_id.startswith("plink_")
+            or len(link_id) > 128
+            or short_url is None
+        ):
             self._payment_link_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
             raise RazorpayUncertainSubmissionError(
                 reference_id=request.reference_id,
             )
+        try:
+            customer_url = _provider_https_url(
+                short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID"
+            )
+        except RazorpayContractError as error:
+            self._payment_link_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
+            raise RazorpayUncertainSubmissionError(
+                reference_id=request.reference_id,
+            ) from error
         self._payment_link_breaker.record_success()
         return PaymentSurfaceResult(
             provider="razorpay",
             provider_reference=link_id,
             surface_type=request.surface_type,
-            customer_url=short_url,
+            customer_url=customer_url,
             expires_at=expires_at,
             authoritative=True,
         )
@@ -357,18 +512,54 @@ class RazorpayClient:
     ) -> PaymentSnapshot:
         del merchant_id  # Credentials are selected by the coordinator's merchant-scoped factory.
         invoice = await self._request_json("GET", f"/v1/invoices/{invoice_id}")
+        if invoice.get("id") != invoice_id:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_RESPONSE_MISMATCH",
+                "Razorpay returned a different invoice than requested.",
+                requested_invoice_id=invoice_id,
+            )
         provider_payment_id = payment_id or _text(invoice.get("payment_id"))
         payment: dict[str, Any] = {}
         if provider_payment_id:
             payment = await self._request_json("GET", f"/v1/payments/{provider_payment_id}")
+            if payment.get("id") != provider_payment_id:
+                raise RazorpayContractError(
+                    "RAZORPAY_PAYMENT_RESPONSE_MISMATCH",
+                    "Razorpay returned a different payment than requested.",
+                    requested_payment_id=provider_payment_id,
+                )
+            payment_invoice_id = _text(payment.get("invoice_id"))
+            if payment_invoice_id is not None and payment_invoice_id != invoice_id:
+                raise RazorpayContractError(
+                    "RAZORPAY_PAYMENT_INVOICE_MISMATCH",
+                    "Razorpay payment belongs to a different invoice.",
+                    requested_invoice_id=invoice_id,
+                    payment_invoice_id=payment_invoice_id,
+                )
         subscription_id = _text(invoice.get("subscription_id"))
         subscription: dict[str, Any] = {}
         if subscription_id:
             subscription = await self._request_json("GET", f"/v1/subscriptions/{subscription_id}")
+            if subscription.get("id") != subscription_id:
+                raise RazorpayContractError(
+                    "RAZORPAY_SUBSCRIPTION_RESPONSE_MISMATCH",
+                    "Razorpay returned a different subscription than requested.",
+                    requested_subscription_id=subscription_id,
+                )
         amount = _integer(payment.get("amount"))
         if amount is None:
-            amount = _integer(invoice.get("amount")) or 0
-        currency = _text(payment.get("currency")) or _text(invoice.get("currency")) or "INR"
+            amount = _integer(invoice.get("amount"))
+        if amount is None or amount < 0:
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_AMOUNT_INVALID",
+                "Razorpay returned no valid integer payment amount.",
+            )
+        currency = _text(payment.get("currency")) or _text(invoice.get("currency"))
+        if currency is None or len(currency) != 3:
+            raise RazorpayContractError(
+                "RAZORPAY_PAYMENT_CURRENCY_INVALID",
+                "Razorpay returned no valid payment currency.",
+            )
         return PaymentSnapshot(
             provider="razorpay",
             payment_id=provider_payment_id,
@@ -377,7 +568,7 @@ class RazorpayClient:
             payment_state=_payment_state(payment.get("status")),
             subscription_state=_subscription_state(subscription.get("status")),
             amount_paise=amount,
-            currency=currency,
+            currency=currency.upper(),
             observed_at=datetime.now(UTC),
             authoritative=True,
         )
@@ -419,7 +610,12 @@ class RazorpayClient:
             return None
         link_id = _text(match.get("id"))
         short_url = _text(match.get("short_url"))
-        if link_id is None or short_url is None:
+        if (
+            link_id is None
+            or not link_id.startswith("plink_")
+            or len(link_id) > 128
+            or short_url is None
+        ):
             raise RazorpayContractError(
                 "RAZORPAY_PAYMENT_LINK_RESPONSE_INVALID",
                 "Reconciled Payment Link has no id or short_url.",
@@ -433,7 +629,9 @@ class RazorpayClient:
             provider="razorpay",
             provider_reference=link_id,
             surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
-            customer_url=short_url,
+            customer_url=_provider_https_url(
+                short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID"
+            ),
             expires_at=expires_at,
             authoritative=True,
         )
