@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -76,8 +76,50 @@ router = APIRouter(prefix="/v1", tags=["recovery"])
 
 
 def get_merchant_scope() -> str:
-    """Return the server-selected merchant for the Phase 1 shared demo login."""
+    """Resolve the single-merchant deployment scope without production hard-coding."""
 
+    merchant_id = os.getenv("RECOVERY_MERCHANT_ID", "").strip()
+    demo_enabled = os.getenv("DEMO_MODE", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if merchant_id:
+        provider = os.getenv("PAYMENT_PROVIDER", "mock").strip().lower()
+        app_env = os.getenv("APP_ENV", "development").strip().lower()
+        if merchant_id == "merchant_fitbox" and (
+            not demo_enabled
+            or provider != "mock"
+            or app_env in {"production", "staging"}
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "DEMO_MERCHANT_NOT_ALLOWED",
+                    "message": (
+                        "The bundled FitBox merchant cannot scope a hosted or "
+                        "real-provider deployment."
+                    ),
+                },
+            )
+        return merchant_id
+    provider = os.getenv("PAYMENT_PROVIDER", "mock").strip().lower()
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    if (
+        not demo_enabled
+        or provider != "mock"
+        or app_env in {"production", "staging"}
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "MERCHANT_SCOPE_NOT_CONFIGURED",
+                "message": (
+                    "RECOVERY_MERCHANT_ID is required outside the local mock demo."
+                ),
+            },
+        )
     return "merchant_fitbox"
 
 
