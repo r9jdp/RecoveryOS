@@ -19,9 +19,9 @@ _CONSTRAINT = "ck_recovery_events_evidence_kind"
 
 def upgrade() -> None:
     with op.batch_alter_table("recovery_events") as batch_op:
-        batch_op.drop_constraint(_CONSTRAINT, type_="check")
+        batch_op.drop_constraint(op.f(_CONSTRAINT), type_="check")
         batch_op.create_check_constraint(
-            _CONSTRAINT,
+            op.f(_CONSTRAINT),
             "evidence_kind IN ('SIMULATED', 'SYSTEM_DERIVED', 'RAZORPAY_TEST_VERIFIED')",
         )
 
@@ -32,8 +32,8 @@ def downgrade() -> None:
         "WHERE evidence_kind = 'SYSTEM_DERIVED'"
     )
     with op.batch_alter_table("recovery_events") as batch_op:
-        batch_op.drop_constraint(_CONSTRAINT, type_="check")
+        batch_op.drop_constraint(op.f(_CONSTRAINT), type_="check")
         batch_op.create_check_constraint(
-            _CONSTRAINT,
+            op.f(_CONSTRAINT),
             "evidence_kind IN ('SIMULATED', 'RAZORPAY_TEST_VERIFIED')",
         )
