@@ -421,7 +421,9 @@ class RazorpayOutboxProcessor:
             delay_until=decision.delay_until,
             created_at=evaluated_at,
         )
-        self.session.add_all([action, policy])
+        self.session.add(action)
+        await self.session.flush()
+        self.session.add(policy)
         await self.session.flush()
         return action
 
@@ -518,7 +520,9 @@ class RazorpayOutboxProcessor:
             delay_until=None,
             created_at=evaluated_at,
         )
-        self.session.add_all([action, policy])
+        self.session.add(action)
+        await self.session.flush()
+        self.session.add(policy)
         await self.session.flush()
         return action
 
