@@ -6,9 +6,15 @@ RecoveryOS activity after the resulting mandate has been verified and consumed.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import secrets
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 from .llm import CustomerLanguageInterpreter
@@ -38,6 +44,10 @@ class TaskConflictError(ValueError):
     pass
 
 
+class TaskAuthorizationError(PermissionError):
+    pass
+
+
 class CustomerAgentService:
     def __init__(
         self,
@@ -47,24 +57,28 @@ class CustomerAgentService:
         receipt_verifier: ReceiptVerifier,
         language_interpreter: CustomerLanguageInterpreter,
         mandate_ttl_seconds: int = 900,
+        approval_token_secret: str | None = None,
     ) -> None:
         self._store = store
         self._signer = signer
         self._receipt_verifier = receipt_verifier
         self._language_interpreter = language_interpreter
         self._mandate_ttl = timedelta(seconds=mandate_ttl_seconds)
+        self._approval_token_secret = (
+            approval_token_secret.encode("utf-8") if approval_token_secret else None
+        )
 
     async def send_message(self, message: Message) -> TaskRecord:
         part = message.parts[0].data
         protocol_version = part.get("protocol_version") or part.get("protocolVersion")
-        if protocol_version == "recovery.request.v1":
+        if protocol_version == "recovery.request.v2":
             request = RecoveryRequestData.model_validate(part)
             return await self._create_authorization_task(message=message, request=request)
         nested_data = part.get("data")
         nested_protocol = (
             nested_data.get("protocol_version") if isinstance(nested_data, dict) else None
         )
-        if protocol_version == "recovery.receipt.v1" or nested_protocol == "recovery.receipt.v1":
+        if protocol_version == "recovery.receipt.v2" or nested_protocol == "recovery.receipt.v2":
             signed_receipt = SignedRecoveryReceipt.model_validate(part)
             try:
                 receipt = self._receipt_verifier.verify(signed_receipt)
@@ -121,6 +135,79 @@ class CustomerAgentService:
             raise TaskNotFoundError(task_id)
         return task
 
+    def public_task(
+        self,
+        task: TaskRecord,
+        *,
+        history_length: int | None = None,
+    ) -> dict[str, Any]:
+        """Render an A2A task and attach its stateless approval capability.
+
+        The token is derived for each response and is never persisted in the
+        task store, signed artifacts, or model context.
+        """
+
+        public = deepcopy(task.public_dict(history_length=history_length))
+        status = public.get("status")
+        message = status.get("message") if isinstance(status, dict) else None
+        parts = message.get("parts") if isinstance(message, dict) else None
+        if isinstance(parts, list) and parts:
+            first = parts[0]
+            data = first.get("data") if isinstance(first, dict) else None
+            if isinstance(data, dict) and "approval_path" in data:
+                data["approval_path"] = self.approval_path(task)
+        return public
+
+    def approval_path(self, task: TaskRecord) -> str:
+        base_path = f"/a2a/{quote(task.id, safe='')}"
+        token = self._approval_token(task)
+        if token is None:
+            return base_path
+        return f"{base_path}#token={token}"
+
+    async def _authorized_task(
+        self,
+        task_id: str,
+        *,
+        approval_token: str | None,
+    ) -> TaskRecord:
+        task = await self.get_task(task_id)
+        expected = self._approval_token(task)
+        if expected is None:
+            return task
+        supplied = approval_token or ""
+        if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("ascii")):
+            raise TaskAuthorizationError("invalid customer approval capability")
+        if task.request.expires_at <= datetime.now(UTC):
+            raise TaskAuthorizationError("customer approval capability has expired")
+        return task
+
+    def _approval_token(self, task: TaskRecord) -> str | None:
+        if self._approval_token_secret is None:
+            return None
+        identity = {
+            "context_id": task.context_id,
+            "request": task.request.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=False,
+            ),
+            "task_id": task.id,
+            "version": "recoveryos.customer-approval-capability.v1",
+        }
+        canonical_identity = json.dumps(
+            identity,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        digest = hmac.new(
+            self._approval_token_secret,
+            canonical_identity,
+            hashlib.sha256,
+        ).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
     async def cancel_task(self, task_id: str, *, reason: str) -> TaskRecord:
         # Cancellation is safety-preferred. Retry only an optimistic conflict so
         # a concurrent approval cannot silently overwrite an accepted cancel.
@@ -147,8 +234,15 @@ class CustomerAgentService:
             return task
         raise TaskConflictError("task changed concurrently; retry cancellation")
 
-    async def approval_summary(self, task_id: str) -> ApprovalSummary:
-        task = await self.get_task(task_id)
+    async def approval_summary(
+        self,
+        task_id: str,
+        *,
+        approval_token: str | None = None,
+    ) -> ApprovalSummary:
+        task = await self._authorized_task(task_id, approval_token=approval_token)
+        if task.state != "TASK_STATE_AUTH_REQUIRED":
+            raise TaskConflictError("task is not awaiting customer authorization")
         return self._approval_summary(task)
 
     async def interpret_customer_language(
@@ -156,8 +250,9 @@ class CustomerAgentService:
         *,
         task_id: str,
         request: CustomerLanguageRequest,
+        approval_token: str | None = None,
     ) -> CustomerLanguageInterpretation:
-        task = await self.get_task(task_id)
+        task = await self._authorized_task(task_id, approval_token=approval_token)
         if task.state != "TASK_STATE_AUTH_REQUIRED":
             raise TaskConflictError("task is not awaiting customer authorization")
         revision = task.revision
@@ -179,6 +274,8 @@ class CustomerAgentService:
             authoritative_scope=AuthoritativeApprovalScope(
                 merchant_id=summary.merchant_id,
                 case_id=summary.case_id,
+                recovery_action_id=summary.recovery_action_id,
+                failed_invoice_id=summary.failed_invoice_id,
                 exact_amount_paise=summary.exact_amount_paise,
                 currency=summary.currency,
                 payment_surface_type=summary.payment_surface_type,
@@ -195,6 +292,8 @@ class CustomerAgentService:
             state=task.state,
             merchant_id=request.merchant_id,
             case_id=request.case_id,
+            recovery_action_id=request.recovery_action_id,
+            failed_invoice_id=request.failed_invoice_id,
             exact_amount_paise=request.exact_amount_paise,
             currency=request.currency,
             payment_surface_type=request.payment_surface_type,
@@ -203,10 +302,23 @@ class CustomerAgentService:
             merchant_display_name=request.context.merchant_display_name,
             plan_name=request.context.plan_name,
             failure_explanation=request.context.failure_explanation,
+            invoice_state=request.context.invoice_state,
+            payment_state=request.context.payment_state,
+            subscription_state=request.context.subscription_state,
+            provider_subscription_state=request.context.provider_subscription_state,
+            preferred_language=request.context.preferred_language,
+            invoice_due_at=request.context.invoice_due_at,
+            recovery_deadline=request.context.recovery_deadline,
         )
 
-    async def decide(self, *, task_id: str, decision: ApprovalDecision) -> TaskRecord:
-        task = await self.get_task(task_id)
+    async def decide(
+        self,
+        *,
+        task_id: str,
+        decision: ApprovalDecision,
+        approval_token: str | None = None,
+    ) -> TaskRecord:
+        task = await self._authorized_task(task_id, approval_token=approval_token)
         expected_revision = task.revision
         request = task.request
         if task.state != "TASK_STATE_AUTH_REQUIRED":
@@ -250,6 +362,8 @@ class CustomerAgentService:
             merchant_id=request.merchant_id,
             case_id=request.case_id,
             customer_id=request.customer_id,
+            recovery_action_id=request.recovery_action_id,
+            failed_invoice_id=request.failed_invoice_id,
             exact_amount_paise=request.exact_amount_paise,
             currency=request.currency,
             payment_surface_type=request.payment_surface_type,
@@ -299,6 +413,8 @@ class CustomerAgentService:
             mandate_data["mandate_id"],
             task.request.merchant_id,
             task.request.case_id,
+            mandate_data["recovery_action_id"],
+            mandate_data["failed_invoice_id"],
             task.request.exact_amount_paise,
             task.request.currency,
         )
@@ -307,6 +423,8 @@ class CustomerAgentService:
             receipt.mandate_id,
             receipt.merchant_id,
             receipt.case_id,
+            receipt.recovery_action_id,
+            receipt.failed_invoice_id,
             receipt.exact_amount_paise,
             receipt.currency,
         )

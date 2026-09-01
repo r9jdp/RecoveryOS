@@ -16,6 +16,90 @@ from services.api.app.integrations.a2a.receipts import RecoveryReceiptSigner
 from services.api.app.providers.contracts import CustomerAgentRecoveryRequest
 
 
+def _recovery_request(
+    *,
+    idempotency_key: str = "merchant-1:case-1:a2a",
+    case_id: str = "case-1",
+    recovery_action_id: str = "action-1",
+    failed_invoice_id: str = "invoice-local-1",
+    payment_surface_reference: str = "inv_123",
+) -> CustomerAgentRecoveryRequest:
+    recovery_deadline = datetime.now(UTC) + timedelta(minutes=10)
+    return CustomerAgentRecoveryRequest(
+        idempotency_key=idempotency_key,
+        case_id=case_id,
+        merchant_id="merchant-1",
+        customer_id="customer-1",
+        recovery_action_id=recovery_action_id,
+        failed_invoice_id=failed_invoice_id,
+        exact_amount_paise=149_900,
+        currency="INR",
+        payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+        payment_surface_reference=payment_surface_reference,
+        expires_at=recovery_deadline,
+        context={
+            "merchant_display_name": "FitBox",
+            "plan_name": "FitBox Annual",
+            "failure_explanation": "Authentication was not completed.",
+            "invoice_state": "issued",
+            "payment_state": "FAILED",
+            "subscription_state": "PENDING",
+            "provider_subscription_state": "pending",
+            "preferred_language": "en-IN",
+            "invoice_due_at": recovery_deadline - timedelta(days=1),
+            "recovery_deadline": recovery_deadline,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_customer_agent_client_sends_configured_s2s_bearer() -> None:
+    captured_authorization: list[str | None] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured_authorization.append(request.headers.get("Authorization"))
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": "response-1",
+                "result": {
+                    "task": {
+                        "id": "task-authenticated",
+                        "status": {
+                            "state": "TASK_STATE_AUTH_REQUIRED",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "message": {
+                                "parts": [
+                                    {
+                                        "data": {
+                                            "approval_path": (
+                                                "/a2a/task-authenticated#token=capability-token"
+                                            )
+                                        }
+                                    }
+                                ]
+                            },
+                        },
+                        "artifacts": [],
+                    }
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = A2ACustomerAgentClient(
+            origin="https://customer.example",
+            client=http_client,
+            bearer_token="outbound-s2s-secret",
+        )
+        task = await client.send_recovery_request(_recovery_request())
+
+    assert task.state == "AUTH_REQUIRED"
+    assert task.approval_path == "/a2a/task-authenticated#token=capability-token"
+    assert captured_authorization == ["Bearer outbound-s2s-secret"]
+
+
 @pytest.mark.asyncio
 async def test_frozen_customer_agent_client_maps_auth_required_and_cancel() -> None:
     app = create_app(CustomerAgentSettings(origin="https://customer.example"))
@@ -27,24 +111,7 @@ async def test_frozen_customer_agent_client_maps_auth_required_and_cancel() -> N
             origin="https://customer.example",
             client=http_client,
         )
-        task = await client.send_recovery_request(
-            CustomerAgentRecoveryRequest(
-                idempotency_key="merchant-1:case-1:a2a",
-                case_id="case-1",
-                merchant_id="merchant-1",
-                customer_id="customer-1",
-                exact_amount_paise=149900,
-                currency="INR",
-                payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
-                payment_surface_reference="inv_123",
-                expires_at=datetime.now(UTC) + timedelta(minutes=10),
-                context={
-                    "merchant_display_name": "FitBox",
-                    "plan_name": "FitBox Annual",
-                    "failure_explanation": "Authentication was not completed.",
-                },
-            )
-        )
+        task = await client.send_recovery_request(_recovery_request())
         assert task.state == "AUTH_REQUIRED"
         fetched = await client.get_task(remote_task_id=task.remote_task_id)
         assert fetched == task
@@ -76,21 +143,12 @@ async def test_customer_agent_client_completes_task_with_exact_idempotent_receip
             client=http_client,
         )
         task = await client.send_recovery_request(
-            CustomerAgentRecoveryRequest(
+            _recovery_request(
                 idempotency_key="merchant-1:case-receipt:a2a",
                 case_id="case-receipt",
-                merchant_id="merchant-1",
-                customer_id="customer-1",
-                exact_amount_paise=149_900,
-                currency="INR",
-                payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+                recovery_action_id="action-receipt",
+                failed_invoice_id="invoice-local-receipt",
                 payment_surface_reference="inv_receipt",
-                expires_at=datetime.now(UTC) + timedelta(minutes=10),
-                context={
-                    "merchant_display_name": "FitBox",
-                    "plan_name": "FitBox Annual",
-                    "failure_explanation": "Authentication was not completed.",
-                },
             )
         )
         approved = await http_client.post(
@@ -111,6 +169,8 @@ async def test_customer_agent_client_completes_task_with_exact_idempotent_receip
             "mandate_id": mandate["mandate_id"],
             "merchant_id": "merchant-1",
             "case_id": "case-receipt",
+            "recovery_action_id": "action-receipt",
+            "failed_invoice_id": "invoice-local-receipt",
             "exact_amount_paise": 149_900,
             "currency": "INR",
             "provider_reference": "pay_captured_receipt",
@@ -164,21 +224,12 @@ async def test_configured_recovery_receipt_signer_must_match_customer_agent_pin(
             receipt_signer=receipt_signer,
         )
         task = await client.send_recovery_request(
-            CustomerAgentRecoveryRequest(
+            _recovery_request(
                 idempotency_key="merchant-1:case-hosted:a2a",
                 case_id="case-hosted",
-                merchant_id="merchant-1",
-                customer_id="customer-1",
-                exact_amount_paise=149_900,
-                currency="INR",
-                payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+                recovery_action_id="action-hosted",
+                failed_invoice_id="invoice-local-hosted",
                 payment_surface_reference="inv_hosted",
-                expires_at=datetime.now(UTC) + timedelta(minutes=10),
-                context={
-                    "merchant_display_name": "FitBox",
-                    "plan_name": "FitBox Annual",
-                    "failure_explanation": "Authentication was not completed.",
-                },
             )
         )
         approved = await http_client.post(
@@ -197,6 +248,8 @@ async def test_configured_recovery_receipt_signer_must_match_customer_agent_pin(
             mandate_id=mandate_id,
             merchant_id="merchant-1",
             case_id="case-hosted",
+            recovery_action_id="action-hosted",
+            failed_invoice_id="invoice-local-hosted",
             exact_amount_paise=149_900,
             currency="INR",
             provider_reference="pay_hosted_captured",

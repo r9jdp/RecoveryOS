@@ -8,12 +8,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from pydantic import ValidationError
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from services.api.app.db import get_session_factory
 from services.api.app.domain.enums import (
     ActionStatus,
+    CaseOutcome,
     Diagnosis,
     EvidenceKind,
     PaymentState,
@@ -22,6 +24,8 @@ from services.api.app.domain.enums import (
     RecoveryActionType,
     RevenueAttribution,
 )
+from services.api.app.integrations.a2a.mandates import canonical_json
+from services.api.app.integrations.a2a.models import SignedMandate
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
 from services.api.app.integrations.razorpay.errors import (
     RazorpayIntegrationError,
@@ -30,6 +34,7 @@ from services.api.app.integrations.razorpay.errors import (
 from services.api.app.integrations.razorpay.normalizer import normalize_webhook
 from services.api.app.lab.scorer import create_recovery_scorer
 from services.api.app.models import (
+    A2AMandateNonceConsumption,
     Invoice,
     PaymentAttempt,
     PolicyDecisionRecord,
@@ -277,11 +282,6 @@ class ProductionRecoveryActivityServices:
                 reason_code="PAYMENT_SURFACE_SCOPE_MISSING",
             )
 
-        claim = await self._claim_payment_action(command)
-        if isinstance(claim, ActionExecutionResult):
-            return claim
-        action = claim.action
-
         surface_type = PaymentSurfaceType(command.payment_surface_type)
         provider_subscription_id: str | None
         provider_invoice_id: str | None
@@ -297,6 +297,14 @@ class ProductionRecoveryActivityServices:
                     provider="none",
                     reason_code="PAYMENT_PROVIDER_SCOPE_MISSING",
                 )
+
+        # Validate every provider identifier before atomically consuming an A2A
+        # authorization or claiming its durable action. A malformed activity
+        # delivery must not burn a valid mandate when no provider call can occur.
+        claim = await self._claim_payment_action(command)
+        if isinstance(claim, ActionExecutionResult):
+            return claim
+        action = claim.action
         deadline = _instant(command.recovery_deadline)
         reference_id: str | None = None
         expires_at: datetime | None = None
@@ -579,6 +587,14 @@ class ProductionRecoveryActivityServices:
             persisted.external_reference = result.provider_reference
             persisted.customer_url = result.customer_url
             persisted.completed_at = datetime.now(UTC)
+            authorization = await session.scalar(
+                select(A2AMandateNonceConsumption)
+                .where(A2AMandateNonceConsumption.recovery_action_id == action_id)
+                .with_for_update()
+            )
+            if authorization is not None:
+                authorization.execution_status = "SUCCEEDED"
+                authorization.executed_at = persisted.completed_at
             await session.commit()
         return ActionExecutionResult(
             status="SUCCEEDED",
@@ -660,6 +676,14 @@ class ProductionRecoveryActivityServices:
             persisted.external_reference = reconciled.provider_reference
             persisted.customer_url = reconciled.customer_url
             persisted.completed_at = self._clock()
+            authorization = await session.scalar(
+                select(A2AMandateNonceConsumption)
+                .where(A2AMandateNonceConsumption.recovery_action_id == action_id)
+                .with_for_update()
+            )
+            if authorization is not None:
+                authorization.execution_status = "SUCCEEDED"
+                authorization.executed_at = persisted.completed_at
             await session.commit()
             return ActionExecutionResult(
                 status="SUCCEEDED",
@@ -679,6 +703,8 @@ class ProductionRecoveryActivityServices:
                 reason_code="PAYMENT_SURFACE_SCOPE_MISSING",
             )
         surface_type = PaymentSurfaceType(command.payment_surface_type)
+        if command.mandate is not None:
+            return await self._claim_a2a_payment_action(command, surface_type=surface_type)
         async with get_session_factory()() as session:
             statement = (
                 select(RecoveryActionRecord, PolicyDecisionRecord)
@@ -816,6 +842,207 @@ class ProductionRecoveryActivityServices:
                 action=action,
                 reconcile_before_submission=False,
             )
+
+    async def _claim_a2a_payment_action(
+        self,
+        command: ExecuteActionInput,
+        *,
+        surface_type: PaymentSurfaceType,
+    ) -> _PaymentActionClaim | ActionExecutionResult:
+        """Claim the exact SEND action backed by a persisted verified v2 mandate."""
+
+        if command.recovery_action_id is None or command.failed_invoice_id is None:
+            return ActionExecutionResult(
+                status="REJECTED",
+                provider="none",
+                reason_code="A2A_DURABLE_SCOPE_MISSING",
+            )
+        try:
+            signed = SignedMandate.model_validate(command.mandate)
+        except ValidationError:
+            return ActionExecutionResult(
+                status="REJECTED",
+                provider="none",
+                reason_code="A2A_MANDATE_MALFORMED",
+            )
+
+        now = self._clock()
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("activity clock must return an offset-aware instant")
+        data = signed.data
+        command_scope = (
+            command.recovery_action_id,
+            command.failed_invoice_id,
+            command.case_id,
+            command.merchant_id,
+            command.customer_id,
+            command.amount_paise,
+            command.currency,
+            surface_type.value,
+            command.provider_invoice_id or command.failed_invoice_id,
+        )
+        signed_scope = (
+            data.recovery_action_id,
+            data.failed_invoice_id,
+            data.case_id,
+            data.merchant_id,
+            data.customer_id,
+            data.exact_amount_paise,
+            data.currency,
+            data.payment_surface_type,
+            data.payment_surface_reference,
+        )
+        if signed_scope != command_scope:
+            return ActionExecutionResult(
+                status="REJECTED",
+                provider="none",
+                reason_code="A2A_MANDATE_COMMAND_SCOPE_MISMATCH",
+            )
+
+        async with get_session_factory()() as session:
+            statement = (
+                select(
+                    RecoveryActionRecord,
+                    PolicyDecisionRecord,
+                    RecoveryCase,
+                    Invoice,
+                    A2AMandateNonceConsumption,
+                )
+                .join(RecoveryCase, RecoveryCase.id == RecoveryActionRecord.case_id)
+                .join(
+                    PolicyDecisionRecord,
+                    PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
+                )
+                .join(Invoice, Invoice.id == RecoveryCase.failed_invoice_id)
+                .join(
+                    A2AMandateNonceConsumption,
+                    A2AMandateNonceConsumption.recovery_action_id == RecoveryActionRecord.id,
+                )
+                .where(
+                    RecoveryActionRecord.id == command.recovery_action_id,
+                    RecoveryActionRecord.case_id == command.case_id,
+                    PolicyDecisionRecord.case_id == command.case_id,
+                    A2AMandateNonceConsumption.mandate_id == data.mandate_id,
+                    A2AMandateNonceConsumption.claim_id
+                    == hashlib.sha256(canonical_json(data)).hexdigest(),
+                )
+                .with_for_update()
+            )
+            row = (await session.execute(statement)).first()
+            if row is None:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="A2A_VERIFIED_AUTHORIZATION_NOT_FOUND",
+                )
+            action, policy, recovery_case, invoice, authorization = row._tuple()
+
+            persisted_scope = (
+                authorization.recovery_action_id,
+                authorization.failed_invoice_id,
+                authorization.case_id,
+                authorization.merchant_id,
+                authorization.customer_id,
+                authorization.exact_amount_paise,
+                authorization.currency,
+                authorization.payment_surface_type,
+                authorization.payment_surface_reference,
+            )
+            current_scope = (
+                action.id,
+                invoice.id,
+                recovery_case.id,
+                recovery_case.merchant_id,
+                recovery_case.customer_id,
+                recovery_case.amount_at_risk_paise,
+                invoice.currency,
+                surface_type.value,
+                invoice.provider_invoice_id,
+            )
+            outstanding_paise = invoice.amount_paise - invoice.amount_paid_paise
+            unsafe = (
+                persisted_scope != signed_scope
+                or current_scope != signed_scope
+                or authorization.task_id != data.task_id
+                or authorization.signer_key_id != data.signer_key_id
+                or authorization.authorized_action != "OPEN_EXACT_PAYMENT_SURFACE"
+                or authorization.issued_at != data.issued_at
+                or authorization.expires_at != data.expires_at
+                or data.expires_at <= now
+                or data.expires_at > recovery_case.recovery_deadline
+                or _instant(command.recovery_deadline) != recovery_case.recovery_deadline
+                or outstanding_paise != data.exact_amount_paise
+                or recovery_case.case_outcome != CaseOutcome.OPEN
+                or recovery_case.payment_state == PaymentState.CAPTURED
+                or recovery_case.case_recovered
+                or action.action_type != RecoveryActionType.SEND_TO_CUSTOMER_AGENT
+                or policy.disposition
+                not in {PolicyDisposition.ALLOW, PolicyDisposition.DELAY}
+            )
+            if unsafe:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="A2A_AUTHORIZATION_STALE_OR_MISMATCHED",
+                )
+
+            if action.status == ActionStatus.SUCCEEDED:
+                return ActionExecutionResult(
+                    status="SUCCEEDED",
+                    provider="persisted",
+                    provider_reference=action.external_reference,
+                    customer_url=action.customer_url,
+                    reason_code="ALREADY_EXECUTED",
+                )
+            if action.status == ActionStatus.CANCELLED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_CANCELLED",
+                )
+            if authorization.execution_status in {"EXECUTING", "UNCERTAIN"}:
+                if surface_type == PaymentSurfaceType.STANDARD_PAYMENT_LINK:
+                    return _PaymentActionClaim(action=action, reconcile_before_submission=True)
+                return ActionExecutionResult(
+                    status="UNCERTAIN",
+                    provider="unknown",
+                    provider_reference=action.external_reference,
+                    reason_code="SUBMISSION_RECONCILIATION_REQUIRED",
+                )
+            if authorization.execution_status == "SUCCEEDED":
+                return ActionExecutionResult(
+                    status="SUCCEEDED",
+                    provider="persisted",
+                    provider_reference=action.external_reference,
+                    customer_url=action.customer_url,
+                    reason_code="ALREADY_EXECUTED",
+                )
+            if authorization.execution_status != "AUTHORIZED":
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="A2A_AUTHORIZATION_NOT_EXECUTABLE",
+                )
+            if action.status not in {ActionStatus.PROPOSED, ActionStatus.SCHEDULED}:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_NOT_AUTHORIZED",
+                )
+            due_at = self._effective_delay(action, policy)
+            if due_at is not None and now < due_at:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_NOT_DUE",
+                )
+
+            action.status = ActionStatus.EXECUTING
+            action.updated_at = now
+            authorization.execution_status = "EXECUTING"
+            authorization.execution_claimed_at = now
+            await session.commit()
+            return _PaymentActionClaim(action=action, reconcile_before_submission=False)
 
     async def reconcile_case(self, command: ReconciliationInput) -> ReconciliationResult:
         if isinstance(self._payment_provider, MockPaymentProvider):

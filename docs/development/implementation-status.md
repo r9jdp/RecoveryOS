@@ -61,9 +61,11 @@ provider interfaces:
   action-level reports. All evaluation revenue is labelled simulated and cannot mutate merchant
   revenue; production scoring safely falls back when the artifact is absent.
 - The separate customer-agent service implements A2A 1.0 Agent Cards and PascalCase JSON-RPC
-  lifecycle methods. Exact customer approval returns an Ed25519 `recovery.mandate.v1` artifact;
-  pinned-key verification rejects tampering, expiry, scope changes, and replay. PostgreSQL nonce
-  consumption uses one `INSERT ... ON CONFLICT DO NOTHING RETURNING` serialization point.
+  lifecycle methods. The current exact customer-approval contract returns an Ed25519
+  `recovery.mandate.v2` artifact bound to the persisted `recovery_action_id` and
+  `failed_invoice_id`; pinned-key verification rejects tampering, expiry, scope changes, and
+  conflicting replay. PostgreSQL nonce/claim consumption uses one
+  `INSERT ... ON CONFLICT DO NOTHING RETURNING` serialization point.
 - The recovery-agent origin exposes a fail-closed delegation endpoint. A2A remains disabled by
   default, and mandate-verifier construction is activity-side so signature verification and nonce
   writes never enter deterministic workflow code.
@@ -137,9 +139,17 @@ final combined gate is recorded separately only after the continuation branch is
   operator-auth gate is inactive, while authenticated server-to-server callers retain the dedicated
   token path.
 - Hosted customer-agent tasks use SQL. The live A2A bridge verifies exact signed scope, atomically
-  consumes the nonce, and completes the task with an idempotent, pinned-key Ed25519
-  `recovery.receipt.v1` only after authoritative recovery. Missing, tampered, wrong-scope, and replayed
-  receipts fail closed.
+  consumes the nonce/canonical claim, and opens only the mandate-bound recovery action, failed
+  invoice, amount, currency, and payment surface. Service calls use the configured S2S Bearer
+  credential; a reused idempotency key with changed request scope fails closed.
+- Each task exposes a deterministic HMAC approval capability. Customer summary, language
+  interpretation, and decision routes require that task-scoped Bearer token. An optional OpenAI
+  Responses adapter interprets customer text against database-derived display context with strict
+  structured output, but returns `authorization_effect=NONE`; only the separate exact approval can
+  sign a mandate.
+- After authoritative recovery, the worker completes the task with an idempotent, pinned-key
+  Ed25519 `recovery.receipt.v2` carrying the same `recovery_action_id` and `failed_invoice_id`.
+  Missing, tampered, wrong-scope, unknown-key, and replay-conflicting receipts fail closed.
 - Customer-agent container, edge, deployment, and monitoring health checks use `/health/ready` and
   require the hosted SQL store, preventing promotion of a restart-unsafe memory-backed process.
 - RecoveryBench model files are byte-reproducible across repeated fixed-seed builds; the current

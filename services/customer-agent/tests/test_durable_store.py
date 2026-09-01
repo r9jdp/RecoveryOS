@@ -20,10 +20,11 @@ from services.api.app.integrations.a2a.receipts import (
 _A2A_HEADERS = {
     "A2A-Version": "1.0",
     "A2A-Extensions": (
-        "https://recoveryos.dev/a2a/recovery-mandate/v1,"
-        "https://recoveryos.dev/a2a/recovery-receipt/v1"
+        "https://recoveryos.dev/a2a/recovery-mandate/v2,"
+        "https://recoveryos.dev/a2a/recovery-receipt/v2"
     ),
 }
+_REQUEST_EXPIRES_AT = datetime.now(UTC) + timedelta(hours=1)
 
 
 def _database_url(path: Path) -> str:
@@ -52,16 +53,18 @@ def _request(*, request_id: str, idempotency_key: str = "case-durable:a2a") -> d
                 "parts": [
                     {
                         "data": {
-                            "protocol_version": "recovery.request.v1",
+                            "protocol_version": "recovery.request.v2",
                             "idempotency_key": idempotency_key,
                             "case_id": "case-durable",
                             "merchant_id": "merchant-1",
                             "customer_id": "customer-1",
+                            "recovery_action_id": "action-durable",
+                            "failed_invoice_id": "invoice-local-durable",
                             "exact_amount_paise": 149900,
                             "currency": "INR",
                             "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
                             "payment_surface_reference": "inv_durable",
-                            "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+                            "expires_at": _REQUEST_EXPIRES_AT.isoformat(),
                             "context": {
                                 "merchant_display_name": "FitBox",
                                 "plan_name": "FitBox Annual",
@@ -69,6 +72,15 @@ def _request(*, request_id: str, idempotency_key: str = "case-durable:a2a") -> d
                                     "The payment needs customer authentication before it can "
                                     "continue."
                                 ),
+                                "invoice_state": "issued",
+                                "payment_state": "FAILED",
+                                "subscription_state": "PENDING",
+                                "provider_subscription_state": "pending",
+                                "preferred_language": "en-IN",
+                                "invoice_due_at": (
+                                    _REQUEST_EXPIRES_AT - timedelta(days=1)
+                                ).isoformat(),
+                                "recovery_deadline": _REQUEST_EXPIRES_AT.isoformat(),
                             },
                         }
                     }
@@ -103,6 +115,8 @@ def _signed_receipt(
             mandate_id=mandate_id,
             merchant_id="merchant-1",
             case_id="case-durable",
+            recovery_action_id="action-durable",
+            failed_invoice_id="invoice-local-durable",
             exact_amount_paise=149_900,
             currency="INR",
             provider_reference=provider_reference,
@@ -229,6 +243,31 @@ async def test_duplicate_send_is_serialized_by_durable_store(tmp_path: Path) -> 
         )
         assert first.status_code == second.status_code == 200
         assert first.json()["result"]["task"]["id"] == second.json()["result"]["task"]["id"]
+    await app.state.customer_agent_store.close()
+
+
+@pytest.mark.asyncio
+async def test_durable_store_rejects_changed_request_for_existing_idempotency_key(
+    tmp_path: Path,
+) -> None:
+    database_url = _database_url(tmp_path / "idempotency-conflict.db")
+    await create_schema_for_tests(database_url)
+    app = create_app(_settings(database_url))
+    first_request = _request(request_id="original")
+    changed_request = deepcopy(_request(request_id="changed"))
+    changed_request["params"]["message"]["parts"][0]["data"]["payment_surface_reference"] = (
+        "inv_changed"
+    )
+
+    async with await _client(app) as client:
+        created = await client.post("/rpc", json=first_request)
+        conflict = await client.post("/rpc", json=changed_request)
+
+    assert created.status_code == conflict.status_code == 200
+    assert conflict.json()["error"]["code"] == -32002
+    assert conflict.json()["error"]["message"] == (
+        "Idempotency key was reused with a different recovery request"
+    )
     await app.state.customer_agent_store.close()
 
 

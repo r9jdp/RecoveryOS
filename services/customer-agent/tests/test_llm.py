@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Any
 
 import httpx
@@ -9,6 +10,7 @@ import pytest
 from app.config import CustomerAgentSettings
 from app.llm import (
     LanguageInterpreterProviderError,
+    LanguageInterpreterTimeoutError,
     OpenAIResponsesLanguageInterpreter,
 )
 from app.main import create_app
@@ -18,8 +20,8 @@ from pydantic import ValidationError
 _A2A_HEADERS = {
     "A2A-Version": "1.0",
     "A2A-Extensions": (
-        "https://recoveryos.dev/a2a/recovery-mandate/v1,"
-        "https://recoveryos.dev/a2a/recovery-receipt/v1"
+        "https://recoveryos.dev/a2a/recovery-mandate/v2,"
+        "https://recoveryos.dev/a2a/recovery-receipt/v2"
     ),
 }
 
@@ -30,6 +32,8 @@ def _summary() -> ApprovalSummary:
         state="TASK_STATE_AUTH_REQUIRED",
         merchant_id="merchant-1",
         case_id="case-1",
+        recovery_action_id="action-1",
+        failed_invoice_id="invoice-1",
         exact_amount_paise=149_900,
         currency="INR",
         payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
@@ -38,6 +42,13 @@ def _summary() -> ApprovalSummary:
         merchant_display_name="FitBox",
         plan_name="FitBox Annual",
         failure_explanation=("The payment needs customer authentication before it can continue."),
+        invoice_state="issued",
+        payment_state="FAILED",
+        subscription_state="PENDING",
+        provider_subscription_state="pending",
+        preferred_language="en-IN",
+        invoice_due_at=datetime.now(UTC) - timedelta(days=1),
+        recovery_deadline=datetime.now(UTC) + timedelta(minutes=10),
     )
 
 
@@ -54,11 +65,13 @@ def _recovery_request() -> dict[str, Any]:
                 "parts": [
                     {
                         "data": {
-                            "protocol_version": "recovery.request.v1",
+                            "protocol_version": "recovery.request.v2",
                             "idempotency_key": "case-1:llm-test",
                             "case_id": "case-1",
                             "merchant_id": "merchant-1",
                             "customer_id": "customer-1",
+                            "recovery_action_id": "action-1",
+                            "failed_invoice_id": "invoice-1",
                             "exact_amount_paise": 149_900,
                             "currency": "INR",
                             "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
@@ -71,6 +84,17 @@ def _recovery_request() -> dict[str, Any]:
                                     "The payment needs customer authentication before it can "
                                     "continue."
                                 ),
+                                "invoice_state": "issued",
+                                "payment_state": "FAILED",
+                                "subscription_state": "PENDING",
+                                "provider_subscription_state": "pending",
+                                "preferred_language": "en-IN",
+                                "invoice_due_at": (
+                                    datetime.now(UTC) - timedelta(days=1)
+                                ).isoformat(),
+                                "recovery_deadline": (
+                                    datetime.now(UTC) + timedelta(minutes=10)
+                                ).isoformat(),
                             },
                         }
                     }
@@ -137,18 +161,32 @@ async def test_openai_request_is_stateless_strict_and_omits_exact_scope() -> Non
     body = captured["body"]
     assert body["model"] == "test-structured-model"
     assert body["store"] is False
+    assert body["safety_identifier"] == sha256(b"task-1").hexdigest()
+    assert len(body["safety_identifier"]) == 64
     assert body["text"]["format"]["type"] == "json_schema"
     assert body["text"]["format"]["strict"] is True
     assert body["text"]["format"]["schema"]["additionalProperties"] is False
     serialized_input = body["input"][0]["content"][0]["text"]
     safe_input = json.loads(serialized_input)
-    assert safe_input["case_context"] == {
+    assert safe_input["case_context"] | {
+        "invoice_due_at": None,
+        "recovery_deadline": None,
+    } == {
         "merchant_display_name": "FitBox",
         "plan_name": "FitBox Annual",
         "failure_explanation": (
             "The payment needs customer authentication before it can continue."
         ),
+        "invoice_state": "issued",
+        "payment_state": "FAILED",
+        "subscription_state": "PENDING",
+        "provider_subscription_state": "pending",
+        "preferred_language": "en-IN",
+        "invoice_due_at": None,
+        "recovery_deadline": None,
     }
+    assert safe_input["case_context"]["invoice_due_at"] is not None
+    assert safe_input["case_context"]["recovery_deadline"] is not None
     assert "149900" not in serialized_input
     assert "inv_123" not in serialized_input
     assert "payment_surface" not in serialized_input
@@ -207,7 +245,14 @@ async def test_approve_interpretation_cannot_sign_or_change_authoritative_scope(
 
 
 @pytest.mark.asyncio
-async def test_configured_provider_failure_has_no_keyword_fallback() -> None:
+async def test_configured_provider_failure_has_no_keyword_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_wait(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", no_wait)
+
     async def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, json={"error": {"message": "unavailable"}})
 
@@ -239,6 +284,250 @@ async def test_configured_provider_failure_has_no_keyword_fallback() -> None:
     assert failed.status_code == 502
     assert failed.json()["detail"] == "language model provider returned HTTP 503"
     assert summary.json()["state"] == "TASK_STATE_AUTH_REQUIRED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retryable_status", [408, 409, 429, 500, 503])
+async def test_retryable_http_statuses_are_retried(
+    retryable_status: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", record_sleep)
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(retryable_status)
+        return httpx.Response(200, json=_completed_response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        result = await interpreter.interpret(
+            request=CustomerLanguageRequest(text="What does this mean?"),
+            summary=_summary(),
+        )
+
+    assert result.intent == "APPROVE"
+    assert calls == 2
+    assert delays == [0.1]
+
+
+@pytest.mark.asyncio
+async def test_retries_use_exponential_backoff_and_stop_after_two_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", record_sleep)
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        with pytest.raises(LanguageInterpreterProviderError, match="HTTP 503"):
+            await interpreter.interpret(
+                request=CustomerLanguageRequest(text="Please explain."),
+                summary=_summary(),
+            )
+
+    assert calls == 3
+    assert delays == [0.1, 0.2]
+
+
+@pytest.mark.asyncio
+async def test_retry_after_is_honored_with_a_bounded_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", record_sleep)
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, headers={"Retry-After": "120"})
+        return httpx.Response(200, json=_completed_response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        await interpreter.interpret(
+            request=CustomerLanguageRequest(text="Please explain."),
+            summary=_summary(),
+        )
+
+    assert calls == 2
+    assert delays == [2.0]
+
+
+@pytest.mark.asyncio
+async def test_non_retryable_client_error_fails_immediately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    async def fail_if_called(_delay: float) -> None:
+        pytest.fail("non-retryable HTTP response must not sleep")
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", fail_if_called)
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(422)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        with pytest.raises(LanguageInterpreterProviderError, match="HTTP 422"):
+            await interpreter.interpret(
+                request=CustomerLanguageRequest(text="Please explain."),
+                summary=_summary(),
+            )
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_transport_error_is_retried_without_exceeding_retry_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+    delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("app.llm.asyncio.sleep", record_sleep)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise httpx.ConnectError("connection failed", request=request)
+        return httpx.Response(200, json=_completed_response(intent="UNCLEAR"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        result = await interpreter.interpret(
+            request=CustomerLanguageRequest(text="Maybe."),
+            summary=_summary(),
+        )
+
+    assert result.intent == "UNCLEAR"
+    assert calls == 3
+    assert delays == [0.1, 0.2]
+
+
+@pytest.mark.asyncio
+async def test_retry_delay_cannot_exceed_total_timeout_budget() -> None:
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, headers={"Retry-After": "1"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=0.01,
+            http_client=http_client,
+        )
+        with pytest.raises(LanguageInterpreterTimeoutError, match="timed out"):
+            await interpreter.interpret(
+                request=CustomerLanguageRequest(text="Please explain."),
+                summary=_summary(),
+            )
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("body", "error_match"),
+    [
+        (
+            {
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "refusal", "refusal": "Cannot comply."}],
+                    }
+                ],
+            },
+            "refused the request",
+        ),
+        (
+            {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}},
+            "did not complete",
+        ),
+        ({"status": "completed", "output": []}, "no structured output"),
+    ],
+)
+async def test_refusal_incomplete_and_missing_output_fail_closed(
+    body: dict[str, Any],
+    error_match: str,
+) -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=body)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        interpreter = OpenAIResponsesLanguageInterpreter(
+            api_key="server-secret",
+            model="test-structured-model",
+            timeout_seconds=4,
+            http_client=http_client,
+        )
+        with pytest.raises(LanguageInterpreterProviderError, match=error_match):
+            await interpreter.interpret(
+                request=CustomerLanguageRequest(text="Please explain."),
+                summary=_summary(),
+            )
 
 
 @pytest.mark.asyncio

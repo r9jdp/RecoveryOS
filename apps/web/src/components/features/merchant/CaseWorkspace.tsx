@@ -148,9 +148,26 @@ function customerInstruction(
     return "Start one consented, operator-approved recovery call";
   }
   if (action === "ESCALATE_TO_HUMAN") return "Send this case to human review";
-  if (action === "WAIT_FOR_GATEWAY_RETRY") return "Wait for Razorpay's native retry";
+  if (action === "WAIT_FOR_GATEWAY_RETRY")
+    return "Wait for Razorpay's native retry";
   if (action === "STOP") return "Stop automated recovery safely";
   return "Complete the operator-approved recovery step";
+}
+
+export function customerAgentApprovalHref(
+  timeline: CaseDetailFixture["timeline"],
+): string | null {
+  const event = [...timeline]
+    .reverse()
+    .find((item) => item.event_type === "A2A_AUTHORIZATION_STARTED");
+  const approvalPath = event?.payload.approval_path;
+  if (typeof approvalPath === "string" && approvalPath.startsWith("/a2a/")) {
+    return approvalPath;
+  }
+  const taskId = event?.payload.remote_task_id;
+  return typeof taskId === "string" && taskId
+    ? `/a2a/${encodeURIComponent(taskId)}`
+    : null;
 }
 
 function safetyContactDisposition(
@@ -441,14 +458,7 @@ function CaseContent({
     fixture.recommendation.action,
     fixture.recommendation.payment_surface_type,
   );
-  const customerAgentTaskId = [...fixture.timeline]
-    .reverse()
-    .find((event) => event.event_type === "A2A_AUTHORIZATION_STARTED")
-    ?.payload.remote_task_id;
-  const customerAgentHref =
-    typeof customerAgentTaskId === "string" && customerAgentTaskId
-      ? `/a2a/${encodeURIComponent(customerAgentTaskId)}`
-      : null;
+  const customerAgentHref = customerAgentApprovalHref(fixture.timeline);
 
   const applySafetyDisposition = useCallback(async () => {
     if (!selectedSafety) return;
@@ -1061,7 +1071,9 @@ function CaseContent({
                 value:
                   fixture.recommendation.expected_utility_paise === null
                     ? "Unavailable"
-                    : formatPaise(fixture.recommendation.expected_utility_paise),
+                    : formatPaise(
+                        fixture.recommendation.expected_utility_paise,
+                      ),
               },
               ...(fixture.recommendation.model_name
                 ? [
@@ -1080,9 +1092,10 @@ function CaseContent({
                           "CHECKSUM_VERIFIED_MODEL" ||
                         fixture.recommendation.scoring_mode === "TRAINED_MODEL"
                           ? "Checksum-verified trained model"
-                          : fixture.recommendation.scoring_mode === "CUSTOM_SCORER"
+                          : fixture.recommendation.scoring_mode ===
+                              "CUSTOM_SCORER"
                             ? "Configured recovery scorer"
-                          : "Deterministic fallback",
+                            : "Deterministic fallback",
                     },
                   ]
                 : []),

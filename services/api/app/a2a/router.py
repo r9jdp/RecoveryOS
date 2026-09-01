@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import UTC
-from typing import Annotated, Any
+from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -30,7 +31,8 @@ def _truthy(value: str | None) -> bool:
 
 def get_customer_agent_client() -> A2ACustomerAgentClient:
     return A2ACustomerAgentClient(
-        origin=os.getenv("CUSTOMER_AGENT_ORIGIN", "http://localhost:8010")
+        origin=os.getenv("CUSTOMER_AGENT_ORIGIN", "http://localhost:8010"),
+        bearer_token=os.getenv("CUSTOMER_AGENT_S2S_BEARER_TOKEN", "").strip() or None,
     )
 
 
@@ -65,6 +67,19 @@ def _task_result(task: CustomerAgentTask) -> dict[str, object]:
 @router.get("/.well-known/agent-card.json", include_in_schema=False)
 async def recovery_agent_card() -> dict[str, object]:
     origin = os.getenv("RECOVERY_AGENT_ORIGIN", "http://localhost:8000").rstrip("/")
+    bearer_auth_required = _inbound_bearer_token() is not None
+    security_schemes: dict[str, object] = {}
+    security: list[dict[str, list[str]]] = []
+    if bearer_auth_required:
+        security_schemes = {
+            "a2aInboundBearer": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "opaque",
+                "description": "Bearer credential for inbound A2A delegation.",
+            }
+        }
+        security = [{"a2aInboundBearer": []}]
     return {
         "name": "RecoveryOS Recovery Agent",
         "description": (
@@ -84,7 +99,7 @@ async def recovery_agent_card() -> dict[str, object]:
             "pushNotifications": False,
             "extensions": [
                 {
-                    "uri": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+                    "uri": RECOVERY_MANDATE_EXTENSION_URI,
                     "required": True,
                 }
             ],
@@ -95,26 +110,39 @@ async def recovery_agent_card() -> dict[str, object]:
             {
                 "id": "request-customer-recovery-authorization",
                 "name": "Request recovery authorization",
-                "description": "Creates an exact recovery.request.v1 DataPart for customer review.",
+                "description": "Creates an exact recovery.request.v2 DataPart for customer review.",
                 "tags": ["recovery", "subscription", "authorization"],
                 "inputModes": ["application/json"],
                 "outputModes": ["application/json"],
             }
         ],
-        "securitySchemes": {},
-        "security": [],
+        "securitySchemes": security_schemes,
+        "security": security,
     }
 
 
 @router.post("/a2a/rpc", include_in_schema=False)
 async def recovery_agent_rpc(
-    payload: dict[str, Any],
+    http_request: Request,
     client: CustomerAgentDependency,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
     a2a_extensions: Annotated[str | None, Header(alias="A2A-Extensions")] = None,
 ) -> JSONResponse:
     """Delegate bounded authorization tasks without executing a payment."""
 
+    if not _bearer_authorized(authorization, _inbound_bearer_token()):
+        return JSONResponse(
+            {"detail": "A valid service credential is required"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = await http_request.json()
+    except ValueError:
+        return _rpc_error(None, -32700, "Parse error")
+    if not isinstance(payload, dict):
+        return _rpc_error(None, -32600, "Invalid JSON-RPC request")
     request_id = payload.get("id")
     safe_request_id = request_id if isinstance(request_id, (str, int)) else None
     if a2a_version != "1.0":
@@ -164,3 +192,16 @@ async def recovery_agent_rpc(
         return _rpc_error(safe_request_id, -32003, "Customer agent delegation failed")
 
     return JSONResponse({"jsonrpc": "2.0", "id": safe_request_id, "result": result})
+
+
+def _inbound_bearer_token() -> str | None:
+    return os.getenv("RECOVERY_AGENT_A2A_INBOUND_BEARER_TOKEN", "").strip() or None
+
+
+def _bearer_authorized(authorization: str | None, expected_token: str | None) -> bool:
+    if expected_token is None:
+        return True
+    scheme, separator, supplied_token = (authorization or "").partition(" ")
+    if separator != " " or scheme.casefold() != "bearer":
+        return False
+    return secrets.compare_digest(supplied_token.encode(), expected_token.encode())

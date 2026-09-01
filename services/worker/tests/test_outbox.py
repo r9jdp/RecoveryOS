@@ -207,5 +207,6 @@ async def test_a2a_recommendation_starts_with_exact_failed_invoice_surface() -> 
         assert command.failed_invoice_id == "inv_fitbox_aug_2026"
         assert command.provider_subscription_id == "sub_provider_worker_a2a"
         assert command.provider_invoice_id == "inv_provider_worker_a2a"
+        assert command.recovery_action_id == "action_worker_a2a"
     finally:
         await engine.dispose()

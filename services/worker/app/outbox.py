@@ -202,6 +202,7 @@ class TemporalRazorpaySignalDispatcher:
             payment_surface_type=payment_surface_type,
             provider_subscription_id=subscription.provider_subscription_id,
             provider_invoice_id=invoice.provider_invoice_id,
+            recovery_action_id=action_id,
         )
 
     @staticmethod

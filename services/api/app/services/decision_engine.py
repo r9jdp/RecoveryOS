@@ -98,11 +98,15 @@ def customer_agent_executor_ready() -> bool:
     return (
         isinstance(public_keys, dict)
         and bool(public_keys)
-        and all(isinstance(key, str) and isinstance(value, str) for key, value in public_keys.items())
+        and all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in public_keys.items()
+        )
         and os.getenv("RECOVERY_AGENT_RECEIPT_SIGNING_MODE", "mock").strip().lower()
         == "configured"
         and bool(os.getenv("RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID", "").strip())
         and bool(os.getenv("RECOVERY_AGENT_RECEIPT_ED25519_PRIVATE_KEY", "").strip())
+        and bool(os.getenv("CUSTOMER_AGENT_S2S_BEARER_TOKEN", "").strip())
     )
 
 

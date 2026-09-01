@@ -2,6 +2,59 @@ import { expect, type Page, type TestInfo } from "@playwright/test";
 
 export const FITBOX_CASE_ID = "case_fitbox_aug_2026";
 export const FITBOX_CASE_PATH = `/cases/${FITBOX_CASE_ID}`;
+export const A2A_APPROVAL_TASK_ID = "e2e-a2a-capability";
+export const A2A_APPROVAL_TOKEN = "e2e-a2a-capability-token";
+export const A2A_APPROVAL_PATH = `/a2a/${A2A_APPROVAL_TASK_ID}#token=${A2A_APPROVAL_TOKEN}`;
+
+export async function mockA2AApproval(page: Page): Promise<void> {
+  await page.route(
+    `**/__e2e-agent/v1/tasks/${A2A_APPROVAL_TASK_ID}/approval`,
+    async (route) => {
+      const request = route.request();
+      expect(request.headers().authorization).toBe(
+        `Bearer ${A2A_APPROVAL_TOKEN}`,
+      );
+
+      if (request.method() === "GET") {
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            task_id: A2A_APPROVAL_TASK_ID,
+            state: "TASK_STATE_AUTH_REQUIRED",
+            merchant_id: "merchant_fitbox",
+            case_id: FITBOX_CASE_ID,
+            exact_amount_paise: 149_900,
+            currency: "INR",
+            payment_surface_type: "SUBSCRIPTION_INVOICE_LINK",
+            payment_surface_reference: "inv_fitbox_aug_2026",
+            expires_at: "2099-09-01T12:00:00Z",
+            merchant_display_name: "FitBox",
+            plan_name: "FitBox Annual",
+            failure_explanation:
+              "The renewal failed and needs the customer to complete payment.",
+          }),
+        });
+        return;
+      }
+
+      expect(request.method()).toBe("POST");
+      expect(request.postDataJSON()).toEqual({
+        decision: "APPROVE",
+        merchant_id: "merchant_fitbox",
+        case_id: FITBOX_CASE_ID,
+        exact_amount_paise: 149_900,
+        payment_surface_reference: "inv_fitbox_aug_2026",
+      });
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: A2A_APPROVAL_TASK_ID,
+          status: { state: "TASK_STATE_WORKING" },
+        }),
+      });
+    },
+  );
+}
 
 export async function expectMockDashboard(page: Page): Promise<void> {
   await expect(

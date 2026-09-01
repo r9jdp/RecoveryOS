@@ -16,27 +16,33 @@ from services.api.app.integrations.a2a.models import (
 from services.api.app.integrations.a2a.nonce_store import InMemoryNonceStore
 
 
-def signed_mandate(*, expires_at: datetime | None = None):  # type: ignore[no-untyped-def]
+def signed_mandate(  # type: ignore[no-untyped-def]
+    *, expires_at: datetime | None = None, **changes: object
+):
     from app.models import RecoveryMandateData as SignerMandateData
     from app.signing import MandateSigner
 
     now = datetime(2026, 8, 28, 10, 0, tzinfo=UTC)
     signer = MandateSigner.from_seed(signer_key_id="customer-key-1", seed=bytes(range(32)))
-    data = SignerMandateData(
-        mandate_id="mandate-1",
-        nonce="nonce-1",
-        signer_key_id="customer-key-1",
-        task_id="task-1",
-        merchant_id="merchant-1",
-        case_id="case-1",
-        customer_id="customer-1",
-        exact_amount_paise=149900,
-        currency="INR",
-        payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
-        payment_surface_reference="inv_123",
-        issued_at=now,
-        expires_at=expires_at or now + timedelta(minutes=10),
-    )
+    values: dict[str, object] = {
+        "mandate_id": "mandate-1",
+        "nonce": "nonce-1",
+        "signer_key_id": "customer-key-1",
+        "task_id": "task-1",
+        "merchant_id": "merchant-1",
+        "case_id": "case-1",
+        "customer_id": "customer-1",
+        "recovery_action_id": "action-1",
+        "failed_invoice_id": "invoice-local-1",
+        "exact_amount_paise": 149900,
+        "currency": "INR",
+        "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
+        "payment_surface_reference": "inv_123",
+        "issued_at": now,
+        "expires_at": expires_at or now + timedelta(minutes=10),
+    }
+    values.update(changes)
+    data = SignerMandateData.model_validate(values)
     return signer, signer.sign(data).model_dump(mode="json"), now
 
 
@@ -46,6 +52,8 @@ def expected_scope(**changes: object) -> ExpectedMandateScope:
         "merchant_id": "merchant-1",
         "case_id": "case-1",
         "customer_id": "customer-1",
+        "recovery_action_id": "action-1",
+        "failed_invoice_id": "invoice-local-1",
         "exact_amount_paise": 149900,
         "currency": "INR",
         "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
@@ -63,13 +71,57 @@ def verifier(signer, store: InMemoryNonceStore | None = None) -> MandateVerifier
 
 
 @pytest.mark.asyncio
-async def test_valid_signature_and_exact_scope_are_consumed_once() -> None:
+async def test_identical_verifier_retry_recovers_the_same_claim() -> None:
     signer, envelope, now = signed_mandate()
     active = verifier(signer)
-    verified = await active.verify_and_consume(envelope, expected=expected_scope(), now=now)
-    assert verified.data == RecoveryMandateData.model_validate(envelope["data"])
-    with pytest.raises(MandateVerificationError, match="already consumed") as replay:
-        await active.verify_and_consume(envelope, expected=expected_scope(), now=now)
+    first = await active.verify_and_consume(envelope, expected=expected_scope(), now=now)
+    retry = await active.verify_and_consume(
+        envelope,
+        expected=expected_scope(),
+        now=now + timedelta(seconds=1),
+    )
+    assert first.data == RecoveryMandateData.model_validate(envelope["data"])
+    assert retry.data == first.data
+    assert retry.claim_id == first.claim_id
+
+
+@pytest.mark.asyncio
+async def test_identical_retry_after_expiry_recovers_only_a_previously_claimed_mandate() -> None:
+    signer, envelope, now = signed_mandate()
+    active = verifier(signer)
+
+    first = await active.verify_and_consume(envelope, expected=expected_scope(), now=now)
+    retry = await active.verify_and_consume(
+        envelope,
+        expected=expected_scope(),
+        now=now + timedelta(minutes=11),
+    )
+
+    assert retry.claim_id == first.claim_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("changes", "expected_changes"),
+    [
+        ({"exact_amount_paise": 149_901}, {"exact_amount_paise": 149_901}),
+        ({"nonce": "nonce-2"}, {}),
+    ],
+)
+async def test_changed_claim_cannot_reuse_nonce_or_mandate_id(
+    changes: dict[str, object], expected_changes: dict[str, object]
+) -> None:
+    signer, envelope, now = signed_mandate()
+    active = verifier(signer)
+    await active.verify_and_consume(envelope, expected=expected_scope(), now=now)
+
+    _, conflicting, _ = signed_mandate(**changes)
+    with pytest.raises(MandateVerificationError) as replay:
+        await active.verify_and_consume(
+            conflicting,
+            expected=expected_scope(**expected_changes),
+            now=now,
+        )
     assert replay.value.code == "REPLAYED"
 
 
@@ -108,11 +160,29 @@ async def test_malformed_envelope_and_signature_encoding_have_structured_errors(
 
 
 @pytest.mark.asyncio
+async def test_legacy_v1_mandate_is_not_provider_executable() -> None:
+    signer, envelope, now = signed_mandate()
+    legacy = {
+        **envelope,
+        "data": {**envelope["data"], "protocol_version": "recovery.mandate.v1"},
+    }
+    with pytest.raises(MandateVerificationError) as rejected:
+        await verifier(signer).verify_and_consume(
+            legacy,
+            expected=expected_scope(),
+            now=now,
+        )
+    assert rejected.value.code == "MALFORMED_MANDATE"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("changed", "value"),
     [
         ("merchant_id", "merchant-wrong"),
         ("case_id", "case-wrong"),
+        ("recovery_action_id", "action-wrong"),
+        ("failed_invoice_id", "invoice-local-wrong"),
         ("exact_amount_paise", 149901),
         ("payment_surface_reference", "inv_wrong"),
     ],
@@ -151,7 +221,7 @@ async def test_expired_and_unknown_signer_mandates_are_rejected() -> None:
 
 
 @pytest.mark.asyncio
-async def test_concurrent_verification_allows_exactly_one_consumer() -> None:
+async def test_concurrent_identical_verification_is_idempotent() -> None:
     signer, envelope, now = signed_mandate()
     active = verifier(signer, InMemoryNonceStore())
 
@@ -163,5 +233,4 @@ async def test_concurrent_verification_allows_exactly_one_consumer() -> None:
         return "VERIFIED"
 
     results = await asyncio.gather(*(consume() for _ in range(25)))
-    assert results.count("VERIFIED") == 1
-    assert results.count("REPLAYED") == 24
+    assert results == ["VERIFIED"] * 25

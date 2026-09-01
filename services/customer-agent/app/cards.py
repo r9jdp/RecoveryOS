@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v1"
-RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v1"
+RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v2"
+RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v2"
 
 
 def customer_agent_card(
@@ -12,7 +12,20 @@ def customer_agent_card(
     signer_key_id: str,
     public_key: str,
     accepted_receipt_signer_key_ids: list[str],
+    bearer_auth_required: bool,
 ) -> dict[str, object]:
+    security_schemes: dict[str, object] = {}
+    security: list[dict[str, list[str]]] = []
+    if bearer_auth_required:
+        security_schemes = {
+            "recoveryOSS2SBearer": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "opaque",
+                "description": "RecoveryOS service-to-service bearer credential.",
+            }
+        }
+        security = [{"recoveryOSS2SBearer": []}]
     return {
         "name": "RecoveryOS Customer Authorization Agent",
         "description": (
@@ -45,7 +58,7 @@ def customer_agent_card(
                     "required": True,
                     "params": {
                         "authentication": "Ed25519",
-                        "protocolVersion": "recovery.receipt.v1",
+                        "protocolVersion": "recovery.receipt.v2",
                         "canonicalization": "RECOVERYOS_CANONICAL_JSON_V1",
                         "acceptedSignerKeyIds": accepted_receipt_signer_key_ids,
                         "scope": [
@@ -54,6 +67,8 @@ def customer_agent_card(
                             "mandate_id",
                             "merchant_id",
                             "case_id",
+                            "recovery_action_id",
+                            "failed_invoice_id",
                             "exact_amount_paise",
                             "currency",
                             "provider_reference",
@@ -77,6 +92,6 @@ def customer_agent_card(
                 "examples": ["Review and approve this exact subscription invoice surface."],
             }
         ],
-        "securitySchemes": {},
-        "security": [],
+        "securitySchemes": security_schemes,
+        "security": security,
     }

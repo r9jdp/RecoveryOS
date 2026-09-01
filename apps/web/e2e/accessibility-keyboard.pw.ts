@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  A2A_APPROVAL_PATH,
   FITBOX_CASE_PATH,
   assertNoHorizontalOverflow,
   expectMockDashboard,
+  mockA2AApproval,
   mockMerchantMutations,
   scanSemanticAccessibility,
   tabTo,
@@ -98,4 +100,41 @@ test("dialog traps focus and Escape restores the review control", async ({
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(review).toBeFocused();
+});
+
+test("A2A approval passes the semantic and overflow scan", async ({ page }) => {
+  await mockA2AApproval(page);
+  await page.goto(A2A_APPROVAL_PATH);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Review recovery authorization",
+    }),
+  ).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("");
+  await expect.poll(() => scanSemanticAccessibility(page)).toEqual([]);
+  await assertNoHorizontalOverflow(page);
+});
+
+test("customer can authorize the exact A2A scope using only the keyboard", async ({
+  page,
+}) => {
+  await mockA2AApproval(page);
+  await page.goto(A2A_APPROVAL_PATH);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Review recovery authorization",
+    }),
+  ).toBeVisible();
+
+  await tabTo(page, "I approve this exact");
+  await page.keyboard.press("Space");
+  const approve = page.getByRole("button", { name: "Approve exact surface" });
+  await expect(approve).toBeEnabled();
+  await tabTo(page, "Approve exact surface");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Authorization recorded" }),
+  ).toBeVisible();
 });

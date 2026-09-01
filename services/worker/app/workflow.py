@@ -548,6 +548,15 @@ class RecoveryCaseWorkflow:
             self._action_status = "REJECTED"
             self._finish("ESCALATED", "EXACT_PAYMENT_SURFACE_REQUIRED")
             return
+        if command.recovery_action_id is None or command.failed_invoice_id is None:
+            await self._audit(
+                "A2A_AUTHORIZATION_REJECTED",
+                "a2a-start",
+                {"reason_code": "DURABLE_ACTION_SCOPE_REQUIRED"},
+            )
+            self._action_status = "REJECTED"
+            self._finish("ESCALATED", "DURABLE_ACTION_SCOPE_REQUIRED")
+            return
 
         result = await self._activity(
             START_A2A_AUTHORIZATION,
@@ -560,7 +569,12 @@ class RecoveryCaseWorkflow:
                 payment_surface_type=surface_type,
                 payment_surface_reference=surface_reference,
                 recovery_deadline=command.recovery_deadline,
-                idempotency_key=f"{command.case_id}:SEND_TO_CUSTOMER_AGENT:1",
+                idempotency_key=(
+                    f"{command.case_id}:SEND_TO_CUSTOMER_AGENT:{command.recovery_action_id}:v2"
+                ),
+                recovery_action_id=command.recovery_action_id,
+                failed_invoice_id=command.failed_invoice_id,
+                provider_invoice_id=command.provider_invoice_id,
             ),
             A2AAuthorizationResult,
             provider_submission=True,
@@ -574,10 +588,16 @@ class RecoveryCaseWorkflow:
             workflow.now() if result.state == "WORKING" else workflow.now() + _A2A_POLL_INTERVAL
         )
         self._phase = "AWAITING_CUSTOMER_AUTHORIZATION"
+        audit_details = {
+            "remote_task_id": result.remote_task_id,
+            "state": result.state,
+        }
+        if result.approval_path is not None:
+            audit_details["approval_path"] = result.approval_path
         await self._audit(
             "A2A_AUTHORIZATION_STARTED",
             "a2a-start",
-            {"remote_task_id": result.remote_task_id, "state": result.state},
+            audit_details,
         )
 
     async def _poll_a2a_if_due(self) -> None:
@@ -595,6 +615,11 @@ class RecoveryCaseWorkflow:
             self._action_status = "REJECTED"
             self._finish("ESCALATED", "EXACT_PAYMENT_SURFACE_REQUIRED")
             return
+        if command.recovery_action_id is None or command.failed_invoice_id is None:
+            self._next_a2a_poll_at = None
+            self._action_status = "REJECTED"
+            self._finish("ESCALATED", "DURABLE_ACTION_SCOPE_REQUIRED")
+            return
         result = await self._activity(
             POLL_A2A_MANDATE,
             PollA2AMandateInput(
@@ -607,6 +632,9 @@ class RecoveryCaseWorkflow:
                 payment_surface_type=surface_type,
                 payment_surface_reference=surface_reference,
                 recovery_deadline=command.recovery_deadline,
+                recovery_action_id=command.recovery_action_id,
+                failed_invoice_id=command.failed_invoice_id,
+                provider_invoice_id=command.provider_invoice_id,
             ),
             A2AMandatePollResult,
         )
@@ -615,7 +643,11 @@ class RecoveryCaseWorkflow:
             self._next_a2a_poll_at = workflow.now() + _A2A_POLL_INTERVAL
             return
         self._next_a2a_poll_at = None
-        accepted = result.verification_status == "VERIFIED" and result.mandate_id is not None
+        accepted = (
+            result.verification_status == "VERIFIED"
+            and result.mandate_id is not None
+            and result.verified_artifact is not None
+        )
         await self._audit(
             "MANDATE_VERIFICATION_COMPLETED",
             result.mandate_id or f"a2a:{self._a2a_task_id}",
@@ -640,10 +672,7 @@ class RecoveryCaseWorkflow:
         )
         await self._execute_action(
             policy,
-            mandate={
-                "mandate_id": result.mandate_id,
-                "remote_task_id": result.remote_task_id,
-            },
+            mandate=result.verified_artifact,
         )
 
     async def _send_a2a_receipt_if_applicable(self, result: ReconciliationResult) -> None:
@@ -669,7 +698,9 @@ class RecoveryCaseWorkflow:
                 currency=command.currency,
                 provider_reference=result.provider_reference,
                 observed_at=workflow.now().isoformat(),
-                idempotency_key=(f"{self._a2a_task_id}:{self._a2a_mandate_id}:recovery.receipt.v1"),
+                idempotency_key=(f"{self._a2a_task_id}:{self._a2a_mandate_id}:recovery.receipt.v2"),
+                recovery_action_id=command.recovery_action_id,
+                failed_invoice_id=command.failed_invoice_id,
             ),
             A2APaymentReceiptResult,
         )
@@ -714,6 +745,7 @@ class RecoveryCaseWorkflow:
                 mandate=mandate,
                 provider_subscription_id=command.provider_subscription_id,
                 provider_invoice_id=command.provider_invoice_id,
+                recovery_action_id=command.recovery_action_id,
             ),
             ActionExecutionResult,
             provider_submission=True,

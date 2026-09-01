@@ -84,6 +84,8 @@ class CustomerAgentClient(Protocol):
         mandate_id: str,
         merchant_id: str,
         case_id: str,
+        recovery_action_id: str,
+        failed_invoice_id: str,
         exact_amount_paise: int,
         currency: str,
         provider_reference: str,

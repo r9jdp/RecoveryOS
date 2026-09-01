@@ -30,10 +30,12 @@ interface A2AWorkflowStart {
   currency: string;
   customer_id: string;
   exact_amount_paise: number;
+  failed_invoice_id: string;
   merchant_id: string;
   payment_surface_reference: string;
   payment_surface_type: string;
   recovery_deadline: string;
+  recovery_action_id: string;
   task_id: string;
   workflow_id: string;
 }
@@ -105,7 +107,7 @@ function serviceState(
 const a2aHeaders = {
   "A2A-Version": "1.0",
   "A2A-Extensions":
-    "https://recoveryos.dev/a2a/recovery-mandate/v1,https://recoveryos.dev/a2a/recovery-receipt/v1",
+    "https://recoveryos.dev/a2a/recovery-mandate/v2,https://recoveryos.dev/a2a/recovery-receipt/v2",
 };
 
 function a2aRpc(id: string, method: string, params: Record<string, unknown>) {
@@ -338,11 +340,13 @@ test("real services recover FitBox without fixture or network mocks", async ({
   expect(artifacts[0]?.parts[0]?.data).toMatchObject({
     algorithm: "Ed25519",
     data: {
-      protocol_version: "recovery.mandate.v1",
+      protocol_version: "recovery.mandate.v2",
       task_id: a2aStart.task_id,
       merchant_id: a2aStart.merchant_id,
       case_id: a2aStart.case_id,
       customer_id: a2aStart.customer_id,
+      recovery_action_id: a2aStart.recovery_action_id,
+      failed_invoice_id: a2aStart.failed_invoice_id,
       exact_amount_paise: a2aStart.exact_amount_paise,
       currency: a2aStart.currency,
       payment_surface_type: a2aStart.payment_surface_type,
@@ -393,10 +397,10 @@ test("real services recover FitBox without fixture or network mocks", async ({
   expect(replay).toMatchObject({
     remote_task_id: a2aStart.task_id,
     task_state: "WORKING",
-    verification_status: "REJECTED",
-    reason_code: "REPLAYED",
-    mandate_id: null,
-    verified_artifact: null,
+    verification_status: "VERIFIED",
+    reason_code: null,
+    mandate_id: expect.any(String),
+    verified_artifact: expect.any(Object),
   });
   const afterReplay = serviceState("a2a-snapshot") as A2AServiceSnapshot;
   expect(afterReplay.database.nonce_consumption_count).toBe(1);
@@ -461,7 +465,7 @@ test("real services recover FitBox without fixture or network mocks", async ({
       artifact.parts.some(
         (part) =>
           part.data.algorithm === "Ed25519" &&
-          part.data.data?.protocol_version === "recovery.receipt.v1",
+          part.data.data?.protocol_version === "recovery.receipt.v2",
       ),
     ),
   ).toBe(true);

@@ -26,7 +26,6 @@ from services.api.app.domain.enums import (
     ContactDisposition,
     Diagnosis,
     PaymentState,
-    PaymentSurfaceType,
     PolicyDisposition,
     RecoveryActionType,
     RevenueAttribution,
@@ -44,7 +43,6 @@ from services.api.app.models import (
 )
 from services.worker.app.a2a_runtime import create_live_a2a_services_from_env
 from services.worker.app.contracts import (
-    ApprovalSignal,
     PollA2AMandateInput,
     ProviderEvent,
     RecoveryWorkflowInput,
@@ -56,10 +54,8 @@ CASE_ID = "case_fitbox_aug_2026"
 MERCHANT_ID = "merchant_fitbox"
 A2A_CASE_ID = "case_fitbox_a2a_service_e2e"
 A2A_INVOICE_ID = "inv_fitbox_a2a_service_e2e"
-A2A_ACTION_ID = "action_fitbox_a2a_service_e2e"
-A2A_DELEGATION_ACTION_ID = "action_fitbox_a2a_delegation_service_e2e"
-A2A_ACTION_POLICY_ID = "policy_fitbox_a2a_surface_service_e2e"
-A2A_DELEGATION_POLICY_ID = "policy_fitbox_a2a_delegation_service_e2e"
+A2A_ACTION_ID = "action_fitbox_a2a_delegation_service_e2e"
+A2A_ACTION_POLICY_ID = "policy_fitbox_a2a_delegation_service_e2e"
 A2A_BILLING_CYCLE = "service-e2e-a2a"
 A2A_AMOUNT_PAISE = 149_900
 
@@ -167,55 +163,31 @@ async def _ensure_a2a_case() -> datetime:
             recovery_deadline=deadline,
             version=1,
         )
-        delegation_action = RecoveryActionRecord(
-            id=A2A_DELEGATION_ACTION_ID,
-            case_id=A2A_CASE_ID,
-            action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
-            payment_surface_type=None,
-            status=ActionStatus.AWAITING_APPROVAL,
-            idempotency_key=f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1",
-            created_at=now,
-            updated_at=now,
-        )
         action = RecoveryActionRecord(
             id=A2A_ACTION_ID,
             case_id=A2A_CASE_ID,
-            action_type=RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
-            payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
-            status=ActionStatus.SCHEDULED,
-            idempotency_key=f"{A2A_CASE_ID}:OPEN_CUSTOMER_PAYMENT_SURFACE:1",
-            scheduled_for=now,
+            action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
+            payment_surface_type=None,
+            status=ActionStatus.PROPOSED,
+            idempotency_key=f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:v2",
             created_at=now,
             updated_at=now,
-        )
-        delegation_policy = PolicyDecisionRecord(
-            id=A2A_DELEGATION_POLICY_ID,
-            case_id=A2A_CASE_ID,
-            action_id=A2A_DELEGATION_ACTION_ID,
-            disposition=PolicyDisposition.REQUIRE_MANUAL_APPROVAL,
-            decision_code="A2A_REQUIRES_APPROVAL",
-            reason_codes=["A2A_REQUIRES_APPROVAL"],
-            reasons=["Customer-agent delegation requires operator approval."],
-            policy_version="service-e2e.v1",
-            created_at=now,
         )
         action_policy = PolicyDecisionRecord(
             id=A2A_ACTION_POLICY_ID,
             case_id=A2A_CASE_ID,
             action_id=A2A_ACTION_ID,
             disposition=PolicyDisposition.ALLOW,
-            decision_code="EXACT_INVOICE_SURFACE_ALLOWED",
-            reason_codes=["EXACT_INVOICE_SURFACE"],
-            reasons=["The mandate may open only the persisted subscription invoice surface."],
-            policy_version="service-e2e.v1",
+            decision_code="A2A_EXACT_INVOICE_ALLOWED",
+            reason_codes=["A2A_EXACT_INVOICE_ALLOWED"],
+            reasons=["The customer agent may authorize only the persisted invoice surface."],
+            policy_version="service-e2e.v2",
             created_at=now,
         )
         for record in (
             invoice,
             recovery_case,
-            delegation_action,
             action,
-            delegation_policy,
             action_policy,
         ):
             session.add(record)
@@ -251,6 +223,9 @@ async def start_a2a_workflow() -> dict[str, Any]:
         candidate_action="SEND_TO_CUSTOMER_AGENT",
         payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
         payment_surface_reference=A2A_INVOICE_ID,
+        provider_subscription_id="sub_fitbox_annual_001",
+        provider_invoice_id=A2A_INVOICE_ID,
+        recovery_action_id=A2A_ACTION_ID,
     )
     client = await _client()
     try:
@@ -266,16 +241,6 @@ async def start_a2a_workflow() -> dict[str, Any]:
     status: RecoveryWorkflowStatus | None = None
     for _ in range(80):
         status = await handle.query("status", result_type=RecoveryWorkflowStatus)
-        if status.phase == "AWAITING_APPROVAL":
-            await handle.signal(
-                "approval",
-                ApprovalSignal(
-                    signal_id="service-e2e-a2a-merchant-approval-001",
-                    approved=True,
-                    reviewer_id="service-e2e-operator",
-                ),
-            )
-            break
         if status.provider_reference is not None:
             break
         await asyncio.sleep(0.25)
@@ -296,6 +261,8 @@ async def start_a2a_workflow() -> dict[str, Any]:
         "merchant_id": MERCHANT_ID,
         "customer_id": "customer_fitbox_001",
         "exact_amount_paise": A2A_AMOUNT_PAISE,
+        "recovery_action_id": A2A_ACTION_ID,
+        "failed_invoice_id": A2A_INVOICE_ID,
         "currency": "INR",
         "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
         "payment_surface_reference": A2A_INVOICE_ID,
@@ -309,7 +276,8 @@ async def a2a_snapshot() -> dict[str, Any]:
         recovery_case = await session.get(RecoveryCase, A2A_CASE_ID)
         task = await session.scalar(
             select(CustomerAgentTaskRecord).where(
-                CustomerAgentTaskRecord.idempotency_key == f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1"
+                CustomerAgentTaskRecord.idempotency_key
+                == f"{A2A_CASE_ID}:SEND_TO_CUSTOMER_AGENT:{A2A_ACTION_ID}:v2"
             )
         )
         nonce_count = await session.scalar(
@@ -331,7 +299,7 @@ async def a2a_snapshot() -> dict[str, Any]:
                 if (
                     data.get("algorithm") == "Ed25519"
                     and isinstance(signed_data, dict)
-                    and signed_data.get("protocol_version") == "recovery.receipt.v1"
+                    and signed_data.get("protocol_version") == "recovery.receipt.v2"
                 ):
                     receipt_count += 1
     client = await _client()
@@ -381,6 +349,9 @@ async def replay_a2a_mandate() -> dict[str, Any]:
             payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
             payment_surface_reference=A2A_INVOICE_ID,
             recovery_deadline=recovery_case_deadline.isoformat(),
+            recovery_action_id=A2A_ACTION_ID,
+            failed_invoice_id=A2A_INVOICE_ID,
+            provider_invoice_id=A2A_INVOICE_ID,
         )
     )
     return asdict(result)

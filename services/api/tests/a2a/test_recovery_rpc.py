@@ -14,6 +14,8 @@ class FakeCustomerAgentClient:
     ) -> CustomerAgentTask:
         assert request.exact_amount_paise == 149_900
         assert request.context.plan_name == "FitBox Annual"
+        assert request.recovery_action_id == "action-1"
+        assert request.failed_invoice_id == "invoice-local-1"
         return CustomerAgentTask(
             remote_task_id="task-1",
             state="AUTH_REQUIRED",
@@ -30,6 +32,7 @@ class FakeCustomerAgentClient:
 @pytest.mark.asyncio
 async def test_recovery_rpc_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("A2A_ENABLED", raising=False)
+    monkeypatch.delenv("RECOVERY_AGENT_A2A_INBOUND_BEARER_TOKEN", raising=False)
     app = FastAPI()
     app.include_router(router)
     async with httpx.AsyncClient(
@@ -39,7 +42,7 @@ async def test_recovery_rpc_is_disabled_by_default(monkeypatch: pytest.MonkeyPat
             "/a2a/rpc",
             headers={
                 "A2A-Version": "1.0",
-                "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+                "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v2",
             },
             json={"jsonrpc": "2.0", "id": "1", "method": "GetTask", "params": {"id": "x"}},
         )
@@ -49,6 +52,7 @@ async def test_recovery_rpc_is_disabled_by_default(monkeypatch: pytest.MonkeyPat
 @pytest.mark.asyncio
 async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("A2A_ENABLED", "true")
+    monkeypatch.delenv("RECOVERY_AGENT_A2A_INBOUND_BEARER_TOKEN", raising=False)
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_customer_agent_client] = FakeCustomerAgentClient
@@ -59,7 +63,7 @@ async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPa
             "/a2a/rpc",
             headers={
                 "A2A-Version": "1.0",
-                "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v1",
+                "A2A-Extensions": "https://recoveryos.dev/a2a/recovery-mandate/v2",
             },
             json={
                 "jsonrpc": "2.0",
@@ -70,11 +74,13 @@ async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPa
                         "parts": [
                             {
                                 "data": {
-                                    "protocol_version": "recovery.request.v1",
+                                    "protocol_version": "recovery.request.v2",
                                     "idempotency_key": "case-1:a2a:1",
                                     "case_id": "case-1",
                                     "merchant_id": "merchant-1",
                                     "customer_id": "customer-1",
+                                    "recovery_action_id": "action-1",
+                                    "failed_invoice_id": "invoice-local-1",
                                     "exact_amount_paise": 149900,
                                     "currency": "INR",
                                     "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
@@ -86,6 +92,13 @@ async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPa
                                         "failure_explanation": (
                                             "Authentication was not completed."
                                         ),
+                                        "invoice_state": "issued",
+                                        "payment_state": "FAILED",
+                                        "subscription_state": "PENDING",
+                                        "provider_subscription_state": "pending",
+                                        "preferred_language": "en-IN",
+                                        "invoice_due_at": "2026-08-27T12:00:00Z",
+                                        "recovery_deadline": "2026-08-28T12:00:00Z",
                                     },
                                 }
                             }
@@ -96,3 +109,33 @@ async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPa
         )
     assert response.status_code == 200
     assert response.json()["result"]["task"]["status"]["state"] == "TASK_STATE_AUTH_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_recovery_rpc_enforces_configured_inbound_bearer_before_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A2A_ENABLED", "true")
+    monkeypatch.setenv("RECOVERY_AGENT_A2A_INBOUND_BEARER_TOKEN", "recovery-inbound-secret")
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_customer_agent_client] = FakeCustomerAgentClient
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        missing = await client.post("/a2a/rpc", content=b"not-json")
+        wrong = await client.post(
+            "/a2a/rpc",
+            content=b"not-json",
+            headers={"Authorization": "Bearer wrong"},
+        )
+        authenticated = await client.post(
+            "/a2a/rpc",
+            content=b"not-json",
+            headers={"Authorization": "Bearer recovery-inbound-secret"},
+        )
+
+    assert missing.status_code == wrong.status_code == 401
+    assert missing.headers["www-authenticate"] == "Bearer"
+    assert authenticated.status_code == 200
+    assert authenticated.json()["error"]["code"] == -32700

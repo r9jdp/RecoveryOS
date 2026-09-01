@@ -60,7 +60,19 @@ projects:
               - key: TEMPORAL_TLS
                 value: "true"
               - key: A2A_ENABLED
-                value: "false"
+                value: "true"
+              - key: CUSTOMER_AGENT_ORIGIN
+                sync: false
+              - key: CUSTOMER_AGENT_S2S_BEARER_TOKEN
+                generateValue: true
+              - key: CUSTOMER_AGENT_PUBLIC_KEYS_JSON
+                sync: false
+              - key: RECOVERY_AGENT_RECEIPT_SIGNING_MODE
+                value: configured
+              - key: RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID
+                sync: false
+              - key: RECOVERY_AGENT_RECEIPT_ED25519_PRIVATE_KEY
+                sync: false
               - key: VOICE_PROVIDER
                 value: mock
               - key: VOICE_REAL_CALLS_ENABLED
@@ -122,6 +134,13 @@ projects:
                 sync: false
               - key: CUSTOMER_AGENT_REAL_SIGNING_ENABLED
                 value: "true"
+              - key: CUSTOMER_AGENT_S2S_BEARER_TOKEN
+                fromService:
+                  type: web
+                  name: recoveryos-api
+                  envVarKey: CUSTOMER_AGENT_S2S_BEARER_TOKEN
+              - key: CUSTOMER_AGENT_APPROVAL_TOKEN_SECRET
+                generateValue: true
               - key: CUSTOMER_AGENT_DATABASE_URL
                 fromService:
                   type: web

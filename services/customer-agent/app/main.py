@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -33,9 +34,14 @@ from .models import (
     JsonRpcRequest,
     SendMessageParams,
 )
-from .service import CustomerAgentService, TaskConflictError, TaskNotFoundError
+from .service import (
+    CustomerAgentService,
+    TaskAuthorizationError,
+    TaskConflictError,
+    TaskNotFoundError,
+)
 from .signing import MandateSigner, ReceiptVerifier
-from .store import TaskStore, create_task_store
+from .store import TaskIdempotencyConflictError, TaskStore, create_task_store
 
 
 def create_app(
@@ -63,6 +69,7 @@ def create_app(
         receipt_verifier=ReceiptVerifier(pinned_public_keys=recovery_receipt_public_keys),
         language_interpreter=interpreter,
         mandate_ttl_seconds=active_settings.request_ttl_seconds,
+        approval_token_secret=active_settings.approval_secret(),
     )
 
     @asynccontextmanager
@@ -84,7 +91,7 @@ def create_app(
         allow_origins=[active_settings.web_origin],
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "A2A-Version", "A2A-Extensions"],
+        allow_headers=["Content-Type", "Authorization", "A2A-Version", "A2A-Extensions"],
     )
     app.state.customer_agent_service = service
     app.state.customer_agent_store = store
@@ -112,14 +119,22 @@ def create_app(
             signer_key_id=signer.signer_key_id,
             public_key=signer.public_key_base64,
             accepted_receipt_signer_key_ids=sorted(recovery_receipt_public_keys),
+            bearer_auth_required=active_settings.s2s_token() is not None,
         )
 
     @app.post("/rpc", tags=["a2a"])
     async def json_rpc(
         http_request: Request,
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
         a2a_version: Annotated[str | None, Header(alias="A2A-Version")] = None,
         a2a_extensions: Annotated[str | None, Header(alias="A2A-Extensions")] = None,
     ) -> JSONResponse:
+        if not _bearer_authorized(authorization, active_settings.s2s_token()):
+            return JSONResponse(
+                {"detail": "A valid service credential is required"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         try:
             raw_request = await http_request.json()
         except ValueError:
@@ -168,37 +183,63 @@ def create_app(
             if request.method == "SendMessage":
                 send_params = SendMessageParams.model_validate(request.params)
                 task = await service.send_message(send_params.message)
-                result = {"task": task.public_dict()}
+                result = {"task": service.public_task(task)}
             elif request.method == "GetTask":
                 get_params = GetTaskParams.model_validate(request.params)
                 task = await service.get_task(get_params.id)
-                result = task.public_dict(history_length=get_params.history_length)
+                result = service.public_task(task, history_length=get_params.history_length)
             elif request.method == "CancelTask":
                 cancel_params = CancelTaskParams.model_validate(request.params)
                 task = await service.cancel_task(cancel_params.id, reason=cancel_params.reason)
-                result = task.public_dict()
+                result = service.public_task(task)
             else:  # Defensive guard for future dispatch edits.
                 return _rpc_error(request.id, -32601, "Method not found")
         except ValidationError as exc:
             return _rpc_error(request.id, -32602, "Invalid params", exc.errors(include_url=False))
         except TaskNotFoundError:
             return _rpc_error(request.id, -32001, "Task not found")
+        except TaskIdempotencyConflictError:
+            return _rpc_error(
+                request.id,
+                -32002,
+                "Idempotency key was reused with a different recovery request",
+            )
         except TaskConflictError as exc:
             return _rpc_error(request.id, -32002, str(exc))
         return JSONResponse({"jsonrpc": "2.0", "id": request.id, "result": result})
 
     @app.get("/v1/tasks/{task_id}/approval", tags=["customer-approval"])
-    async def approval_summary(task_id: str) -> dict[str, object]:
+    async def approval_summary(
+        task_id: str,
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    ) -> dict[str, object]:
         try:
-            summary = await service.approval_summary(task_id)
+            summary = await service.approval_summary(
+                task_id,
+                approval_token=_bearer_token(authorization),
+            )
+        except TaskAuthorizationError as exc:
+            raise _approval_unauthorized() from exc
         except TaskNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Task not found") from exc
+        except TaskConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return summary.model_dump(mode="json")
 
     @app.post("/v1/tasks/{task_id}/approval", tags=["customer-approval"])
-    async def approval_decision(task_id: str, decision: ApprovalDecision) -> dict[str, object]:
+    async def approval_decision(
+        task_id: str,
+        decision: ApprovalDecision,
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    ) -> dict[str, object]:
         try:
-            task = await service.decide(task_id=task_id, decision=decision)
+            task = await service.decide(
+                task_id=task_id,
+                decision=decision,
+                approval_token=_bearer_token(authorization),
+            )
+        except TaskAuthorizationError as exc:
+            raise _approval_unauthorized() from exc
         except TaskNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Task not found") from exc
         except TaskConflictError as exc:
@@ -209,12 +250,16 @@ def create_app(
     async def interpret_customer_language(
         task_id: str,
         request: CustomerLanguageRequest,
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     ) -> dict[str, object]:
         try:
             interpretation = await service.interpret_customer_language(
                 task_id=task_id,
                 request=request,
+                approval_token=_bearer_token(authorization),
             )
+        except TaskAuthorizationError as exc:
+            raise _approval_unauthorized() from exc
         except TaskNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Task not found") from exc
         except TaskConflictError as exc:
@@ -256,6 +301,30 @@ def _rpc_error(
     if data is not None:
         error["data"] = data
     return JSONResponse({"jsonrpc": "2.0", "id": request_id, "error": error})
+
+
+def _bearer_authorized(authorization: str | None, expected_token: str | None) -> bool:
+    if expected_token is None:
+        return True
+    scheme, separator, supplied_token = (authorization or "").partition(" ")
+    if separator != " " or scheme.casefold() != "bearer":
+        return False
+    return secrets.compare_digest(supplied_token.encode(), expected_token.encode())
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    scheme, separator, supplied_token = (authorization or "").partition(" ")
+    if separator != " " or scheme.casefold() != "bearer" or not supplied_token:
+        return None
+    return supplied_token
+
+
+def _approval_unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail="A valid customer approval capability is required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 app = create_app()

@@ -25,13 +25,15 @@ class ReceiptWireModel(BaseModel):
 
 
 class RecoveryReceiptData(ReceiptWireModel):
-    protocol_version: Literal["recovery.receipt.v1"] = "recovery.receipt.v1"
+    protocol_version: Literal["recovery.receipt.v2"] = "recovery.receipt.v2"
     receipt_id: str = Field(min_length=1)
     signer_key_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     mandate_id: str = Field(min_length=1)
     merchant_id: str = Field(min_length=1)
     case_id: str = Field(min_length=1)
+    recovery_action_id: str = Field(min_length=1)
+    failed_invoice_id: str = Field(min_length=1)
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     provider_reference: str = Field(min_length=1)

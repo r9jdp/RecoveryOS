@@ -140,14 +140,23 @@ class CustomerAgentDisplayContext(ProviderContract):
     merchant_display_name: str = Field(min_length=1, max_length=200)
     plan_name: str = Field(min_length=1, max_length=200)
     failure_explanation: str = Field(min_length=1, max_length=500)
+    invoice_state: str = Field(min_length=1, max_length=64)
+    payment_state: str = Field(min_length=1, max_length=64)
+    subscription_state: str = Field(min_length=1, max_length=64)
+    provider_subscription_state: str = Field(min_length=1, max_length=64)
+    preferred_language: str = Field(min_length=2, max_length=35)
+    invoice_due_at: datetime | None = None
+    recovery_deadline: datetime
 
 
 class CustomerAgentRecoveryRequest(ProviderContract):
-    protocol_version: Literal["recovery.request.v1"] = "recovery.request.v1"
+    protocol_version: Literal["recovery.request.v2"] = "recovery.request.v2"
     idempotency_key: str
     case_id: str
     merchant_id: str
     customer_id: str
+    recovery_action_id: str
+    failed_invoice_id: str
     exact_amount_paise: int = Field(gt=0)
     currency: str
     payment_surface_type: PaymentSurfaceType
@@ -166,5 +175,6 @@ class CustomerAgentTask(ProviderContract):
         "FAILED",
         "CANCELED",
     ]
+    approval_path: str | None = None
     artifact: dict[str, Any] | None = None
     updated_at: datetime

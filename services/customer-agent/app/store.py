@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Protocol
@@ -34,6 +35,10 @@ class TaskVersionConflictError(RuntimeError):
     """Raised when a concurrent writer changed a task after it was read."""
 
 
+class TaskIdempotencyConflictError(RuntimeError):
+    """Raised when one idempotency key is reused for a different request scope."""
+
+
 class TaskStore(Protocol):
     kind: str
 
@@ -62,7 +67,9 @@ class InMemoryTaskStore:
         async with self._lock:
             existing_id = self._idempotency.get(idempotency_key)
             if existing_id:
-                return self._tasks[existing_id].model_copy(deep=True)
+                existing = self._tasks[existing_id]
+                _require_matching_request(existing=existing, incoming=task)
+                return existing.model_copy(deep=True)
             stored = task.model_copy(deep=True, update={"revision": 1})
             self._tasks[task.id] = stored
             self._idempotency[idempotency_key] = task.id
@@ -167,7 +174,9 @@ class SqlAlchemyTaskStore:
                 existing = result.scalar_one_or_none()
             if existing is None:
                 raise
-            return _task_from_row(existing)
+            existing_task = _task_from_row(existing)
+            _require_matching_request(existing=existing_task, incoming=task)
+            return existing_task
 
     async def get(self, task_id: str) -> TaskRecord | None:
         async with self._session_factory() as session:
@@ -236,6 +245,23 @@ def _task_payload(task: TaskRecord) -> dict[str, Any]:
 def _task_from_row(row: CustomerAgentTaskRow) -> TaskRecord:
     payload: Mapping[str, Any] = row.payload
     return TaskRecord.model_validate({**payload, "revision": row.version})
+
+
+def _require_matching_request(*, existing: TaskRecord, incoming: TaskRecord) -> None:
+    if _canonical_request(existing) != _canonical_request(incoming):
+        raise TaskIdempotencyConflictError(
+            "idempotency key was reused with a different recovery request"
+        )
+
+
+def _canonical_request(task: TaskRecord) -> bytes:
+    return json.dumps(
+        task.request.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def _async_database_url(database_url: str) -> str:

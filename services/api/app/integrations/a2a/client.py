@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -12,8 +13,8 @@ from services.api.app.providers.contracts import CustomerAgentRecoveryRequest, C
 
 from .receipts import RecoveryReceiptData, RecoveryReceiptSigner
 
-RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v1"
-RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v1"
+RECOVERY_MANDATE_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-mandate/v2"
+RECOVERY_RECEIPT_EXTENSION_URI = "https://recoveryos.dev/a2a/recovery-receipt/v2"
 
 
 class CustomerAgentProtocolError(RuntimeError):
@@ -38,11 +39,18 @@ class A2ACustomerAgentClient:
         client: httpx.AsyncClient | None = None,
         timeout_seconds: float = 5.0,
         receipt_signer: RecoveryReceiptSigner | None = None,
+        bearer_token: str | None = None,
     ) -> None:
         self._origin = origin.rstrip("/")
         self._provided_client = client
         self._timeout = timeout_seconds
         self._receipt_signer = receipt_signer or RecoveryReceiptSigner.mock()
+        configured_token = (
+            bearer_token
+            if bearer_token is not None
+            else os.getenv("CUSTOMER_AGENT_S2S_BEARER_TOKEN", "")
+        )
+        self._bearer_token = configured_token.strip() or None
 
     async def send_recovery_request(
         self, request: CustomerAgentRecoveryRequest
@@ -71,6 +79,8 @@ class A2ACustomerAgentClient:
         mandate_id: str,
         merchant_id: str,
         case_id: str,
+        recovery_action_id: str,
+        failed_invoice_id: str,
         exact_amount_paise: int,
         currency: str,
         provider_reference: str,
@@ -86,6 +96,8 @@ class A2ACustomerAgentClient:
             mandate_id=mandate_id,
             merchant_id=merchant_id,
             case_id=case_id,
+            recovery_action_id=recovery_action_id,
+            failed_invoice_id=failed_invoice_id,
             exact_amount_paise=exact_amount_paise,
             currency=currency,
             provider_reference=provider_reference,
@@ -127,15 +139,18 @@ class A2ACustomerAgentClient:
             return await self._post(client, payload)
 
     async def _post(self, client: httpx.AsyncClient, payload: dict[str, Any]) -> dict[str, Any]:
+        headers = {
+            "A2A-Version": "1.0",
+            "A2A-Extensions": (
+                f"{RECOVERY_MANDATE_EXTENSION_URI},{RECOVERY_RECEIPT_EXTENSION_URI}"
+            ),
+        }
+        if self._bearer_token is not None:
+            headers["Authorization"] = f"Bearer {self._bearer_token}"
         response = await client.post(
             f"{self._origin}/rpc",
             json=payload,
-            headers={
-                "A2A-Version": "1.0",
-                "A2A-Extensions": (
-                    f"{RECOVERY_MANDATE_EXTENSION_URI},{RECOVERY_RECEIPT_EXTENSION_URI}"
-                ),
-            },
+            headers=headers,
         )
         response.raise_for_status()
         body = _object(response.json(), "JSON-RPC response")
@@ -170,9 +185,22 @@ class A2ACustomerAgentClient:
             parts = first.get("parts")
             if isinstance(parts, list) and parts:
                 artifact = _object(parts[0], "artifact part").get("data")
+        approval_path = None
+        status_message = status.get("message")
+        if isinstance(status_message, dict):
+            message_parts = status_message.get("parts")
+            if isinstance(message_parts, list) and message_parts:
+                first_part = message_parts[0]
+                part_data = first_part.get("data") if isinstance(first_part, dict) else None
+                raw_approval_path = (
+                    part_data.get("approval_path") if isinstance(part_data, dict) else None
+                )
+                if isinstance(raw_approval_path, str) and raw_approval_path:
+                    approval_path = raw_approval_path
         return CustomerAgentTask(
             remote_task_id=str(task["id"]),
             state=state,
+            approval_path=approval_path,
             artifact=artifact if isinstance(artifact, dict) else None,
             updated_at=updated_at,
         )

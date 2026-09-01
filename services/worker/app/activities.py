@@ -257,6 +257,7 @@ class DisabledA2AMandateActivityServices:
         return A2AAuthorizationResult(
             remote_task_id=f"mock-a2a:{command.case_id}",
             state="AUTH_REQUIRED",
+            approval_path=f"/a2a/mock-a2a:{command.case_id}",
         )
 
     async def poll_and_verify_mandate(self, command: PollA2AMandateInput) -> A2AMandatePollResult:

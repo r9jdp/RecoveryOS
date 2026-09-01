@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import ValidationError
 
 from .models import ExpectedMandateScope, RecoveryMandateData, SignedMandate
-from .nonce_store import NonceStore
+from .nonce_store import MandateNonceClaim, NonceClaimOutcome, NonceStore
 
 
 class MandateVerificationError(ValueError):
@@ -30,6 +31,7 @@ class MandateVerificationError(ValueError):
 class VerifiedMandate:
     data: RecoveryMandateData
     verified_at: datetime
+    claim_id: str
 
 
 def canonical_json(data: RecoveryMandateData) -> bytes:
@@ -88,7 +90,7 @@ class MandateVerifier:
             )
         except ValidationError as exc:
             raise MandateVerificationError(
-                "MALFORMED_MANDATE", "mandate envelope does not match recovery.mandate.v1"
+                "MALFORMED_MANDATE", "mandate envelope does not match recovery.mandate.v2"
             ) from exc
         public_key = self._keys.get(signed.data.signer_key_id)
         if public_key is None:
@@ -106,14 +108,15 @@ class MandateVerifier:
             raise ValueError("verification time must be timezone-aware")
         if signed.data.issued_at > observed_at + self._max_clock_skew:
             raise MandateVerificationError("NOT_YET_VALID", "mandate issue time is in the future")
-        if signed.data.expires_at <= observed_at:
-            raise MandateVerificationError("EXPIRED", "mandate has expired")
+        expired = signed.data.expires_at <= observed_at
 
         scope_fields = (
             "task_id",
             "merchant_id",
             "case_id",
             "customer_id",
+            "recovery_action_id",
+            "failed_invoice_id",
             "exact_amount_paise",
             "currency",
             "payment_surface_type",
@@ -130,15 +133,38 @@ class MandateVerifier:
                 f"mandate does not match expected {', '.join(mismatches)}",
             )
 
-        consumed = await self._nonce_store.consume(
+        claim_id = hashlib.sha256(canonical_json(signed.data)).hexdigest()
+        claim = MandateNonceClaim(
+            claim_id=claim_id,
             nonce=signed.data.nonce,
             mandate_id=signed.data.mandate_id,
             signer_key_id=signed.data.signer_key_id,
+            task_id=signed.data.task_id,
             merchant_id=signed.data.merchant_id,
             case_id=signed.data.case_id,
+            customer_id=signed.data.customer_id,
+            recovery_action_id=signed.data.recovery_action_id,
+            failed_invoice_id=signed.data.failed_invoice_id,
+            exact_amount_paise=signed.data.exact_amount_paise,
+            currency=signed.data.currency,
+            payment_surface_type=signed.data.payment_surface_type,
+            payment_surface_reference=signed.data.payment_surface_reference,
+            authorized_action=signed.data.authorized_action,
+            issued_at=signed.data.issued_at,
             expires_at=signed.data.expires_at,
             consumed_at=observed_at,
         )
-        if not consumed:
-            raise MandateVerificationError("REPLAYED", "mandate nonce was already consumed")
-        return VerifiedMandate(data=signed.data, verified_at=observed_at)
+        outcome = await self._nonce_store.consume(claim, allow_new=not expired)
+        if outcome == NonceClaimOutcome.CONFLICT:
+            if expired:
+                raise MandateVerificationError("EXPIRED", "mandate has expired")
+            raise MandateVerificationError(
+                "REPLAYED", "mandate nonce or ID was reused with different signed scope"
+            )
+        if expired and outcome != NonceClaimOutcome.ALREADY_CLAIMED:
+            raise MandateVerificationError("EXPIRED", "mandate has expired")
+        return VerifiedMandate(
+            data=signed.data,
+            verified_at=observed_at,
+            claim_id=claim_id,
+        )

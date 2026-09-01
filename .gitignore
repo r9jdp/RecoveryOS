@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 .next/
+.next-e2e/
 node_modules/
 .pnpm-store/
 coverage/

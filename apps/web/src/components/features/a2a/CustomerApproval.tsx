@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 
 import { Alert, Badge, Button } from "@/components/ui";
@@ -22,15 +22,18 @@ interface CustomerApprovalProps {
   customerAgentOrigin: string;
   loadApproval?: (
     taskId: string,
+    approvalToken?: string,
     signal?: AbortSignal,
   ) => Promise<ApprovalSummary>;
   submitApproval?: (
     taskId: string,
     submission: ApprovalSubmission,
+    approvalToken?: string,
   ) => Promise<ApprovalResult>;
   interpretLanguage?: (
     taskId: string,
     text: string,
+    approvalToken?: string,
   ) => Promise<LanguageInterpretation>;
 }
 
@@ -52,14 +55,54 @@ export function CustomerApproval({
   const [interpretation, setInterpretation] =
     useState<LanguageInterpretation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [approvalCapability, setApprovalCapability] = useState<{
+    ready: boolean;
+    token?: string;
+  }>({ ready: false });
+  const capturedCapability = useRef<{
+    captured: boolean;
+    token?: string;
+  }>({ captured: false });
   const confirmationId = useId();
+  const approvalToken = approvalCapability.token;
+
+  useEffect(() => {
+    if (!capturedCapability.current.captured) {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      capturedCapability.current = {
+        captured: true,
+        token: fragment.get("token")?.trim() || undefined,
+      };
+      if (fragment.has("token")) {
+        fragment.delete("token");
+        const remainingFragment = fragment.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${window.location.search}${remainingFragment ? `#${remainingFragment}` : ""}`,
+        );
+      }
+    }
+    const kickoff = window.setTimeout(() => {
+      setApprovalCapability({
+        ready: true,
+        token: capturedCapability.current.token,
+      });
+    }, 0);
+    return () => window.clearTimeout(kickoff);
+  }, []);
 
   const fetchApproval = useCallback(
     async (signal?: AbortSignal) => {
       try {
         const result = await (loadApproval
-          ? loadApproval(taskId, signal)
-          : loadApprovalSummary(customerAgentOrigin, taskId, signal));
+          ? loadApproval(taskId, approvalToken, signal)
+          : loadApprovalSummary(
+              customerAgentOrigin,
+              taskId,
+              approvalToken,
+              signal,
+            ));
         if (signal?.aborted) return;
         setSummary(result);
         if (result.state === "TASK_STATE_CANCELED") setViewState("rejected");
@@ -76,10 +119,11 @@ export function CustomerApproval({
         setViewState("error");
       }
     },
-    [customerAgentOrigin, loadApproval, taskId],
+    [approvalToken, customerAgentOrigin, loadApproval, taskId],
   );
 
   useEffect(() => {
+    if (!approvalCapability.ready) return;
     const controller = new AbortController();
     const kickoff = window.setTimeout(() => {
       void fetchApproval(controller.signal);
@@ -88,7 +132,7 @@ export function CustomerApproval({
       window.clearTimeout(kickoff);
       controller.abort();
     };
-  }, [fetchApproval]);
+  }, [approvalCapability.ready, fetchApproval]);
 
   const retry = () => {
     setViewState("loading");
@@ -109,8 +153,13 @@ export function CustomerApproval({
     };
     try {
       await (submitApproval
-        ? submitApproval(taskId, payload)
-        : submitApprovalDecision(customerAgentOrigin, taskId, payload));
+        ? submitApproval(taskId, payload, approvalToken)
+        : submitApprovalDecision(
+            customerAgentOrigin,
+            taskId,
+            payload,
+            approvalToken,
+          ));
       setViewState(decision === "APPROVE" ? "approved" : "rejected");
     } catch (reason) {
       setError(
@@ -132,8 +181,13 @@ export function CustomerApproval({
     try {
       setInterpretation(
         await (interpretLanguage
-          ? interpretLanguage(taskId, text)
-          : interpretCustomerLanguage(customerAgentOrigin, taskId, text)),
+          ? interpretLanguage(taskId, text, approvalToken)
+          : interpretCustomerLanguage(
+              customerAgentOrigin,
+              taskId,
+              text,
+              approvalToken,
+            )),
       );
     } catch (reason) {
       setError(
@@ -292,7 +346,7 @@ export function CustomerApproval({
                   }
                   title={`Understood as ${interpretation.intent.replaceAll("_", " ").toLowerCase()}`}
                 >
-                  {interpretation.explanation} Confidence: {" "}
+                  {interpretation.explanation} Confidence:{" "}
                   {(interpretation.confidence_basis_points / 100).toFixed(0)}%.
                   You must still use the explicit controls below.
                 </Alert>

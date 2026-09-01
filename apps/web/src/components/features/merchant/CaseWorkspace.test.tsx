@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CaseWorkspace } from "./CaseWorkspace";
+import type { CaseDetailFixture } from "@/types/recovery";
+
+import { CaseWorkspace, customerAgentApprovalHref } from "./CaseWorkspace";
 
 afterEach(cleanup);
 
@@ -74,5 +76,29 @@ describe("CaseWorkspace", () => {
 
     expect(await screen.findByText("Wrong Person")).toBeInTheDocument();
     expect(screen.getByText("Stopped")).toBeInTheDocument();
+  });
+
+  it("uses the audited approval capability and preserves the mock task fallback", () => {
+    const event = {
+      id: "audit-a2a",
+      event_type: "A2A_AUTHORIZATION_STARTED",
+      source: "worker",
+      evidence_kind: "SIMULATED" as const,
+      occurred_at: "2026-09-01T00:00:00Z",
+      correlation_id: "a2a-start",
+      payload: {
+        remote_task_id: "task:customer-1",
+        approval_path: "/a2a/task%3Acustomer-1#token=capability-token",
+      },
+    } satisfies CaseDetailFixture["timeline"][number];
+
+    expect(customerAgentApprovalHref([event])).toBe(
+      "/a2a/task%3Acustomer-1#token=capability-token",
+    );
+    expect(
+      customerAgentApprovalHref([
+        { ...event, payload: { remote_task_id: "mock-a2a:case-1" } },
+      ]),
+    ).toBe("/a2a/mock-a2a%3Acase-1");
   });
 });

@@ -52,14 +52,23 @@ class RecoveryDisplayContext(WireModel):
     merchant_display_name: str = Field(min_length=1, max_length=200)
     plan_name: str = Field(min_length=1, max_length=200)
     failure_explanation: str = Field(min_length=1, max_length=500)
+    invoice_state: str = Field(min_length=1, max_length=64)
+    payment_state: str = Field(min_length=1, max_length=64)
+    subscription_state: str = Field(min_length=1, max_length=64)
+    provider_subscription_state: str = Field(min_length=1, max_length=64)
+    preferred_language: str = Field(min_length=2, max_length=35)
+    invoice_due_at: datetime | None = None
+    recovery_deadline: datetime
 
 
 class RecoveryRequestData(WireModel):
-    protocol_version: Literal["recovery.request.v1"] = "recovery.request.v1"
+    protocol_version: Literal["recovery.request.v2"] = "recovery.request.v2"
     idempotency_key: str = Field(min_length=1)
     case_id: str = Field(min_length=1)
     merchant_id: str = Field(min_length=1)
     customer_id: str = Field(min_length=1)
+    recovery_action_id: str = Field(min_length=1)
+    failed_invoice_id: str = Field(min_length=1)
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     payment_surface_type: str = Field(min_length=1)
@@ -75,13 +84,15 @@ class RecoveryRequestData(WireModel):
 
 
 class RecoveryReceiptData(WireModel):
-    protocol_version: Literal["recovery.receipt.v1"] = "recovery.receipt.v1"
+    protocol_version: Literal["recovery.receipt.v2"] = "recovery.receipt.v2"
     receipt_id: str = Field(min_length=1)
     signer_key_id: str = Field(min_length=1)
     task_id: str = Field(min_length=1)
     mandate_id: str = Field(min_length=1)
     merchant_id: str = Field(min_length=1)
     case_id: str = Field(min_length=1)
+    recovery_action_id: str = Field(min_length=1)
+    failed_invoice_id: str = Field(min_length=1)
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     provider_reference: str = Field(min_length=1)
@@ -102,14 +113,16 @@ class SignedRecoveryReceipt(WireModel):
 
 
 class RecoveryMandateData(WireModel):
-    protocol_version: Literal["recovery.mandate.v1"] = "recovery.mandate.v1"
-    mandate_id: str
-    nonce: str
-    signer_key_id: str
-    task_id: str
-    merchant_id: str
-    case_id: str
-    customer_id: str
+    protocol_version: Literal["recovery.mandate.v2"] = "recovery.mandate.v2"
+    mandate_id: str = Field(min_length=1)
+    nonce: str = Field(min_length=1)
+    signer_key_id: str = Field(min_length=1)
+    task_id: str = Field(min_length=1)
+    merchant_id: str = Field(min_length=1)
+    case_id: str = Field(min_length=1)
+    customer_id: str = Field(min_length=1)
+    recovery_action_id: str = Field(min_length=1)
+    failed_invoice_id: str = Field(min_length=1)
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     payment_surface_type: str
@@ -183,6 +196,8 @@ class ApprovalSummary(WireModel):
     state: str
     merchant_id: str
     case_id: str
+    recovery_action_id: str
+    failed_invoice_id: str
     exact_amount_paise: int
     currency: str
     payment_surface_type: str
@@ -191,6 +206,13 @@ class ApprovalSummary(WireModel):
     merchant_display_name: str
     plan_name: str
     failure_explanation: str
+    invoice_state: str
+    payment_state: str
+    subscription_state: str
+    provider_subscription_state: str
+    preferred_language: str
+    invoice_due_at: datetime | None
+    recovery_deadline: datetime
 
 
 class CustomerLanguageRequest(WireModel):
@@ -208,6 +230,8 @@ class LanguageModelInterpretation(WireModel):
 class AuthoritativeApprovalScope(WireModel):
     merchant_id: str
     case_id: str
+    recovery_action_id: str
+    failed_invoice_id: str
     exact_amount_paise: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     payment_surface_type: str

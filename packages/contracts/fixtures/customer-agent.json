@@ -2,30 +2,92 @@
   "fixture_version": "screens.v1",
   "screen": "/agent/tasks/task_fitbox_001",
   "protocol": "A2A",
-  "data_part_type": "recovery.request.v1",
+  "data_part_type": "recovery.request.v2",
+  "rpc_authentication": {
+    "type": "http",
+    "scheme": "bearer",
+    "credential_source": "CUSTOMER_AGENT_S2S_BEARER_TOKEN"
+  },
   "task": {
     "id": "task_fitbox_001",
     "state": "AUTH_REQUIRED",
+    "approval_path": "/a2a/task_fitbox_001#token=<task-scoped-capability>"
+  },
+  "request": {
+    "protocol_version": "recovery.request.v2",
+    "idempotency_key": "merchant_fitbox:case_fitbox_aug_2026:action_fitbox_card_update_001:a2a",
     "case_id": "case_fitbox_aug_2026",
     "merchant_id": "merchant_fitbox",
-    "merchant_display_name": "FitBox",
-    "merchant_support_email": "support@fitbox.example",
     "customer_id": "customer_fitbox_001",
+    "recovery_action_id": "action_fitbox_card_update_001",
+    "failed_invoice_id": "inv_fitbox_aug_2026",
     "exact_amount_paise": 149900,
     "currency": "INR",
-    "reason": "Your August FitBox Annual subscription invoice is unpaid after an incorrect OTP.",
     "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
-    "expires_at": "2026-08-27T10:10:00Z"
+    "payment_surface_reference": "sub_fitbox_annual_001",
+    "expires_at": "2026-08-27T10:10:00Z",
+    "context": {
+      "merchant_display_name": "FitBox",
+      "plan_name": "FitBox Annual",
+      "failure_explanation": "Your August subscription invoice is unpaid after an incorrect OTP.",
+      "invoice_state": "issued",
+      "payment_state": "FAILED",
+      "subscription_state": "PENDING",
+      "provider_subscription_state": "pending",
+      "preferred_language": "Hinglish",
+      "invoice_due_at": "2026-08-27T10:00:00Z",
+      "recovery_deadline": "2026-08-30T10:00:01Z"
+    }
   },
   "approval": {
     "allowed": true,
     "requires_exact_amount_confirmation": true,
-    "mandate_issued": false
+    "capability_required": true,
+    "capability_transport": "Authorization: Bearer <task-scoped-capability>",
+    "language_interpretation": {
+      "provider": "openai",
+      "mode": "ADVISORY",
+      "authorization_effect": "NONE",
+      "requires_explicit_approval": true
+    },
+    "mandate_data_part_type": "recovery.mandate.v2",
+    "mandate_issued": false,
+    "signed_scope_bindings": [
+      "task_id",
+      "merchant_id",
+      "case_id",
+      "customer_id",
+      "recovery_action_id",
+      "failed_invoice_id",
+      "exact_amount_paise",
+      "currency",
+      "payment_surface_type",
+      "payment_surface_reference"
+    ]
+  },
+  "completion": {
+    "data_part_type": "recovery.receipt.v2",
+    "authentication": "Ed25519",
+    "required_scope_bindings": [
+      "receipt_id",
+      "task_id",
+      "mandate_id",
+      "merchant_id",
+      "case_id",
+      "recovery_action_id",
+      "failed_invoice_id",
+      "exact_amount_paise",
+      "currency",
+      "provider_reference",
+      "payment_state",
+      "observed_at"
+    ],
+    "receipt_received": false
   },
   "trace": [
     {
       "type": "TASK_SUBMITTED",
-      "data_part_type": "recovery.request.v1",
+      "data_part_type": "recovery.request.v2",
       "occurred_at": "2026-08-27T10:02:00Z"
     },
     {

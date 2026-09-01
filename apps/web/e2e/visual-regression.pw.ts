@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  A2A_APPROVAL_PATH,
   FITBOX_CASE_PATH,
   assertNoHorizontalOverflow,
   captureEvidence,
   expectMockDashboard,
+  mockA2AApproval,
   prepareVisualPage,
 } from "./support/fixtures";
 
@@ -78,4 +80,22 @@ test("voice safety visual baseline", async ({ page }, testInfo) => {
   await assertNoHorizontalOverflow(page);
   await expect(page).toHaveScreenshot("voice-safety.png", { fullPage: true });
   await captureEvidence(page, testInfo, "voice-safety.png");
+});
+
+test("A2A customer approval visual baseline", async ({ page }, testInfo) => {
+  await mockA2AApproval(page);
+  await page.goto(A2A_APPROVAL_PATH);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Review recovery authorization",
+    }),
+  ).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("");
+  await prepareVisualPage(page);
+  await assertNoHorizontalOverflow(page);
+  await expect(page).toHaveScreenshot("a2a-customer-approval.png", {
+    fullPage: true,
+  });
+  await captureEvidence(page, testInfo, "a2a-customer-approval.png");
 });

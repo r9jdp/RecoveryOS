@@ -29,6 +29,8 @@ class CustomerAgentSettings(BaseSettings):
     signer_key_id: str = "recoveryos-mock-2026-01"
     ed25519_private_key: str | None = None
     real_signing_enabled: bool = False
+    s2s_bearer_token: SecretStr | None = None
+    approval_token_secret: SecretStr | None = None
     request_ttl_seconds: int = Field(default=900, ge=60, le=3600)
     task_store: Literal["memory", "sql"] = "memory"
     database_url: SecretStr | None = None
@@ -49,14 +51,36 @@ class CustomerAgentSettings(BaseSettings):
     llm_timeout_seconds: float = Field(default=8.0, ge=1.0, le=30.0)
 
     @model_validator(mode="after")
-    def require_openai_configuration(self) -> CustomerAgentSettings:
-        if self.llm_provider != "openai":
-            return self
-        if self.openai_api_key is None or not self.openai_api_key.get_secret_value().strip():
-            raise ValueError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
-        if self.openai_model is None or not self.openai_model.strip():
-            raise ValueError("OPENAI_MODEL is required when LLM_PROVIDER=openai")
+    def require_live_configuration(self) -> CustomerAgentSettings:
+        approval_secret = self.approval_secret()
+        if approval_secret is not None and len(approval_secret.encode("utf-8")) < 32:
+            raise ValueError("CUSTOMER_AGENT_APPROVAL_TOKEN_SECRET must contain at least 32 bytes")
+        if self.real_signing_enabled and not self.s2s_token():
+            raise ValueError(
+                "CUSTOMER_AGENT_S2S_BEARER_TOKEN is required when real signing is enabled"
+            )
+        if self.real_signing_enabled and not approval_secret:
+            raise ValueError(
+                "CUSTOMER_AGENT_APPROVAL_TOKEN_SECRET is required when real signing is enabled"
+            )
+        if self.llm_provider == "openai":
+            if self.openai_api_key is None or not self.openai_api_key.get_secret_value().strip():
+                raise ValueError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+            if self.openai_model is None or not self.openai_model.strip():
+                raise ValueError("OPENAI_MODEL is required when LLM_PROVIDER=openai")
         return self
+
+    def s2s_token(self) -> str | None:
+        if self.s2s_bearer_token is None:
+            return None
+        value = self.s2s_bearer_token.get_secret_value().strip()
+        return value or None
+
+    def approval_secret(self) -> str | None:
+        if self.approval_token_secret is None:
+            return None
+        value = self.approval_token_secret.get_secret_value().strip()
+        return value or None
 
     def signing_seed(self) -> bytes:
         if self.real_signing_enabled:

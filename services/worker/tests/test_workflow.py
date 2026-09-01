@@ -48,6 +48,7 @@ def workflow_input(case_id: str, *, deadline_seconds: int = 3600) -> RecoveryWor
                 "reason_code": "BAD_REQUEST_PAYMENT_CARD_INSUFFICIENT_BALANCE",
             },
         ),
+        recovery_action_id=f"action-{case_id}",
     )
 
 
@@ -313,7 +314,7 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
                     verification_status="VERIFIED",
                     mandate_id="mandate-activity-verified",
                     verified_artifact={
-                        "protocol_version": "recovery.mandate.v1",
+                        "protocol_version": "recovery.mandate.v2",
                         "source": "verified-activity-result",
                     },
                 )
@@ -374,7 +375,7 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
                     payment_surface_reference="wrong-surface",
                     exact_amount_paise=149_900,
                     expires_at=(datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
-                    artifact={"protocol_version": "recovery.mandate.v1"},
+                    artifact={"protocol_version": "recovery.mandate.v2"},
                 ),
             )
             await handle.signal(
@@ -401,8 +402,8 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
         assert result.processed_signal_count == 4
         assert len(services.executed_actions) == 1
         assert services.executed_commands[0].mandate == {
-            "mandate_id": "mandate-activity-verified",
-            "remote_task_id": "mock-a2a:a2a",
+            "protocol_version": "recovery.mandate.v2",
+            "source": "verified-activity-result",
         }
         assert a2a_services.polls
         event_types = {event.event_type for event in services.audits}
@@ -413,6 +414,10 @@ async def test_a2a_mandate_and_customer_intent_signals_are_processed() -> None:
             "CUSTOMER_INTENT_RECORDED",
             "RECOVERY_CANCELLED",
         } <= event_types
+        authorization_started = next(
+            event for event in services.audits if event.event_type == "A2A_AUTHORIZATION_STARTED"
+        )
+        assert authorization_started.details["approval_path"] == "/a2a/mock-a2a:a2a"
 
         replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
         assert replay_result.replay_failure is None
@@ -429,7 +434,7 @@ async def test_verified_a2a_capture_delivers_one_exact_receipt_and_replays() -> 
                     task_state="WORKING",
                     verification_status="VERIFIED",
                     mandate_id="mandate-receipt-1",
-                    verified_artifact={"protocol_version": "recovery.mandate.v1"},
+                    verified_artifact={"protocol_version": "recovery.mandate.v2"},
                 )
             ]
         )
@@ -498,7 +503,7 @@ async def test_verified_a2a_capture_delivers_one_exact_receipt_and_replays() -> 
         assert receipt.currency == "INR"
         assert receipt.provider_reference == "pay-authoritative-captured-1"
         assert receipt.idempotency_key == (
-            "mock-a2a:a2a-receipt:mandate-receipt-1:recovery.receipt.v1"
+            "mock-a2a:a2a-receipt:mandate-receipt-1:recovery.receipt.v2"
         )
         assert any(event.event_type == "A2A_PAYMENT_RECEIPT_DELIVERED" for event in services.audits)
         replay_result = await Replayer(workflows=[RecoveryCaseWorkflow]).replay_workflow(history)
@@ -529,7 +534,7 @@ async def test_a2a_non_exact_or_non_authoritative_payment_never_sends_success_re
                     task_state="WORKING",
                     verification_status="VERIFIED",
                     mandate_id="mandate-no-receipt",
-                    verified_artifact={"protocol_version": "recovery.mandate.v1"},
+                    verified_artifact={"protocol_version": "recovery.mandate.v2"},
                 )
             ]
         )

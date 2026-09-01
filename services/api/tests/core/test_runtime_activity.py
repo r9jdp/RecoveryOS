@@ -116,6 +116,8 @@ def payment_command() -> ExecuteActionInput:
         customer_id="customer_fitbox",
         subscription_id="sub_fitbox_monthly",
         failed_invoice_id="inv_fitbox_aug_2026",
+        provider_subscription_id="sub_fitbox_monthly",
+        provider_invoice_id="inv_fitbox_aug_2026",
         amount_paise=149_900,
         currency="INR",
         action="OPEN_CUSTOMER_PAYMENT_SURFACE",
@@ -199,7 +201,7 @@ async def test_a2a_policy_uses_nullable_persisted_surface_but_keeps_exact_workfl
             action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
             payment_surface_type=None,
             status=ActionStatus.AWAITING_APPROVAL,
-            idempotency_key=f"{FITBOX_CASE_ID}:SEND_TO_CUSTOMER_AGENT:1",
+            idempotency_key=f"{FITBOX_CASE_ID}:SEND_TO_CUSTOMER_AGENT:action-fitbox:v2",
             created_at=TEST_NOW,
             updated_at=TEST_NOW,
         )

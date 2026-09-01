@@ -38,6 +38,10 @@ class RecoveryWorkflowInput:
     # The unsuffixed fields above remain local database identifiers.
     provider_subscription_id: str | None = None
     provider_invoice_id: str | None = None
+    # Exact durable action selected by the policy transaction.  Older Temporal
+    # histories may not contain it, so the field is additive and optional; the
+    # live A2A v2 boundary rejects a missing value.
+    recovery_action_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +133,7 @@ class ExecuteActionInput:
     mandate: dict[str, Any] | None = None
     provider_subscription_id: str | None = None
     provider_invoice_id: str | None = None
+    recovery_action_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -151,12 +156,16 @@ class StartA2AAuthorizationInput:
     payment_surface_reference: str
     recovery_deadline: str
     idempotency_key: str
+    recovery_action_id: str | None = None
+    failed_invoice_id: str | None = None
+    provider_invoice_id: str | None = None
 
 
 @dataclass(frozen=True)
 class A2AAuthorizationResult:
     remote_task_id: str
     state: str
+    approval_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +179,9 @@ class PollA2AMandateInput:
     payment_surface_type: str
     payment_surface_reference: str
     recovery_deadline: str
+    recovery_action_id: str | None = None
+    failed_invoice_id: str | None = None
+    provider_invoice_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +205,8 @@ class SendA2APaymentReceiptInput:
     provider_reference: str
     observed_at: str
     idempotency_key: str
+    recovery_action_id: str | None = None
+    failed_invoice_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -31,7 +31,7 @@ def _encoded(value: bytes) -> str:
 def _signed_mandate() -> tuple[SignedMandate, ExpectedMandateScope, str, datetime]:
     now = datetime(2026, 8, 28, 12, tzinfo=UTC)
     data = RecoveryMandateData(
-        protocol_version="recovery.mandate.v1",
+        protocol_version="recovery.mandate.v2",
         mandate_id="mandate-1",
         nonce="nonce-1",
         signer_key_id="customer-key-1",
@@ -39,6 +39,8 @@ def _signed_mandate() -> tuple[SignedMandate, ExpectedMandateScope, str, datetim
         merchant_id="merchant-1",
         case_id="case-1",
         customer_id="customer-1",
+        recovery_action_id="action-1",
+        failed_invoice_id="invoice-local-1",
         exact_amount_paise=149_900,
         currency="INR",
         payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
@@ -66,6 +68,8 @@ def _signed_mandate() -> tuple[SignedMandate, ExpectedMandateScope, str, datetim
                 "merchant_id",
                 "case_id",
                 "customer_id",
+                "recovery_action_id",
+                "failed_invoice_id",
                 "exact_amount_paise",
                 "currency",
                 "payment_surface_type",
@@ -92,6 +96,8 @@ async def test_customer_agent_timeout_opens_structured_fallback() -> None:
             merchant_id="merchant-1",
             case_id="case-1",
             customer_id="customer-1",
+            recovery_action_id="action-1",
+            failed_invoice_id="invoice-local-1",
             exact_amount_paise=149_900,
             currency="INR",
             payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
@@ -101,6 +107,13 @@ async def test_customer_agent_timeout_opens_structured_fallback() -> None:
                 "merchant_display_name": "FitBox",
                 "plan_name": "FitBox Annual",
                 "failure_explanation": "Authentication was not completed.",
+                "invoice_state": "issued",
+                "payment_state": "FAILED",
+                "subscription_state": "PENDING",
+                "provider_subscription_state": "pending",
+                "preferred_language": "en-IN",
+                "invoice_due_at": datetime(2026, 8, 28, 11, tzinfo=UTC),
+                "recovery_deadline": datetime(2026, 8, 28, 12, 10, tzinfo=UTC),
             },
         )
         with pytest.raises(httpx.ReadTimeout):

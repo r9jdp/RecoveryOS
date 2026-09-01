@@ -49,11 +49,16 @@ export interface LanguageInterpretation {
 export async function loadApprovalSummary(
   origin: string,
   taskId: string,
+  approvalToken?: string,
   signal?: AbortSignal,
 ): Promise<ApprovalSummary> {
   const response = await fetch(
     `${origin.replace(/\/$/, "")}/v1/tasks/${encodeURIComponent(taskId)}/approval`,
-    { signal, cache: "no-store" },
+    {
+      signal,
+      cache: "no-store",
+      headers: approvalHeaders(approvalToken),
+    },
   );
   if (!response.ok) throw await customerAgentError(response);
   return (await response.json()) as ApprovalSummary;
@@ -63,12 +68,13 @@ export async function submitApprovalDecision(
   origin: string,
   taskId: string,
   submission: ApprovalSubmission,
+  approvalToken?: string,
 ): Promise<ApprovalResult> {
   const response = await fetch(
     `${origin.replace(/\/$/, "")}/v1/tasks/${encodeURIComponent(taskId)}/approval`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: approvalHeaders(approvalToken, true),
       body: JSON.stringify(submission),
     },
   );
@@ -80,17 +86,28 @@ export async function interpretCustomerLanguage(
   origin: string,
   taskId: string,
   text: string,
+  approvalToken?: string,
 ): Promise<LanguageInterpretation> {
   const response = await fetch(
     `${origin.replace(/\/$/, "")}/v1/tasks/${encodeURIComponent(taskId)}/interpretation`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: approvalHeaders(approvalToken, true),
       body: JSON.stringify({ text, channel: "TEXT" }),
     },
   );
   if (!response.ok) throw await customerAgentError(response);
   return (await response.json()) as LanguageInterpretation;
+}
+
+function approvalHeaders(
+  approvalToken: string | undefined,
+  includeContentType = false,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (includeContentType) headers["Content-Type"] = "application/json";
+  if (approvalToken) headers.Authorization = `Bearer ${approvalToken}`;
+  return headers;
 }
 
 async function customerAgentError(response: Response): Promise<Error> {

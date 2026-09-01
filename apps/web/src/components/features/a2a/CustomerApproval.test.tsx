@@ -5,13 +5,17 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ApprovalSummary } from "@/lib/a2a/client";
 
 import { CustomerApproval, formatPaise } from "./CustomerApproval";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 const summary: ApprovalSummary = {
   task_id: "task-1",
@@ -30,6 +34,30 @@ const summary: ApprovalSummary = {
 };
 
 describe("CustomerApproval", () => {
+  it("bootstraps the bearer capability from the fragment and removes it from the URL", async () => {
+    window.history.replaceState(null, "", "/a2a/task-1#token=capability-token");
+    const loadApproval = vi.fn().mockResolvedValue(summary);
+
+    render(
+      <StrictMode>
+        <CustomerApproval
+          taskId="task-1"
+          customerAgentOrigin="https://customer.example"
+          loadApproval={loadApproval}
+        />
+      </StrictMode>,
+    );
+
+    await waitFor(() =>
+      expect(loadApproval).toHaveBeenCalledWith(
+        "task-1",
+        "capability-token",
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(window.location.hash).toBe("");
+  });
+
   it("shows an accessible loading state while fetching", () => {
     render(
       <CustomerApproval
@@ -89,13 +117,17 @@ describe("CustomerApproval", () => {
     expect(
       await screen.findByRole("heading", { name: "Authorization recorded" }),
     ).toBeInTheDocument();
-    expect(submitApproval).toHaveBeenCalledWith("task-1", {
-      decision: "APPROVE",
-      merchant_id: "merchant-1",
-      case_id: "case-1",
-      exact_amount_paise: 149900,
-      payment_surface_reference: "inv_123",
-    });
+    expect(submitApproval).toHaveBeenCalledWith(
+      "task-1",
+      {
+        decision: "APPROVE",
+        merchant_id: "merchant-1",
+        case_id: "case-1",
+        exact_amount_paise: 149900,
+        payment_surface_reference: "inv_123",
+      },
+      undefined,
+    );
   });
 
   it("keeps the exact request visible when submission fails", async () => {

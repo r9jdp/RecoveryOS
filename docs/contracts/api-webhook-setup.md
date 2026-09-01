@@ -93,18 +93,54 @@ the adapter rejects a non-`rzp_test_` key while that gate is true.
 ## A2A setup
 
 The Recovery Agent exposes `/.well-known/agent-card.json` and `/a2a/rpc`. The separate customer
-agent exposes `/.well-known/agent-card.json`, `/rpc`, approval GET/POST routes, and health endpoints.
-Both JSON-RPC directions require `A2A-Version: 1.0` and the recovery-mandate extension URI advertised
-by their Agent Cards. Enable delegation only after pinning the customer-agent public key in
-`CUSTOMER_AGENT_PUBLIC_KEYS_JSON`. Hosted modes set `CUSTOMER_AGENT_TASK_STORE=sql` and require a
-server-only `CUSTOMER_AGENT_DATABASE_URL`; memory is the local default. Never share the
-customer-agent Ed25519 private seed with the API or worker. The recovery worker verifies and
-atomically consumes the exact mandate, then sends an idempotent `recovery.receipt.v1` only after
-authoritative payment recovery. Hosted workers set `RECOVERY_AGENT_RECEIPT_SIGNING_MODE=configured`
-and provide `RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID` plus the server-only
+agent exposes `/.well-known/agent-card.json`, `/rpc`, approval GET/POST routes, an advisory language
+interpretation route, and health endpoints. Both JSON-RPC directions require `A2A-Version: 1.0`.
+RecoveryOS `/a2a/rpc` requires the mandate-v2 extension; customer-agent `/rpc` requires both the
+mandate-v2 and authenticated-receipt-v2 extensions advertised by its Agent Card.
+
+Live RecoveryOS-to-customer-agent requests send `Authorization: Bearer
+<CUSTOMER_AGENT_S2S_BEARER_TOKEN>`. Real mandate signing will not start without that shared,
+server-only credential, and the customer-agent validates it before JSON parsing. If another
+coordinator may call RecoveryOS `/a2a/rpc`, configure a separate
+`RECOVERY_AGENT_A2A_INBOUND_BEARER_TOKEN`; when present, the Recovery Agent advertises and enforces
+that HTTP Bearer scheme. Do not reuse either service credential as a browser approval token.
+
+Enable delegation only after pinning the customer-agent public key in
+`CUSTOMER_AGENT_PUBLIC_KEYS_JSON`. `recovery.request.v2` carries database-derived display context
+and binds the exact persisted `recovery_action_id`, `failed_invoice_id`, amount, currency, and
+payment surface. Hosted modes set `CUSTOMER_AGENT_TASK_STORE=sql` and require the server-only
+`CUSTOMER_AGENT_DATABASE_URL`; memory is the local default. Never share the customer-agent Ed25519
+private seed with the API or worker.
+
+Set `CUSTOMER_AGENT_APPROVAL_TOKEN_SECRET` to a high-entropy server secret in real signing mode.
+The returned approval path contains a deterministic, task-scoped HMAC capability in its URL
+fragment (`#token=...`), so navigation does not send the token to either server. The browser reads
+and removes the fragment, then presents that capability as an HTTP Bearer token to the summary,
+interpretation, and explicit approval routes. Query-parameter tokens are not accepted by those
+APIs. The capability grants access to that exact task, not payment authority.
+It expires with the request and stops exposing approval details after a decision. It is still a
+possession credential, not customer identity proof or a Razorpay/RBI recurring mandate. In this
+workspace it is copied into restricted workflow audit data for operator-assisted delivery/testing;
+production deployments that claim customer consent must instead deliver it through an
+authenticated customer channel and redact it from merchant-visible audit data.
+
+To enable advisory customer-language interpretation, set `LLM_PROVIDER=openai`, `OPENAI_API_KEY`,
+`OPENAI_MODEL`, and optionally `CUSTOMER_AGENT_LLM_TIMEOUT_SECONDS`. The OpenAI Responses request
+uses strict structured output and sends customer text plus display-only case context. RecoveryOS
+does not add exact money, raw customer/case/action/invoice identifiers, or payment-surface claims to
+the model payload. The result always has `authorization_effect=NONE` and
+`requires_explicit_approval=true`; provider timeouts, refusals, malformed output, and errors fail
+closed without producing a mandate.
+
+The recovery worker verifies the pinned Ed25519 signature, complete v2 scope, time window, and
+atomically consumed nonce/claim before opening the already-bound surface. Only after authoritative
+payment recovery does it send an idempotent, signed `recovery.receipt.v2` carrying the same
+`recovery_action_id` and `failed_invoice_id`. Hosted workers set
+`RECOVERY_AGENT_RECEIPT_SIGNING_MODE=configured` and provide
+`RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID` plus the server-only
 `RECOVERY_AGENT_RECEIPT_ED25519_PRIVATE_KEY`. The customer agent sets
 `CUSTOMER_AGENT_RECEIPT_VERIFICATION_MODE=pinned` and pins the matching public key in
-`CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON`; an unsigned, unknown-key, replayed, or
+`CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON`; an unsigned, unknown-key, replay-conflicting, or
 scope-mismatched receipt cannot complete a task.
 
 ## Contract validation
