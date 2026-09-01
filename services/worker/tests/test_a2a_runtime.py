@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from services.api.app.db import Base
 from services.api.app.integrations.a2a.mandates import MandateVerifier, canonical_json
 from services.api.app.integrations.a2a.models import RecoveryMandateData
 from services.api.app.integrations.a2a.nonce_store import (
@@ -19,10 +20,15 @@ from services.api.app.integrations.a2a.nonce_store import (
     SqlAlchemyNonceStore,
 )
 from services.api.app.providers.contracts import (
+    CustomerAgentDisplayContext,
     CustomerAgentRecoveryRequest,
     CustomerAgentTask,
 )
-from services.worker.app.a2a_runtime import LiveA2AMandateActivityServices
+from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
+from services.worker.app.a2a_runtime import (
+    LiveA2AMandateActivityServices,
+    SqlAlchemyA2ADisplayContextLoader,
+)
 from services.worker.app.contracts import (
     PollA2AMandateInput,
     SendA2APaymentReceiptInput,
@@ -57,6 +63,27 @@ class FakeCustomerAgentClient:
         del reason
         assert remote_task_id == self.task.remote_task_id
         return self.task
+
+
+@dataclass
+class FakeDisplayContextLoader:
+    contexts: list[tuple[str, str, str]] = field(default_factory=list)
+
+    async def load(
+        self,
+        *,
+        case_id: str,
+        merchant_id: str,
+        customer_id: str,
+    ) -> CustomerAgentDisplayContext:
+        self.contexts.append((case_id, merchant_id, customer_id))
+        return CustomerAgentDisplayContext(
+            merchant_display_name="FitBox",
+            plan_name="FitBox Annual",
+            failure_explanation=(
+                "The payment needs customer authentication before it can continue."
+            ),
+        )
 
 
 def _b64url(value: bytes) -> str:
@@ -132,6 +159,7 @@ def live_services(
             pinned_public_keys={"customer-key-1": public_key},
             nonce_store=nonce_store,
         ),
+        display_context_loader=FakeDisplayContextLoader(),
         clock=lambda: NOW,
     )
 
@@ -183,6 +211,14 @@ async def test_live_bridge_starts_exact_request_and_sql_nonce_is_consumed_once()
     client = services.client
     assert isinstance(client, FakeCustomerAgentClient)
     assert client.requests[0].payment_surface_reference == "invoice-1"
+    assert client.requests[0].context == CustomerAgentDisplayContext(
+        merchant_display_name="FitBox",
+        plan_name="FitBox Annual",
+        failure_explanation=("The payment needs customer authentication before it can continue."),
+    )
+    loader = services.display_context_loader
+    assert isinstance(loader, FakeDisplayContextLoader)
+    assert loader.contexts == [("case-1", "merchant-1", "customer-1")]
 
     verified = await services.poll_and_verify_mandate(poll_command())
     replayed = await services.poll_and_verify_mandate(poll_command())
@@ -220,6 +256,44 @@ async def test_live_bridge_starts_exact_request_and_sql_nonce_is_consumed_once()
             "idempotency_key": "task-1:mandate-1:recovery.receipt.v1",
         }
     ]
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_display_context_is_loaded_from_exact_database_case_without_raw_failure_data() -> (
+    None
+):
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        await seed_fitbox(session)
+
+    loader = SqlAlchemyA2ADisplayContextLoader(session_factory)
+    context = await loader.load(
+        case_id=FITBOX_CASE_ID,
+        merchant_id="merchant_fitbox",
+        customer_id="customer_fitbox_001",
+    )
+    assert context == CustomerAgentDisplayContext(
+        merchant_display_name="FitBox",
+        plan_name="FitBox Annual",
+        failure_explanation=("The payment needs customer authentication before it can continue."),
+    )
+    serialized = context.model_dump_json()
+    assert "incorrect_otp" not in serialized.casefold()
+    assert "pay_" not in serialized.casefold()
+
+    with pytest.raises(ValueError, match="does not match"):
+        await loader.load(
+            case_id=FITBOX_CASE_ID,
+            merchant_id="merchant_wrong",
+            customer_id="customer_fitbox_001",
+        )
     await engine.dispose()
 
 

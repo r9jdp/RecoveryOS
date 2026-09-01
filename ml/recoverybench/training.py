@@ -19,10 +19,12 @@ from .synthetic import SyntheticCase, generate_paired_cases
 ARTIFACT_VERSION = "recoverybench.v1"
 REPORT_SCHEMA_VERSION = "recoverybench.report.v1"
 DEFAULT_SEED = 20_260_827
+DEFAULT_CASE_COUNT = 5_000
 FEATURE_COLUMNS = [
     "amount_at_risk_paise",
     "diagnosis",
     "candidate_action",
+    "payment_surface_type",
     "tenure_days",
     "prior_successful_payments",
     "failed_attempt_count",
@@ -30,8 +32,9 @@ FEATURE_COLUMNS = [
     "voice_consent",
     "is_quiet_hours",
 ]
-CATEGORICAL_FEATURES = ["diagnosis", "candidate_action"]
+CATEGORICAL_FEATURES = ["diagnosis", "candidate_action", "payment_surface_type"]
 _DETERMINISTIC_TRAIN_FINISH_TIME = "1970-01-01T00:00:00Z"
+ISOTONIC_WEIGHT = 0.90
 
 
 def _frame(cases: Sequence[SyntheticCase]) -> pd.DataFrame:
@@ -42,23 +45,38 @@ def _canonical_json(payload: object) -> str:
     return json.dumps(payload, indent=2, sort_keys=True, separators=(",", ": ")) + "\n"
 
 
-def apply_calibration(raw_probability: float, calibration: dict[str, list[float]]) -> float:
+def apply_calibration(raw_probability: float, calibration: dict[str, Any]) -> float:
+    """Apply rank-preserving isotonic shrinkage.
+
+    Pure isotonic calibration creates broad equal-probability plateaus on a
+    modest synthetic calibration cohort. Shrinking the calibrated estimate
+    slightly toward the raw CatBoost score retains calibration while ensuring
+    meaningful candidate differences are not converted back into ties.
+    """
+
+    raw_probability = min(max(raw_probability, 0.0), 1.0)
     x = calibration["x_thresholds"]
     y = calibration["y_thresholds"]
     if not x or len(x) != len(y):
-        return min(max(raw_probability, 0.0), 1.0)
+        return raw_probability
     if raw_probability <= x[0]:
-        return y[0]
-    if raw_probability >= x[-1]:
-        return y[-1]
-    for index in range(1, len(x)):
-        if raw_probability <= x[index]:
-            width = x[index] - x[index - 1]
-            if width == 0:
-                return y[index]
-            fraction = (raw_probability - x[index - 1]) / width
-            return y[index - 1] + (fraction * (y[index] - y[index - 1]))
-    return y[-1]
+        isotonic_probability = y[0]
+    elif raw_probability >= x[-1]:
+        isotonic_probability = y[-1]
+    else:
+        isotonic_probability = y[-1]
+        for index in range(1, len(x)):
+            if raw_probability <= x[index]:
+                width = x[index] - x[index - 1]
+                if width == 0:
+                    isotonic_probability = y[index]
+                else:
+                    fraction = (raw_probability - x[index - 1]) / width
+                    isotonic_probability = y[index - 1] + (fraction * (y[index] - y[index - 1]))
+                break
+    weight = float(calibration.get("isotonic_weight", ISOTONIC_WEIGHT))
+    weight = min(max(weight, 0.0), 1.0)
+    return float((weight * isotonic_probability) + ((1.0 - weight) * raw_probability))
 
 
 def artifact_checksum(artifact_dir: Path) -> str:
@@ -89,7 +107,7 @@ def train_artifact(
     artifact_dir: Path,
     *,
     seed: int = DEFAULT_SEED,
-    case_count: int = 1_200,
+    case_count: int = DEFAULT_CASE_COUNT,
 ) -> dict[str, Any]:
     """Train, calibrate, evaluate, and write one self-verifying artifact."""
 
@@ -110,6 +128,7 @@ def train_artifact(
         random_seed=seed,
         random_strength=0.0,
         bootstrap_type="No",
+        one_hot_max_size=10,
         thread_count=1,
         verbose=False,
         allow_writing_files=False,
@@ -127,6 +146,8 @@ def train_artifact(
         [int(case.treatment_recovered) for case in calibration_cases],
     )
     calibration = {
+        "method": "isotonic_shrinkage",
+        "isotonic_weight": ISOTONIC_WEIGHT,
         "x_thresholds": [float(value) for value in calibrator.X_thresholds_],
         "y_thresholds": [float(value) for value in calibrator.y_thresholds_],
     }
@@ -142,7 +163,7 @@ def train_artifact(
         "schema_version": "recoverybench.artifact.v1",
         "artifact_version": ARTIFACT_VERSION,
         "artifact_checksum": checksum,
-        "model_type": "CatBoostClassifier+isotonic",
+        "model_type": "CatBoostClassifier+isotonic-shrinkage",
         "feature_columns": FEATURE_COLUMNS,
         "categorical_features": CATEGORICAL_FEATURES,
         "training_seed": seed,
@@ -158,7 +179,7 @@ def train_artifact(
         "evidence_kind": "SIMULATED",
         "artifact": manifest,
         "dataset": {
-            "generator_version": "hidden-customer-state.v1",
+            "generator_version": "hidden-customer-state.v2-surface-aware",
             "seed": seed,
             "total_case_count": case_count,
             "training_case_count": len(training_cases),

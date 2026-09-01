@@ -38,12 +38,15 @@ from services.api.app.models import (
     Subscription,
     WebhookInboxEntry,
 )
+from services.api.app.runtime_mode import ensure_demo_seed_allowed
 
 FITBOX_CASE_ID = "case_fitbox_aug_2026"
 
 
 async def reset_demo_data(session: AsyncSession) -> None:
     """Remove demo data in dependency order; intended only for explicit reset."""
+
+    ensure_demo_seed_allowed()
 
     merchant_id = "merchant_fitbox"
     case_ids = select(RecoveryCase.id).where(RecoveryCase.merchant_id == merchant_id)
@@ -77,6 +80,8 @@ async def reset_demo_data(session: AsyncSession) -> None:
 
 async def seed_fitbox(session: AsyncSession, *, reset: bool = False) -> bool:
     """Seed one correlated failed subscription case, returning whether rows were added."""
+
+    ensure_demo_seed_allowed()
 
     if reset:
         await reset_demo_data(session)
@@ -182,7 +187,7 @@ async def seed_fitbox(session: AsyncSession, *, reset: bool = False) -> bool:
         case_id=recovery_case.id,
         action_type=RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
         payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
-        status=ActionStatus.PROPOSED,
+        status=ActionStatus.AWAITING_APPROVAL,
         idempotency_key=(
             "case:case_fitbox_aug_2026:action:OPEN_CUSTOMER_PAYMENT_SURFACE:"
             "surface:SUBSCRIPTION_CARD_UPDATE"

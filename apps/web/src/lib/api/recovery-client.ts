@@ -5,20 +5,31 @@ import type {
   CaseCommand,
   CaseDetailFixture,
   CommandResult,
+  ApprovalItem,
   DashboardCase,
   DashboardFixture,
   FixtureResult,
   PolicySettings,
+  PaymentSurfaceType,
+  RecoveryAction,
   SafetyDisposition,
   SafetyDispositionResult,
 } from "@/types/recovery";
+import { buildApprovalItems } from "@/lib/merchant-demo";
 import { operatorMutationHeaders } from "@/lib/operator-session";
+import {
+  demoDataEnabled,
+  recoveryApiOrigin,
+  requireRecoveryApiOrigin,
+} from "@/lib/runtime-config";
 
 type ApiSchemas = components["schemas"];
 type LiveDashboard = ApiSchemas["DashboardResponse"];
 type LiveCaseList = ApiSchemas["CaseListResponse"];
 type LiveCaseDetail = ApiSchemas["CaseDetailResponse"];
 type LiveTimeline = ApiSchemas["TimelineResponse"];
+type LivePolicySettings = ApiSchemas["PolicySettingsResponse"];
+type LiveApprovalQueue = ApiSchemas["ApprovalQueueResponse"];
 
 const rawDashboardFixture = dashboardFixtureJson as DashboardFixture;
 const dashboardFixture: DashboardFixture = {
@@ -30,11 +41,6 @@ const dashboardFixture: DashboardFixture = {
   },
 };
 const caseDetailFixture = caseDetailFixtureJson as CaseDetailFixture;
-
-function apiBaseUrl(): string | null {
-  const configured = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-  return configured ? configured.replace(/\/$/, "") : null;
-}
 
 function fallbackFixture<T>(fixture: T, warning?: string): FixtureResult<T> {
   return {
@@ -91,40 +97,160 @@ function fallbackWarning(error: unknown, resource: string): string {
   return `${resource} could not be loaded (${reason}); deterministic FitBox demo data is shown instead.`;
 }
 
+function liveReadError(error: unknown, resource: string): Error {
+  const reason =
+    error instanceof Error ? error.message : "The API is unavailable.";
+  return new Error(`${resource} could not be loaded: ${reason}`);
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-function normalizePolicySettings(settings: PolicySettings): PolicySettings {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const recoveryActions = new Set<RecoveryAction>([
+  "WAIT_FOR_GATEWAY_RETRY",
+  "OPEN_CUSTOMER_PAYMENT_SURFACE",
+  "START_VOICE",
+  "SEND_TO_CUSTOMER_AGENT",
+  "ESCALATE_TO_HUMAN",
+  "STOP",
+]);
+
+const paymentSurfaces = new Set<PaymentSurfaceType>([
+  "SUBSCRIPTION_CARD_UPDATE",
+  "SUBSCRIPTION_INVOICE_LINK",
+  "STANDARD_PAYMENT_LINK",
+]);
+
+function recoveryAction(value: unknown): RecoveryAction | null {
+  return typeof value === "string" && recoveryActions.has(value as RecoveryAction)
+    ? (value as RecoveryAction)
+    : null;
+}
+
+function paymentSurface(value: unknown): PaymentSurfaceType | null {
+  return typeof value === "string" && paymentSurfaces.has(value as PaymentSurfaceType)
+    ? (value as PaymentSurfaceType)
+    : null;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function liveRecommendationFromTimeline(timeline: LiveTimeline) {
+  const event = [...timeline.items]
+    .reverse()
+    .find((item) => item.event_type === "ACTION_RECOMMENDED");
+  if (!event || !isRecord(event.payload)) return null;
+  const payload = event.payload;
+  const candidates = Array.isArray(payload.ranked_candidates)
+    ? payload.ranked_candidates.filter(isRecord)
+    : [];
+  const selected = candidates.find((candidate) => candidate.selected === true);
+  if (!selected) return null;
+  const action = recoveryAction(selected.action_type);
+  if (!action) return null;
+  const model = isRecord(selected.model)
+    ? selected.model
+    : isRecord(payload.selected_model)
+      ? payload.selected_model
+      : {};
+  const policy = isRecord(selected.policy) ? selected.policy : {};
+  const probability: number | null =
+    typeof selected.recovery_probability === "number"
+      ? selected.recovery_probability
+      : null;
+  const rejected = candidates.flatMap((candidate) => {
+    if (candidate.selected === true) return [];
+    const rejectedAction = recoveryAction(candidate.action_type);
+    if (!rejectedAction) return [];
+    return [
+      {
+        action: rejectedAction,
+        payment_surface_type:
+          paymentSurface(candidate.payment_surface_type) ?? undefined,
+        reason_code:
+          typeof candidate.rejection_code === "string"
+            ? candidate.rejection_code
+            : "NOT_SELECTED",
+        reason:
+          typeof candidate.rejection_reason === "string"
+            ? candidate.rejection_reason
+            : "A higher-utility policy-eligible action was selected.",
+      },
+    ];
+  });
+  const scoringMode: CaseDetailFixture["recommendation"]["scoring_mode"] =
+    model.scoring_mode === "CHECKSUM_VERIFIED_MODEL" ||
+    model.scoring_mode === "TRAINED_MODEL" ||
+    model.scoring_mode === "CUSTOM_SCORER" ||
+    model.scoring_mode === "DETERMINISTIC_FALLBACK"
+      ? model.scoring_mode
+      : undefined;
+  return {
+    action,
+    payment_surface_type: paymentSurface(selected.payment_surface_type),
+    predicted_recovery_probability: probability,
+    expected_recovered_paise:
+      typeof selected.expected_recovered_paise === "number"
+        ? selected.expected_recovered_paise
+        : null,
+    expected_utility_paise:
+      typeof selected.expected_utility_paise === "number"
+        ? selected.expected_utility_paise
+        : null,
+    confidence: probability,
+    model_name: typeof model.name === "string" ? model.name : undefined,
+    model_version: typeof model.version === "string" ? model.version : undefined,
+    artifact_checksum:
+      typeof model.artifact_checksum === "string" || model.artifact_checksum === null
+        ? model.artifact_checksum
+        : undefined,
+    scoring_mode: scoringMode,
+    reason_codes: [
+      scoringMode === "CHECKSUM_VERIFIED_MODEL" ||
+      scoringMode === "TRAINED_MODEL" ||
+      scoringMode === "CUSTOM_SCORER"
+        ? "MODEL_MAX_POLICY_ELIGIBLE_EXPECTED_UTILITY"
+        : "DETERMINISTIC_FALLBACK",
+      ...stringList(policy.reason_codes),
+    ],
+    reasons: [...stringList(selected.explanation), ...stringList(policy.reasons)],
+    rejected_alternatives: rejected,
+  };
+}
+
+function normalizePolicySettings(
+  settings: LivePolicySettings | PolicySettings,
+): PolicySettings {
   return {
     timezone: settings.timezone,
-    quiet_hours_start: settings.quiet_hours_start,
-    quiet_hours_end: settings.quiet_hours_end,
-    max_contacts_per_7_days: settings.max_contacts_per_7_days,
-    require_approval_above_paise: settings.require_approval_above_paise,
+    quiet_hours_start: settings.quiet_hours_start ?? null,
+    quiet_hours_end: settings.quiet_hours_end ?? null,
+    max_contacts_per_7_days: settings.max_contacts_per_7_days ?? null,
+    require_approval_above_paise: settings.require_approval_above_paise ?? null,
     require_approval_actions: settings.require_approval_actions ?? [],
-    recovery_kill_switch: settings.recovery_kill_switch,
+    recovery_kill_switch: settings.recovery_kill_switch ?? false,
   };
 }
 
 function normalizeDashboardCase(
   item: ApiSchemas["CaseSummaryResponse"],
 ): DashboardCase {
-  const fallback = dashboardFixture.cases.find(
-    (candidate) => candidate.id === item.id,
-  );
   return {
     id: item.id,
     merchant_id: item.merchant_id,
-    failed_invoice_id:
-      item.failed_invoice_id ?? fallback?.failed_invoice_id ?? "not-correlated",
-    billing_cycle_key:
-      item.billing_cycle_key ?? fallback?.billing_cycle_key ?? "not-correlated",
-    customer_display_name:
-      item.customer_display_name ??
-      fallback?.customer_display_name ??
-      "Unknown customer",
-    plan_name: item.plan_name ?? fallback?.plan_name ?? "Unknown plan",
+    failed_invoice_id: item.failed_invoice_id ?? "not-correlated",
+    billing_cycle_key: item.billing_cycle_key ?? "not-correlated",
+    customer_display_name: item.customer_display_name ?? "Unknown customer",
+    plan_name: item.plan_name ?? "Unknown plan",
     amount_at_risk_paise: item.amount_at_risk_paise,
     case_outcome: item.case_outcome,
     payment_state: item.payment_state,
@@ -132,10 +258,7 @@ function normalizeDashboardCase(
     contact_disposition: item.contact_disposition,
     revenue_attribution: item.revenue_attribution,
     diagnosis: item.diagnosis,
-    recommended_action:
-      item.recommended_action ??
-      fallback?.recommended_action ??
-      "ESCALATE_TO_HUMAN",
+    recommended_action: item.recommended_action ?? "ESCALATE_TO_HUMAN",
     payment_surface_type: item.payment_surface_type ?? null,
     updated_at: item.updated_at,
   };
@@ -144,6 +267,7 @@ function normalizeDashboardCase(
 function composeDashboard(
   dashboard: LiveDashboard,
   caseList: LiveCaseList,
+  policySettings: LivePolicySettings,
 ): DashboardFixture {
   const cases = caseList.items.map(normalizeDashboardCase);
   const channels: DashboardFixture["recovery_by_channel"][number]["channel"][] =
@@ -154,11 +278,17 @@ function composeDashboard(
       "VOICE",
       "CUSTOMER_AGENT",
     ];
+  const recoveryByChannel = Array.isArray(dashboard.recovery_by_channel)
+    ? dashboard.recovery_by_channel
+    : [];
+  const channelFacts = new Map(
+    recoveryByChannel.map((item) => [item.channel, item]),
+  );
   return {
     fixture_version: "screens.v1",
     screen: "/dashboard",
     evidence_kind: dashboard.evidence_kind,
-    currency: "INR",
+    currency: dashboard.currency,
     metrics: {
       revenue_at_risk_paise: dashboard.metrics.revenue_at_risk_paise,
       verified_recovered_revenue_paise:
@@ -172,20 +302,27 @@ function composeDashboard(
       policy_blocked_actions: dashboard.metrics.policy_blocked_actions,
     },
     diagnosis_distribution: dashboard.diagnosis_distribution,
-    recovery_by_channel: channels.map((channel) => ({
-      channel,
-      case_count: cases.filter((item) => {
-        if (channel === "VOICE")
-          return item.recommended_action === "START_VOICE";
-        if (channel === "CUSTOMER_AGENT")
+    recovery_by_channel: channels.map((channel) => {
+      const facts = channelFacts.get(channel);
+      const matchingCases = cases.filter((item) => {
+        if (channel === "VOICE") return item.recommended_action === "START_VOICE";
+        if (channel === "CUSTOMER_AGENT") {
           return item.recommended_action === "SEND_TO_CUSTOMER_AGENT";
+        }
         return item.payment_surface_type === channel;
-      }).length,
-      recovered_paise: 0,
-    })),
-    policy_settings: structuredClone(dashboardFixture.policy_settings),
+      });
+      return {
+        channel,
+        case_count: facts?.case_count ?? matchingCases.length,
+        recovered_paise: facts?.recovered_paise ?? 0,
+      };
+    }),
+    policy_settings: normalizePolicySettings(policySettings),
     cases,
-    recent_events: dashboard.recent_events,
+    recent_events: dashboard.recent_events.map((event) => ({
+      ...event,
+      payload: {},
+    })),
   };
 }
 
@@ -197,6 +334,7 @@ function composeCaseDetail(
   const failure = detail.payment_failure;
   const action = detail.latest_action;
   const policy = detail.latest_policy;
+  const rankedRecommendation = liveRecommendationFromTimeline(timeline);
   const evidenceKind =
     timeline.items.find(
       (event) => event.evidence_kind === "RAZORPAY_TEST_VERIFIED",
@@ -204,7 +342,7 @@ function composeCaseDetail(
     timeline.items[0]?.evidence_kind ??
     (recoveryCase.revenue_attribution === "RAZORPAY_TEST_VERIFIED"
       ? "RAZORPAY_TEST_VERIFIED"
-      : "SIMULATED");
+      : "SYSTEM_DERIVED");
   return {
     fixture_version: "screens.v1",
     screen: `/cases/${recoveryCase.id}`,
@@ -243,7 +381,7 @@ function composeCaseDetail(
       id: detail.subscription.id,
       plan_name: detail.subscription.plan_name,
       amount_paise: detail.subscription.amount_paise,
-      currency: "INR",
+      currency: detail.subscription.currency,
       subscription_state: detail.subscription.subscription_state,
     },
     payment_failure: {
@@ -272,13 +410,13 @@ function composeCaseDetail(
           },
         ]
       : [],
-    recommendation: {
+    recommendation: rankedRecommendation ?? {
       action: action?.action_type ?? "STOP",
       payment_surface_type: action?.payment_surface_type ?? null,
-      predicted_recovery_probability: 0,
-      expected_recovered_paise: 0,
-      expected_utility_paise: 0,
-      confidence: 0,
+      predicted_recovery_probability: null,
+      expected_recovered_paise: null,
+      expected_utility_paise: null,
+      confidence: null,
       reason_codes: [action ? "LIVE_ACTION_LOADED" : "NO_LIVE_ACTION"],
       reasons: [
         action
@@ -319,6 +457,7 @@ function composeCaseDetail(
       evidence_kind: event.evidence_kind,
       occurred_at: event.occurred_at,
       correlation_id: event.correlation_id,
+      payload: isRecord(event.payload) ? event.payload : {},
     })),
   };
 }
@@ -326,18 +465,31 @@ function composeCaseDetail(
 export async function getDashboard(
   signal?: AbortSignal,
 ): Promise<FixtureResult<DashboardFixture>> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) return fallbackFixture(dashboardFixture);
+  const baseUrl = recoveryApiOrigin();
+  if (!baseUrl) {
+    if (demoDataEnabled()) return fallbackFixture(dashboardFixture);
+    return Promise.reject(
+      new Error(
+        "The Control Tower requires NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+      ),
+    );
+  }
   try {
-    const [dashboard, cases] = await Promise.all([
+    const [dashboard, cases, policySettings] = await Promise.all([
       fetchJson<LiveDashboard>(`${baseUrl}/v1/dashboard/metrics`, { signal }),
       fetchJson<LiveCaseList>(`${baseUrl}/v1/recovery-cases?limit=100`, {
         signal,
       }),
+      fetchJson<LivePolicySettings>(`${baseUrl}/v1/policy-settings`, { signal }),
     ]);
-    return { data: composeDashboard(dashboard, cases), source: "api" };
+    return {
+      data: composeDashboard(dashboard, cases, policySettings),
+      source: "api",
+    };
   } catch (error) {
     if (isAbortError(error)) throw error;
+    if (!demoDataEnabled())
+      throw liveReadError(error, "Live Control Tower data");
     return fallbackFixture(
       dashboardFixture,
       fallbackWarning(error, "Live Control Tower data"),
@@ -345,12 +497,61 @@ export async function getDashboard(
   }
 }
 
+export async function getApprovalQueue(
+  signal?: AbortSignal,
+): Promise<FixtureResult<ApprovalItem[]>> {
+  const baseUrl = recoveryApiOrigin();
+  if (!baseUrl) {
+    if (demoDataEnabled()) {
+      return {
+        data: buildApprovalItems(dashboardFixture),
+        source: "mock",
+      };
+    }
+    return Promise.reject(
+      new Error(
+        "The approval queue requires NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+      ),
+    );
+  }
+  try {
+    const response = await fetchJson<LiveApprovalQueue>(
+      `${baseUrl}/v1/approval-queue`,
+      { signal },
+    );
+    return {
+      data: response.items.map((item) => ({
+        ...item,
+        deadline: item.deadline,
+      })),
+      source: "api",
+    };
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    if (demoDataEnabled()) {
+      return {
+        data: buildApprovalItems(dashboardFixture),
+        source: "mock",
+        warning: fallbackWarning(error, "Live approval queue"),
+      };
+    }
+    throw liveReadError(error, "Live approval queue");
+  }
+}
+
 export async function getCaseDetail(
   caseId: string,
   signal?: AbortSignal,
 ): Promise<FixtureResult<CaseDetailFixture>> {
-  const baseUrl = apiBaseUrl();
+  const baseUrl = recoveryApiOrigin();
   if (!baseUrl) {
+    if (!demoDataEnabled()) {
+      return Promise.reject(
+        new Error(
+          "Case details require NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+        ),
+      );
+    }
     return fallbackFixture(
       caseDetailFixture,
       caseDetailFixture.case.id === caseId
@@ -375,6 +576,7 @@ export async function getCaseDetail(
     return { data: composeCaseDetail(detail, timeline), source: "api" };
   } catch (error) {
     if (isAbortError(error)) throw error;
+    if (!demoDataEnabled()) throw liveReadError(error, `Live case ${caseId}`);
     return fallbackFixture(
       caseDetailFixture,
       `${fallbackWarning(error, `Live case ${caseId}`)} The FitBox reference case is shown.`,
@@ -385,8 +587,16 @@ export async function getCaseDetail(
 export async function getPolicySettings(
   signal?: AbortSignal,
 ): Promise<FixtureResult<PolicySettings>> {
-  const baseUrl = apiBaseUrl();
-  if (!baseUrl) return fallbackFixture(dashboardFixture.policy_settings);
+  const baseUrl = recoveryApiOrigin();
+  if (!baseUrl) {
+    if (demoDataEnabled())
+      return fallbackFixture(dashboardFixture.policy_settings);
+    return Promise.reject(
+      new Error(
+        "Policy settings require NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+      ),
+    );
+  }
   try {
     const settings = await fetchJson<PolicySettings>(
       `${baseUrl}/v1/policy-settings`,
@@ -395,6 +605,7 @@ export async function getPolicySettings(
     return { data: normalizePolicySettings(settings), source: "api" };
   } catch (error) {
     if (isAbortError(error)) throw error;
+    if (!demoDataEnabled()) throw liveReadError(error, "Live policy settings");
     return fallbackFixture(
       dashboardFixture.policy_settings,
       fallbackWarning(error, "Live policy settings"),
@@ -406,8 +617,9 @@ export async function executeCaseCommand(
   caseId: string,
   command: CaseCommand,
 ): Promise<CommandResult> {
-  const baseUrl = apiBaseUrl();
+  const baseUrl = recoveryApiOrigin();
   if (!baseUrl) {
+    if (!demoDataEnabled()) requireRecoveryApiOrigin("Recovery commands");
     await new Promise((resolve) => window.setTimeout(resolve, 450));
     return {
       command,
@@ -454,8 +666,9 @@ export async function executeSafetyDisposition(
   caseId: string,
   disposition: SafetyDisposition,
 ): Promise<SafetyDispositionResult> {
-  const baseUrl = apiBaseUrl();
+  const baseUrl = recoveryApiOrigin();
   if (!baseUrl) {
+    if (!demoDataEnabled()) requireRecoveryApiOrigin("Safety dispositions");
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     return {
       disposition,
@@ -498,8 +711,9 @@ export async function executeSafetyDisposition(
 export async function updatePolicySettings(
   settings: PolicySettings,
 ): Promise<PolicySettings> {
-  const baseUrl = apiBaseUrl();
+  const baseUrl = recoveryApiOrigin();
   if (!baseUrl) {
+    if (!demoDataEnabled()) requireRecoveryApiOrigin("Policy updates");
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     return structuredClone(settings);
   }

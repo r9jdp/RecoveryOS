@@ -35,20 +35,11 @@ import {
   FieldSet,
 } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/shadcn/select";
 import { Spinner } from "@/components/shadcn/spinner";
 import {
   getPolicySettings,
   updatePolicySettings,
 } from "@/lib/api/recovery-client";
-import { merchantDashboard } from "@/lib/merchant-demo";
 import { formatPaise, humanize } from "@/lib/recovery-format";
 import type { PolicySettings, RecoveryAction } from "@/types/recovery";
 
@@ -66,16 +57,24 @@ const approvalActions: Array<{ action: RecoveryAction; label: string }> = [
   },
 ];
 
-const timezoneItems = [{ label: "Asia/Kolkata", value: "Asia/Kolkata" }];
+const emptyPolicySettings: PolicySettings = {
+  timezone: "Asia/Kolkata",
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  max_contacts_per_7_days: null,
+  require_approval_above_paise: null,
+  require_approval_actions: [],
+  recovery_kill_switch: false,
+};
 
 export function PolicySettingsPanel({
   saveSettings = updatePolicySettings,
 }: {
   saveSettings?: (settings: PolicySettings) => Promise<PolicySettings>;
 }) {
-  const [settings, setSettings] = useState<PolicySettings>(
-    merchantDashboard.policy_settings,
-  );
+  const [settings, setSettings] = useState<PolicySettings>(emptyPolicySettings);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [killConfirm, setKillConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,8 +93,14 @@ export function PolicySettingsPanel({
       .catch((caught: unknown) => {
         if (caught instanceof DOMException && caught.name === "AbortError")
           return;
-        setReadWarning("Policy settings could not be refreshed.");
-      });
+        setLoadFailed(true);
+        setReadWarning(
+          caught instanceof Error
+            ? caught.message
+            : "Live policy settings could not be loaded.",
+        );
+      })
+      .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
 
@@ -118,6 +123,26 @@ export function PolicySettingsPanel({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="grid min-h-64 place-items-center" role="status">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Spinner /> Loading live policy settings…
+        </div>
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <Alert variant="destructive">
+        <CircleAlert />
+        <AlertTitle>Policy settings unavailable</AlertTitle>
+        <AlertDescription>{readWarning}</AlertDescription>
+      </Alert>
+    );
   }
 
   return (
@@ -200,30 +225,18 @@ export function PolicySettingsPanel({
                 <FieldLabel htmlFor="policy-timezone">
                   Merchant timezone
                 </FieldLabel>
-                <Select
-                  items={timezoneItems}
+                <Input
+                  id="policy-timezone"
                   value={settings.timezone}
-                  onValueChange={(value) => {
-                    if (!value) return;
+                  placeholder="Asia/Kolkata"
+                  onChange={(event) => {
+                    const value = event.target.value;
                     setSettings((current) => ({
                       ...current,
                       timezone: value,
                     }));
                   }}
-                >
-                  <SelectTrigger id="policy-timezone" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {timezoneItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                />
               </Field>
 
               <Field>

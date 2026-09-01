@@ -6,7 +6,6 @@ import pytest
 from services.api.app.integrations.voice.twilio import (
     TwilioConfig,
     TwilioVoiceProvider,
-    render_elevenlabs_twiml,
 )
 from services.api.app.providers.contracts import VoiceContactRequest
 
@@ -129,13 +128,3 @@ async def test_twilio_cancel_raises_when_provider_rejects_update() -> None:
             await provider.cancel_contact(
                 contact_attempt_id="attempt-rejected", reason="PAYMENT_RECOVERED"
             )
-
-
-def test_twiml_escapes_attempt_and_requires_secure_stream() -> None:
-    xml = render_elevenlabs_twiml(
-        stream_url="wss://eleven.example/stream?a=1&b=2", attempt_id='a"b'
-    )
-    assert "wss://eleven.example/stream?a=1&amp;b=2" in xml
-    assert "a&quot;b" in xml
-    with pytest.raises(ValueError):
-        render_elevenlabs_twiml(stream_url="ws://insecure", attempt_id="a")

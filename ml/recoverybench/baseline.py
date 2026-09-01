@@ -60,15 +60,25 @@ class DeterministicRecoveryScorer:
         )
 
 
+class RecoveryModelUnavailableError(RuntimeError):
+    """Raised when a deployment requires the trained artifact but it cannot load."""
+
+
 class RecoveryBenchScorer:
     """Lazy CatBoost adapter that degrades safely to the deterministic scorer."""
 
-    def __init__(self, artifact_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        artifact_dir: Path | None = None,
+        *,
+        allow_deterministic_fallback: bool = True,
+    ) -> None:
         self.artifact_dir = artifact_dir
+        self.allow_deterministic_fallback = allow_deterministic_fallback
         self.fallback = DeterministicRecoveryScorer()
         self._model: Any | None = None
         self._manifest: dict[str, Any] | None = None
-        self._calibration: dict[str, list[float]] | None = None
+        self._calibration: dict[str, Any] | None = None
 
     def _try_load(self) -> bool:
         if self._model is not None:
@@ -99,6 +109,10 @@ class RecoveryBenchScorer:
 
     async def score(self, request: RecoveryScoreRequest) -> RecoveryScoreResult:
         if not self._try_load():
+            if not self.allow_deterministic_fallback:
+                raise RecoveryModelUnavailableError(
+                    "The checksum-verified RecoveryBench model is unavailable."
+                )
             return await self.fallback.score(request)
 
         import pandas as pd  # type: ignore[import-untyped]
@@ -109,6 +123,7 @@ class RecoveryBenchScorer:
         assert self._manifest is not None
         assert self._calibration is not None
         row = {column: request.features.get(column) for column in FEATURE_COLUMNS}
+        row["payment_surface_type"] = request.features.get("payment_surface_type") or "NONE"
         row.update(
             {
                 "amount_at_risk_paise": request.amount_at_risk_paise,

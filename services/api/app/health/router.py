@@ -35,7 +35,7 @@ async def live() -> dict[str, Any]:
 
 @router.get("/ready", include_in_schema=False)
 async def ready() -> JSONResponse:
-    """Return 200 only when PostgreSQL and Temporal are usable."""
+    """Return 200 only when PostgreSQL, Temporal, and recovery scoring are usable."""
 
     components = await run_readiness_checks()
     embedded_worker = embedded_worker_component()

@@ -11,10 +11,14 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Protocol
 
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from services.api.app.domain.enums import PaymentSurfaceType
+from services.api.app.db import get_session_factory
+from services.api.app.domain.enums import Diagnosis, PaymentSurfaceType
 from services.api.app.integrations.a2a.client import A2ACustomerAgentClient
 from services.api.app.integrations.a2a.factory import create_mandate_verifier_from_env
 from services.api.app.integrations.a2a.mandates import (
@@ -23,7 +27,11 @@ from services.api.app.integrations.a2a.mandates import (
 )
 from services.api.app.integrations.a2a.models import ExpectedMandateScope, SignedMandate
 from services.api.app.integrations.a2a.receipts import create_receipt_signer_from_env
-from services.api.app.providers.contracts import CustomerAgentRecoveryRequest
+from services.api.app.models import Merchant, RecoveryCase, Subscription
+from services.api.app.providers.contracts import (
+    CustomerAgentDisplayContext,
+    CustomerAgentRecoveryRequest,
+)
 from services.api.app.providers.interfaces import CustomerAgentClient
 
 from .contracts import (
@@ -35,6 +43,72 @@ from .contracts import (
     StartA2AAuthorizationInput,
 )
 
+_FAILURE_EXPLANATIONS = {
+    Diagnosis.TRANSIENT_RETRYABLE: "The payment provider reported a temporary processing issue.",
+    Diagnosis.INSUFFICIENT_FUNDS: (
+        "The payment could not be completed with the payment method's available balance."
+    ),
+    Diagnosis.AUTHENTICATION_REQUIRED: (
+        "The payment needs customer authentication before it can continue."
+    ),
+    Diagnosis.INSTRUMENT_INVALID: "The saved payment method could not be used.",
+    Diagnosis.MERCHANT_ERROR: "The payment setup needs merchant review.",
+    Diagnosis.RISK_OR_COMPLIANCE_BLOCK: ("The payment was blocked by a risk or compliance check."),
+    Diagnosis.UNKNOWN: ("The payment could not be completed; no verified reason is available yet."),
+}
+
+
+class A2ADisplayContextLoader(Protocol):
+    async def load(
+        self,
+        *,
+        case_id: str,
+        merchant_id: str,
+        customer_id: str,
+    ) -> CustomerAgentDisplayContext: ...
+
+
+@dataclass(frozen=True)
+class SqlAlchemyA2ADisplayContextLoader:
+    """Resolve display-only A2A context from the authoritative recovery case."""
+
+    session_factory: async_sessionmaker[AsyncSession]
+
+    async def load(
+        self,
+        *,
+        case_id: str,
+        merchant_id: str,
+        customer_id: str,
+    ) -> CustomerAgentDisplayContext:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(
+                    Merchant.display_name,
+                    Subscription.plan_name,
+                    RecoveryCase.diagnosis,
+                )
+                .select_from(RecoveryCase)
+                .join(Merchant, Merchant.id == RecoveryCase.merchant_id)
+                .join(Subscription, Subscription.id == RecoveryCase.subscription_id)
+                .where(
+                    RecoveryCase.id == case_id,
+                    RecoveryCase.merchant_id == merchant_id,
+                    RecoveryCase.customer_id == customer_id,
+                )
+            )
+            row = result.one_or_none()
+        if row is None:
+            raise ValueError("A2A display context does not match the recovery case scope")
+
+        merchant_display_name, plan_name, raw_diagnosis = row
+        diagnosis = Diagnosis(raw_diagnosis)
+        return CustomerAgentDisplayContext(
+            merchant_display_name=_clean_display_value(merchant_display_name),
+            plan_name=_clean_display_value(plan_name),
+            failure_explanation=_FAILURE_EXPLANATIONS[diagnosis],
+        )
+
 
 @dataclass
 class LiveA2AMandateActivityServices:
@@ -42,12 +116,18 @@ class LiveA2AMandateActivityServices:
 
     client: CustomerAgentClient
     verifier: MandateVerifier
+    display_context_loader: A2ADisplayContextLoader
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
 
     async def start_authorization(
         self, command: StartA2AAuthorizationInput
     ) -> A2AAuthorizationResult:
         deadline = _parse_instant(command.recovery_deadline)
+        display_context = await self.display_context_loader.load(
+            case_id=command.case_id,
+            merchant_id=command.merchant_id,
+            customer_id=command.customer_id,
+        )
         task = await self.client.send_recovery_request(
             CustomerAgentRecoveryRequest(
                 idempotency_key=command.idempotency_key,
@@ -59,7 +139,7 @@ class LiveA2AMandateActivityServices:
                 payment_surface_type=PaymentSurfaceType(command.payment_surface_type),
                 payment_surface_reference=command.payment_surface_reference,
                 expires_at=deadline,
-                context={"recovery_case_id": command.case_id},
+                context=display_context,
             )
         )
         return A2AAuthorizationResult(remote_task_id=task.remote_task_id, state=task.state)
@@ -186,6 +266,7 @@ def create_live_a2a_services_from_env() -> LiveA2AMandateActivityServices:
             receipt_signer=create_receipt_signer_from_env(),
         ),
         verifier=create_mandate_verifier_from_env(),
+        display_context_loader=SqlAlchemyA2ADisplayContextLoader(get_session_factory()),
     )
 
 
@@ -205,3 +286,10 @@ def _parse_instant(value: str) -> datetime:
     if instant.tzinfo is None or instant.utcoffset() is None:
         raise ValueError("A2A recovery deadline must include a UTC offset")
     return instant
+
+
+def _clean_display_value(value: str) -> str:
+    cleaned = " ".join(value.split())
+    if not cleaned:
+        raise ValueError("A2A display context contains an empty display value")
+    return cleaned

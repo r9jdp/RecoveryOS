@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceConsole } from "./VoiceConsole";
 
+const liveCases = [{ id: "case-1", label: "Live Customer · Live Plan", eligible: true }];
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -16,7 +18,13 @@ describe("VoiceConsole", () => {
       contact_must_end: true,
       suppression_persisted: true,
     });
-    render(<VoiceConsole submitTranscript={submitTranscript} />);
+    render(
+      <VoiceConsole
+        initialCases={liveCases}
+        initialTimeline={[]}
+        submitTranscript={submitTranscript}
+      />,
+    );
     fireEvent.change(screen.getByLabelText("Transcript fallback"), {
       target: { value: "Stop calling, I will pay tomorrow" },
     });
@@ -24,13 +32,13 @@ describe("VoiceConsole", () => {
     expect(await screen.findByText("Detected: OPT OUT")).toBeInTheDocument();
     expect(screen.getByText(/Contact must end now/)).toBeInTheDocument();
     expect(submitTranscript).toHaveBeenCalledWith(
-      "browser-rehearsal-fitbox",
+      "browser-rehearsal-case-1",
       "Stop calling, I will pay tomorrow",
     );
   });
 
   it("keeps the real-call action gated behind explicit operator confirmation", () => {
-    render(<VoiceConsole />);
+    render(<VoiceConsole initialCases={liveCases} initialTimeline={[]} />);
     const button = screen.getByRole("button", {
       name: "Request guarded test call",
     });
@@ -48,7 +56,7 @@ describe("VoiceConsole", () => {
       configurable: true,
       value: undefined,
     });
-    render(<VoiceConsole />);
+    render(<VoiceConsole initialCases={liveCases} initialTimeline={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Record sample" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       /Microphone capture is unavailable/,
@@ -82,7 +90,7 @@ describe("VoiceConsole", () => {
       createObjectURL: vi.fn(() => "blob:voice"),
       revokeObjectURL: vi.fn(),
     });
-    render(<VoiceConsole />);
+    render(<VoiceConsole initialCases={liveCases} initialTimeline={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Record sample" }));
     expect(
       await screen.findByRole("button", { name: "Stop recording" }),

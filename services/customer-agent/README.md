@@ -20,6 +20,7 @@ Its public service endpoints are:
 - `POST /rpc` for `SendMessage`, `GetTask`, and `CancelTask`
 - `GET /v1/tasks/{task_id}/approval`
 - `POST /v1/tasks/{task_id}/approval`
+- `POST /v1/tasks/{task_id}/interpretation` for advisory customer-language interpretation
 - `GET /health/live` and `GET /health/ready`
 
 The wire shape follows the current [A2A specification](https://github.com/a2aproject/A2A/blob/main/docs/specification.md), including PascalCase JSON-RPC methods and the standard Agent Card URI.
@@ -38,6 +39,10 @@ The wire shape follows the current [A2A specification](https://github.com/a2apro
 | `CUSTOMER_AGENT_DATABASE_URL` | Server-only PostgreSQL URL required when the task store is `sql` |
 | `CUSTOMER_AGENT_RECEIPT_VERIFICATION_MODE` | `mock` locally; hosted environments must use `pinned` |
 | `CUSTOMER_AGENT_RECOVERY_AGENT_PUBLIC_KEYS_JSON` | Server-only JSON map of accepted recovery-agent receipt signer IDs to Ed25519 public keys |
+| `LLM_PROVIDER` | `disabled` by default; set to `openai` to enable language interpretation |
+| `OPENAI_API_KEY` | Server-only OpenAI API key; required when `LLM_PROVIDER=openai` |
+| `OPENAI_MODEL` | Responses API model ID; required when `LLM_PROVIDER=openai` |
+| `CUSTOMER_AGENT_LLM_TIMEOUT_SECONDS` | Bounded provider timeout, default 8 seconds (range 1–30) |
 
 The worker uses `RECOVERY_AGENT_RECEIPT_SIGNING_MODE=mock` locally. Hosted workers set it to
 `configured`, then provide `RECOVERY_AGENT_RECEIPT_SIGNER_KEY_ID` and the server-only
@@ -48,6 +53,23 @@ Mock mode is the default and uses a deterministic development-only key. A hosted
 must set the real-signing flag, inject the seed from server-side secret storage, select the SQL
 task store, and apply the coordinator-owned database migration. Readiness reports only the store
 kind and availability; it never includes the connection URL.
+
+## Advisory language interpretation
+
+`POST /v1/tasks/{task_id}/interpretation` accepts a customer text message or voice transcript and
+uses the OpenAI Responses API to return a typed `APPROVE`, `REJECT`, `ASK_QUESTION`, or `UNCLEAR`
+intent, integer confidence basis points, and a short plain-language explanation. The request uses
+`store: false`, a strict JSON schema, and a bounded HTTP timeout. Exact amount and payment-surface
+fields are intentionally excluded from the model input and are attached to the response only from
+the trusted task record as `authoritative_scope`.
+
+Interpretation is advisory: the response always has `authorization_effect: "NONE"` and
+`requires_explicit_approval: true`. It does not change task state or create an artifact, even when
+the interpreted intent is `APPROVE`. Only the existing exact-scope
+`POST /v1/tasks/{task_id}/approval` path can call the Ed25519 signer after explicit confirmation.
+If the configured provider times out, rejects the request, or returns invalid structured output,
+the endpoint returns an error; it never substitutes a keyword-based approval or another automatic
+fallback. With `LLM_PROVIDER=disabled`, the endpoint returns HTTP 503.
 
 ## Durable task-store contract
 

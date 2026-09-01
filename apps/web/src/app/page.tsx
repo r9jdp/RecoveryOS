@@ -19,13 +19,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/card";
-import { Separator } from "@/components/shadcn/separator";
 
-const demoStops = [
-  "See the ₹1,499 FitBox failure",
-  "Inspect diagnosis and policy evidence",
-  "Approve one mock-only recovery surface",
-  "Close with deterministic RecoveryBench results",
+const recoveryFlow = [
+  "Receive and verify a failed-payment webhook",
+  "Rank executable actions with the recovery model",
+  "Apply deterministic consent and payment safety gates",
+  "Execute through Temporal and reconcile provider proof",
 ];
 
 const safeguards = [
@@ -67,15 +66,15 @@ export default function HomePage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-5 pb-8 md:px-8 md:pb-12">
         <section className="grid items-center gap-6 py-6 lg:grid-cols-[minmax(0,1fr)_25rem] lg:py-12">
           <div className="flex max-w-2xl flex-col items-start gap-5">
-            <Badge variant="secondary">Mock-first revenue recovery</Badge>
+            <Badge variant="secondary">Provider-connected revenue recovery</Badge>
             <div className="flex flex-col gap-3">
               <h1 className="max-w-xl text-4xl leading-tight font-semibold tracking-tight text-balance md:text-5xl">
                 From failed invoice to an auditable next action.
               </h1>
               <p className="max-w-xl text-base leading-7 text-muted-foreground md:text-lg">
-                RecoveryOS explains subscription failures, applies deterministic
-                safety policy, and keeps a human in control of every
-                consequential recovery action.
+                RecoveryOS explains subscription failures, ranks the next best
+                action with a trained recovery model, and keeps deterministic
+                safety rules around every consequential provider action.
               </p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
@@ -84,7 +83,7 @@ export default function HomePage() {
                 render={<Link href="/login" />}
                 nativeButton={false}
               >
-                Open the FitBox demo
+                Open RecoveryOS
                 <ArrowRightIcon data-icon="inline-end" />
               </Button>
               <Button
@@ -93,41 +92,29 @@ export default function HomePage() {
                 render={<Link href="/dashboard" />}
                 nativeButton={false}
               >
-                View seeded Control Tower
+                View Control Tower
               </Button>
             </div>
             <p className="flex items-start gap-2 text-sm text-muted-foreground">
               <CheckCircle2Icon className="mt-0.5 size-4 shrink-0" />
               <span>
-                Demo access is prefilled. Real payment and calling controls
-                remain server-side gated.
+                Razorpay stays in test mode. Payment, A2A, and calling controls
+                remain independently server-side gated.
               </span>
             </p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>FitBox Annual</CardTitle>
-              <CardDescription>Seeded judge scenario</CardDescription>
+              <CardTitle>One auditable recovery loop</CardTitle>
+              <CardDescription>From webhook to verified outcome</CardDescription>
               <CardAction>
-                <Badge variant="outline">5:00 route</Badge>
+                <Badge variant="outline">Live workflow</Badge>
               </CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex items-end justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    Revenue at risk
-                  </span>
-                  <strong className="text-3xl font-semibold tracking-tight">
-                    ₹1,499
-                  </strong>
-                </div>
-                <Badge variant="secondary">Authentication required</Badge>
-              </div>
-              <Separator />
-              <ol className="flex flex-col gap-3" aria-label="FitBox demo path">
-                {demoStops.map((stop, index) => (
+              <ol className="flex flex-col gap-3" aria-label="Recovery workflow">
+                {recoveryFlow.map((stop, index) => (
                   <li className="flex items-center gap-3" key={stop}>
                     <Badge variant="secondary">
                       {String(index + 1).padStart(2, "0")}
@@ -138,9 +125,9 @@ export default function HomePage() {
               </ol>
             </CardContent>
             <CardFooter className="justify-between gap-3">
-              <Badge variant="outline">Seeded demo data</Badge>
+              <Badge variant="outline">Razorpay test mode</Badge>
               <span className="text-xs text-muted-foreground">
-                Default evidence · no external action
+                Provider proof remains authoritative
               </span>
             </CardFooter>
           </Card>

@@ -6,6 +6,8 @@ import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, time
 
+from sqlalchemy import func, select
+
 from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
@@ -27,13 +29,25 @@ from services.api.app.models import (
     RecoveryEventRecord,
     RevenueRecognitionRecord,
 )
-from services.api.app.providers.interfaces import PaymentProvider
+from services.api.app.providers.interfaces import (
+    PaymentProvider,
+    RecoveryScorer,
+    StandardPaymentLinkLifecycleProvider,
+)
 from services.api.app.repositories import CaseFilters, CaseRepository
 from services.api.app.repositories.cases import CaseAggregate, CasePage
 from services.api.app.safety import (
     SafetyPolicyConfig,
     SafetyPolicyContext,
     evaluate_safety_policy,
+)
+
+from .decision_engine import (
+    RecoveryDecisionContext,
+    RecoveryDecisionEngine,
+    RecoveryDecisionResult,
+    customer_agent_executor_ready,
+    get_default_recovery_scorer,
 )
 
 
@@ -70,6 +84,7 @@ class CaseAlreadyRecoveredError(ApplicationServiceError):
 class DashboardSnapshot:
     metrics: dict[str, int]
     diagnosis_distribution: list[tuple[Diagnosis, int]]
+    recovery_by_channel: list[tuple[str, int, int]]
     recent_events: list[RecoveryEventRecord]
 
 
@@ -89,10 +104,14 @@ class RecoveryCaseService:
         payment_provider: PaymentProvider,
         *,
         global_kill_switch: bool = False,
+        recovery_scorer: RecoveryScorer | None = None,
     ) -> None:
         self.repository = repository
         self.payment_provider = payment_provider
         self.global_kill_switch = global_kill_switch
+        self.decision_engine = RecoveryDecisionEngine(
+            recovery_scorer if recovery_scorer is not None else get_default_recovery_scorer()
+        )
 
     async def list_cases(
         self,
@@ -142,6 +161,9 @@ class RecoveryCaseService:
             diagnosis_distribution=await self.repository.diagnosis_distribution(
                 merchant_id=merchant_id
             ),
+            recovery_by_channel=await self.repository.recovery_by_channel(
+                merchant_id=merchant_id
+            ),
             recent_events=await self.repository.recent_events(merchant_id=merchant_id),
         )
 
@@ -150,27 +172,6 @@ class RecoveryCaseService:
         if recovery_case is None:
             raise CaseNotFoundError("Recovery case was not found.", metadata={"case_id": case_id})
         return await self.repository.timeline(case_id=case_id)
-
-    @staticmethod
-    def recommended_action(
-        diagnosis: Diagnosis, subscription_state: SubscriptionState
-    ) -> tuple[RecoveryActionType, PaymentSurfaceType | None]:
-        if diagnosis in {Diagnosis.AUTHENTICATION_REQUIRED, Diagnosis.INSTRUMENT_INVALID}:
-            return (
-                RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
-                PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
-            )
-        if (
-            diagnosis == Diagnosis.TRANSIENT_RETRYABLE
-            and subscription_state == SubscriptionState.PENDING
-        ):
-            return RecoveryActionType.WAIT_FOR_GATEWAY_RETRY, None
-        if diagnosis == Diagnosis.INSUFFICIENT_FUNDS:
-            return (
-                RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
-                PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
-            )
-        return RecoveryActionType.ESCALATE_TO_HUMAN, None
 
     async def recommend_action(
         self,
@@ -183,16 +184,16 @@ class RecoveryCaseService:
     ) -> tuple[RecoveryActionRecord, PolicyDecisionRecord]:
         aggregate = await self.get_case(merchant_id=merchant_id, case_id=case_id)
         recovery_case = aggregate.recovery_case
-        if action_type is None:
-            action_type, inferred_surface = self.recommended_action(
-                recovery_case.diagnosis, recovery_case.subscription_state
+        if action_type is None and aggregate.latest_action is not None:
+            # Automatic recommendations are single-assignment. Replays return
+            # the exact durable action/policy instead of re-ranking under a
+            # changed clock or model artifact.
+            existing_policy = await self.repository.get_policy_for_action(
+                action_id=aggregate.latest_action.id
             )
-            payment_surface_type = inferred_surface
-        opens_surface = action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
-        if opens_surface != (payment_surface_type is not None):
-            raise CaseConflictError(
-                "Payment surface type must be set only for customer payment surface actions."
-            )
+            if existing_policy is None:
+                raise RuntimeError("persisted recovery action has no policy decision")
+            return aggregate.latest_action, existing_policy
         evaluated_at = now or datetime.now(UTC)
         merchant_policy = await self.repository.get_merchant_policy_settings(
             merchant_id=merchant_id
@@ -221,23 +222,65 @@ class RecoveryCaseService:
             global_kill_switch=self.global_kill_switch,
             merchant_kill_switch=settings.recovery_kill_switch,
         )
-        decision = evaluate_safety_policy(
-            SafetyPolicyContext(
-                now=evaluated_at,
-                recovery_deadline=recovery_case.recovery_deadline,
-                case_outcome=recovery_case.case_outcome,
-                payment_state=recovery_case.payment_state,
-                subscription_state=recovery_case.subscription_state,
-                contact_disposition=recovery_case.contact_disposition,
-                action=action_type,
-                payment_surface_type=payment_surface_type,
-                amount_at_risk_paise=recovery_case.amount_at_risk_paise,
-                active_gateway_retries=(
-                    recovery_case.subscription_state == SubscriptionState.PENDING
+        ranked_decision: RecoveryDecisionResult | None = None
+        if action_type is None:
+            ranked_decision = await self.decision_engine.decide(
+                RecoveryDecisionContext(
+                    case_id=recovery_case.id,
+                    amount_at_risk_paise=recovery_case.amount_at_risk_paise,
+                    diagnosis=recovery_case.diagnosis,
+                    case_outcome=recovery_case.case_outcome,
+                    payment_state=recovery_case.payment_state,
+                    subscription_state=recovery_case.subscription_state,
+                    contact_disposition=recovery_case.contact_disposition,
+                    recovery_deadline=recovery_case.recovery_deadline,
+                    now=evaluated_at,
+                    has_failed_invoice=aggregate.invoice is not None,
+                    active_gateway_retries=(
+                        recovery_case.subscription_state == SubscriptionState.PENDING
+                    ),
+                    standard_payment_link_available=isinstance(
+                        self.payment_provider, StandardPaymentLinkLifecycleProvider
+                    ),
+                    # These actions are excluded until their owning Temporal
+                    # executor can consume a ranked initial recommendation.
+                    voice_action_available=False,
+                    voice_consent=aggregate.customer.voice_consent_at is not None,
+                    voice_destination_available=aggregate.customer.phone_token is not None,
+                    customer_agent_action_available=customer_agent_executor_ready(),
+                    customer_agent_available=aggregate.customer.customer_agent_available,
+                    model_features=await self._decision_model_features(
+                        aggregate=aggregate, evaluated_at=evaluated_at
+                    ),
                 ),
-            ),
-            policy_config,
-        ).to_contract()
+                policy_config,
+            )
+            action_type = ranked_decision.recommendation.action
+            payment_surface_type = ranked_decision.recommendation.payment_surface_type
+            decision = ranked_decision.policy
+        else:
+            opens_surface = action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
+            if opens_surface != (payment_surface_type is not None):
+                raise CaseConflictError(
+                    "Payment surface type must be set only for customer payment surface actions."
+                )
+            decision = evaluate_safety_policy(
+                SafetyPolicyContext(
+                    now=evaluated_at,
+                    recovery_deadline=recovery_case.recovery_deadline,
+                    case_outcome=recovery_case.case_outcome,
+                    payment_state=recovery_case.payment_state,
+                    subscription_state=recovery_case.subscription_state,
+                    contact_disposition=recovery_case.contact_disposition,
+                    action=action_type,
+                    payment_surface_type=payment_surface_type,
+                    amount_at_risk_paise=recovery_case.amount_at_risk_paise,
+                    active_gateway_retries=(
+                        recovery_case.subscription_state == SubscriptionState.PENDING
+                    ),
+                ),
+                policy_config,
+            ).to_contract()
         statuses = {
             PolicyDisposition.ALLOW: ActionStatus.PROPOSED,
             PolicyDisposition.BLOCK: ActionStatus.CANCELLED,
@@ -282,15 +325,21 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="ACTION_RECOMMENDED",
                 source="decision-engine",
-                evidence_kind=EvidenceKind.SIMULATED,
-                payload={
-                    "action_type": action_type.value,
-                    "payment_surface_type": (
-                        payment_surface_type.value if payment_surface_type else None
-                    ),
-                    "policy_disposition": decision.disposition.value,
-                    "decision_code": decision.decision_code,
-                },
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
+                payload=(
+                    ranked_decision.to_audit_payload(action_id=action.id)
+                    if ranked_decision is not None
+                    else {
+                        "selection_basis": "EXPLICIT_OPERATOR_REQUEST",
+                        "action_id": action.id,
+                        "selected_action_type": action_type.value,
+                        "selected_payment_surface_type": (
+                            payment_surface_type.value if payment_surface_type else None
+                        ),
+                        "policy_disposition": decision.disposition.value,
+                        "decision_code": decision.decision_code,
+                    }
+                ),
                 occurred_at=evaluated_at,
                 correlation_id=f"corr_{case_id}",
                 source_event_id=f"recommendation:{action.id}",
@@ -298,6 +347,46 @@ class RecoveryCaseService:
         )
         await self.repository.commit()
         return action, policy
+
+    async def _decision_model_features(
+        self,
+        *,
+        aggregate: CaseAggregate,
+        evaluated_at: datetime,
+    ) -> dict[str, str | int | float | bool | None]:
+        """Build observable RecoveryBench features from durable history only."""
+
+        recovery_case = aggregate.recovery_case
+        prior_successful_payments = int(
+            await self.repository.session.scalar(
+                select(func.count(PaymentAttempt.id)).where(
+                    PaymentAttempt.merchant_id == recovery_case.merchant_id,
+                    PaymentAttempt.subscription_id == recovery_case.subscription_id,
+                    PaymentAttempt.payment_state == PaymentState.CAPTURED,
+                )
+            )
+            or 0
+        )
+        failed_attempt_count = int(
+            await self.repository.session.scalar(
+                select(func.count(PaymentAttempt.id)).where(
+                    PaymentAttempt.merchant_id == recovery_case.merchant_id,
+                    PaymentAttempt.subscription_id == recovery_case.subscription_id,
+                    PaymentAttempt.payment_state == PaymentState.FAILED,
+                )
+            )
+            or 0
+        )
+        tenure_days = max((evaluated_at - aggregate.customer.created_at).days, 0)
+        return {
+            "tenure_days": tenure_days,
+            "prior_successful_payments": prior_successful_payments,
+            "failed_attempt_count": failed_attempt_count,
+            "payment_method": (
+                aggregate.failed_payment.method if aggregate.failed_payment is not None else None
+            ),
+            "plan_name": aggregate.subscription.plan_name,
+        }
 
     async def approve_action(
         self,
@@ -315,15 +404,9 @@ class RecoveryCaseService:
             raise CaseNotFoundError(
                 "Recovery action was not found.", metadata={"action_id": action_id}
             )
-        if action.status in {
-            ActionStatus.SCHEDULED,
-            ActionStatus.EXECUTING,
-            ActionStatus.SUCCEEDED,
-        }:
-            return action
-        if action.status not in {ActionStatus.PROPOSED, ActionStatus.AWAITING_APPROVAL}:
+        if action.status != ActionStatus.AWAITING_APPROVAL:
             raise CaseConflictError(
-                "Only a proposed or approval-pending action can be approved.",
+                "Only the current approval-pending action can be approved.",
                 metadata={"action_id": action_id, "status": action.status.value},
             )
         completed_at = now or datetime.now(UTC)
@@ -340,7 +423,7 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="ACTION_APPROVED",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
                 payload={
                     "action_id": action.id,
                     "action_type": action.action_type.value,
@@ -387,7 +470,7 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="ACTION_REJECTED",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
                 payload={"action_id": action.id, "reason": reason},
                 occurred_at=rejected_at,
                 correlation_id=f"corr_{case_id}",
@@ -418,7 +501,7 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="CASE_STOPPED",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
                 payload={"reason": reason},
                 occurred_at=stopped_at,
                 correlation_id=f"corr_{case_id}",
@@ -456,7 +539,7 @@ class RecoveryCaseService:
             decision_code="OPERATOR_ESCALATION",
             reason_codes=["OPERATOR_ESCALATION"],
             reasons=[reason],
-            policy_version="fitbox-demo.v1",
+            policy_version="operator.v1",
         )
         await self.repository.add_action_with_policy(action, policy)
         await self.repository.cancel_nonterminal_actions(case_id=case_id, completed_at=escalated_at)
@@ -465,7 +548,7 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type="CASE_ESCALATED",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
                 payload={"reason": reason, "action_id": action.id},
                 occurred_at=escalated_at,
                 correlation_id=f"corr_{case_id}",
@@ -527,7 +610,7 @@ class RecoveryCaseService:
                 case_id=case_id,
                 event_type=f"SAFETY_{disposition.value}",
                 source="operator",
-                evidence_kind=EvidenceKind.SIMULATED,
+                evidence_kind=EvidenceKind.SYSTEM_DERIVED,
                 payload={
                     "contact_disposition": disposition.value,
                     "case_outcome": target_outcome.value,

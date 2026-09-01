@@ -62,6 +62,14 @@ def _request(*, request_id: str, idempotency_key: str = "case-durable:a2a") -> d
                             "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
                             "payment_surface_reference": "inv_durable",
                             "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
+                            "context": {
+                                "merchant_display_name": "FitBox",
+                                "plan_name": "FitBox Annual",
+                                "failure_explanation": (
+                                    "The payment needs customer authentication before it can "
+                                    "continue."
+                                ),
+                            },
                         }
                     }
                 ],

@@ -116,8 +116,8 @@ async def test_twilio_terminal_callbacks_are_idempotent(terminal_status: str) ->
     attempt = await repository.get_attempt("attempt-1")
     assert not first and duplicate
     assert attempt is not None
-    assert attempt.status == terminal_status.upper()
-    assert attempt.disposition == terminal_status.upper()
+    assert attempt.status == terminal_status.upper().replace("-", "_")
+    assert attempt.disposition == terminal_status.upper().replace("-", "_")
 
 
 def test_late_ringing_does_not_regress_terminal_and_elevenlabs_reconciles() -> None:

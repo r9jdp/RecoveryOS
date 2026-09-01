@@ -97,6 +97,11 @@ async def test_customer_agent_timeout_opens_structured_fallback() -> None:
             payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
             payment_surface_reference="inv-1",
             expires_at=datetime(2026, 8, 28, 12, 10, tzinfo=UTC),
+            context={
+                "merchant_display_name": "FitBox",
+                "plan_name": "FitBox Annual",
+                "failure_explanation": "Authentication was not completed.",
+            },
         )
         with pytest.raises(httpx.ReadTimeout):
             await adapter.send_recovery_request(request)

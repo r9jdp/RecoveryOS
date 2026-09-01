@@ -51,7 +51,7 @@ from services.api.app.providers.interfaces import (
     StandardPaymentLinkLifecycleProvider,
 )
 from services.api.app.services.mock_payment import MockPaymentProvider
-from services.api.app.voice.factory import create_voice_service_from_env
+from services.api.app.voice.factory import create_voice_service_from_env, voice_provider_ready
 
 from .activities import MockRecoveryActivityServices
 from .contracts import (
@@ -83,6 +83,11 @@ class ActivityConfigurationError(RuntimeError):
 class _PaymentActionClaim:
     action: RecoveryActionRecord
     reconcile_before_submission: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _VoiceActionClaim:
+    action: RecoveryActionRecord
 
 
 def _enabled(name: str, default: str = "false") -> bool:
@@ -257,6 +262,8 @@ class ProductionRecoveryActivityServices:
     async def execute_recovery_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
         if command.action in {"WAIT_FOR_GATEWAY_RETRY", "STOP", "ESCALATE_TO_HUMAN"}:
             return ActionExecutionResult(status="SUCCEEDED", provider="workflow")
+        if command.action == "START_VOICE":
+            return await self._execute_voice_action(command)
         if command.action != "OPEN_CUSTOMER_PAYMENT_SURFACE":
             return ActionExecutionResult(
                 status="REJECTED",
@@ -359,6 +366,183 @@ class ProductionRecoveryActivityServices:
         finally:
             self._payment_submissions_in_flight.discard(action.id)
         return await self._persist_payment_surface(action.id, result)
+
+    async def _execute_voice_action(self, command: ExecuteActionInput) -> ActionExecutionResult:
+        """Execute only a durable, explicitly operator-approved voice action."""
+
+        claim = await self._claim_voice_action(
+            command,
+            provider_ready=voice_provider_ready(),
+        )
+        if isinstance(claim, ActionExecutionResult):
+            return claim
+
+        async with get_session_factory()() as session:
+            resources = create_voice_service_from_env(session)
+            try:
+                result = await resources.service.start(
+                    case_id=command.case_id,
+                    idempotency_key=command.idempotency_key,
+                    supplied_operator_token=os.getenv("VOICE_OPERATOR_TOKEN", ""),
+                    max_duration_seconds=180,
+                    now=self._clock(),
+                )
+                await session.commit()
+            finally:
+                await resources.aclose()
+
+        provider_reference = result.provider_call_id or result.contact_attempt_id
+        if result.status == "SUBMITTED":
+            await self._finalize_voice_action(
+                action_id=claim.action.id,
+                status=ActionStatus.SUCCEEDED,
+                provider_reference=provider_reference,
+            )
+            return ActionExecutionResult(
+                status="SUCCEEDED",
+                provider=result.provider,
+                provider_reference=provider_reference,
+                reason_code=result.reason_code,
+            )
+        if result.status == "REJECTED":
+            await self._finalize_voice_action(
+                action_id=claim.action.id,
+                status=ActionStatus.CANCELLED,
+                provider_reference=None,
+            )
+            return ActionExecutionResult(
+                status="REJECTED",
+                provider=result.provider,
+                reason_code=result.reason_code,
+            )
+        return ActionExecutionResult(
+            status="UNCERTAIN",
+            provider=result.provider,
+            provider_reference=provider_reference,
+            reason_code=result.reason_code or "VOICE_SUBMISSION_RECONCILIATION_REQUIRED",
+        )
+
+    async def _claim_voice_action(
+        self,
+        command: ExecuteActionInput,
+        *,
+        provider_ready: bool,
+    ) -> _VoiceActionClaim | ActionExecutionResult:
+        """Claim a voice action only after a persisted manual approval event."""
+
+        async with get_session_factory()() as session:
+            statement = (
+                select(RecoveryActionRecord, PolicyDecisionRecord, RecoveryCase)
+                .join(RecoveryCase, RecoveryCase.id == RecoveryActionRecord.case_id)
+                .join(
+                    PolicyDecisionRecord,
+                    PolicyDecisionRecord.action_id == RecoveryActionRecord.id,
+                )
+                .where(
+                    RecoveryActionRecord.case_id == command.case_id,
+                    RecoveryCase.merchant_id == command.merchant_id,
+                    RecoveryCase.customer_id == command.customer_id,
+                    RecoveryCase.subscription_id == command.subscription_id,
+                    RecoveryCase.amount_at_risk_paise == command.amount_paise,
+                    RecoveryActionRecord.action_type == RecoveryActionType.START_VOICE,
+                )
+                .order_by(RecoveryActionRecord.created_at.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            row = (await session.execute(statement)).first()
+            if row is None:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="VOICE_PERSISTED_POLICY_NOT_FOUND",
+                )
+            action, policy, _ = row._tuple()
+            if policy.disposition != PolicyDisposition.REQUIRE_MANUAL_APPROVAL:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="VOICE_MANUAL_APPROVAL_POLICY_REQUIRED",
+                )
+            approval_events = (
+                await session.scalars(
+                    select(RecoveryEventRecord)
+                    .where(
+                        RecoveryEventRecord.case_id == command.case_id,
+                        RecoveryEventRecord.event_type == "ACTION_APPROVED",
+                        RecoveryEventRecord.source == "operator",
+                    )
+                    .order_by(RecoveryEventRecord.occurred_at.desc())
+                )
+            ).all()
+            approved = any(
+                isinstance(event.payload, dict)
+                and event.payload.get("action_id") == action.id
+                and event.payload.get("action_type") == RecoveryActionType.START_VOICE.value
+                for event in approval_events
+            )
+            if not approved:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="VOICE_OPERATOR_APPROVAL_NOT_PERSISTED",
+                )
+            if action.status == ActionStatus.SUCCEEDED:
+                return ActionExecutionResult(
+                    status="SUCCEEDED",
+                    provider="persisted",
+                    provider_reference=action.external_reference,
+                    reason_code="ALREADY_EXECUTED",
+                )
+            if action.status == ActionStatus.CANCELLED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="ACTION_CANCELLED",
+                )
+            if action.status == ActionStatus.EXECUTING:
+                if not provider_ready:
+                    return ActionExecutionResult(
+                        status="UNCERTAIN",
+                        provider="unknown",
+                        provider_reference=action.external_reference,
+                        reason_code="VOICE_SUBMISSION_RECONCILIATION_REQUIRED",
+                    )
+                return _VoiceActionClaim(action=action)
+            if action.status != ActionStatus.SCHEDULED:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="VOICE_ACTION_NOT_MANUALLY_APPROVED",
+                )
+            if not provider_ready:
+                return ActionExecutionResult(
+                    status="REJECTED",
+                    provider="none",
+                    reason_code="VOICE_PROVIDER_NOT_READY",
+                )
+            action.status = ActionStatus.EXECUTING
+            action.updated_at = self._clock()
+            await session.commit()
+            return _VoiceActionClaim(action=action)
+
+    async def _finalize_voice_action(
+        self,
+        *,
+        action_id: str,
+        status: ActionStatus,
+        provider_reference: str | None,
+    ) -> None:
+        async with get_session_factory()() as session:
+            action = await session.get(RecoveryActionRecord, action_id, with_for_update=True)
+            if action is None:
+                return
+            if action.status == ActionStatus.SUCCEEDED:
+                return
+            action.status = status
+            action.external_reference = provider_reference
+            action.completed_at = self._clock() if status != ActionStatus.EXECUTING else None
+            await session.commit()
 
     @staticmethod
     def _standard_payment_link_reference(idempotency_key: str) -> str:
@@ -826,7 +1010,7 @@ class ProductionRecoveryActivityServices:
         evidence_kind = (
             EvidenceKind.RAZORPAY_TEST_VERIFIED
             if command.details.get("provider") == "razorpay"
-            else EvidenceKind.SIMULATED
+            else EvidenceKind.SYSTEM_DERIVED
         )
         async with get_session_factory()() as session:
             event = RecoveryEventRecord(

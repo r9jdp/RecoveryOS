@@ -6,7 +6,12 @@ from collections.abc import Awaitable, Callable
 import pytest
 
 from . import router as router_module
-from .checks import ComponentStatus, _psycopg_dsn, run_readiness_checks
+from .checks import (
+    ComponentStatus,
+    _psycopg_dsn,
+    merchant_scope_check,
+    run_readiness_checks,
+)
 
 
 def test_psycopg_dsn_normalizes_sqlalchemy_driver() -> None:
@@ -14,6 +19,35 @@ def test_psycopg_dsn_normalizes_sqlalchemy_driver() -> None:
         _psycopg_dsn("postgresql+psycopg://user:secret@db.example/recovery")
         == "postgresql://user:secret@db.example/recovery"
     )
+
+
+@pytest.mark.asyncio
+async def test_razorpay_readiness_requires_real_merchant_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
+    monkeypatch.delenv("RECOVERY_MERCHANT_ID", raising=False)
+    monkeypatch.delenv("RECOVERY_MERCHANT_DISPLAY_NAME", raising=False)
+
+    result = await merchant_scope_check()
+
+    assert result.status == "unavailable"
+    assert result.reason == "scope_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_razorpay_readiness_accepts_configured_merchant_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("PAYMENT_PROVIDER", "razorpay")
+    monkeypatch.setenv("RECOVERY_MERCHANT_ID", "merchant_recoveryos")
+    monkeypatch.setenv("RECOVERY_MERCHANT_DISPLAY_NAME", "RecoveryOS Test Merchant")
+
+    result = await merchant_scope_check()
+
+    assert result.status == "ok"
 
 
 @pytest.mark.asyncio

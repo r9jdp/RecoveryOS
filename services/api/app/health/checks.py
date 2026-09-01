@@ -97,7 +97,78 @@ async def temporal_check() -> ComponentStatus:
         return ComponentStatus("temporal", "unavailable", _elapsed_ms(started_at), "probe_failed")
 
 
-DEFAULT_READINESS_CHECKS: tuple[ReadinessCheck, ...] = (database_check, temporal_check)
+async def merchant_scope_check() -> ComponentStatus:
+    """Reject a hosted Razorpay process that would have no real merchant scope."""
+
+    started_at = monotonic()
+    try:
+        environment = os.getenv("APP_ENV", "development").strip().lower()
+        provider = os.getenv("PAYMENT_PROVIDER", "mock").strip().lower()
+        if environment == "production" or provider == "razorpay":
+            merchant_id = _required("RECOVERY_MERCHANT_ID")
+            _required("RECOVERY_MERCHANT_DISPLAY_NAME")
+            if merchant_id == "merchant_fitbox":
+                raise RuntimeError("demo merchant is not a live scope")
+        return ComponentStatus("merchant_scope", "ok", _elapsed_ms(started_at))
+    except Exception:
+        return ComponentStatus(
+            "merchant_scope",
+            "unavailable",
+            _elapsed_ms(started_at),
+            "scope_not_configured",
+        )
+
+
+async def recovery_model_check() -> ComponentStatus:
+    """Prove that production can load and execute the checksum-verified scorer."""
+
+    started_at = monotonic()
+    try:
+        from services.api.app.domain.enums import Diagnosis, RecoveryActionType
+        from services.api.app.providers.contracts import RecoveryScoreRequest
+        from services.api.app.services.decision_engine import get_default_recovery_scorer
+
+        score = await get_default_recovery_scorer().score(
+            RecoveryScoreRequest(
+                case_id="readiness-probe",
+                amount_at_risk_paise=100_000,
+                diagnosis=Diagnosis.UNKNOWN,
+                candidate_action=RecoveryActionType.ESCALATE_TO_HUMAN,
+                features={},
+            )
+        )
+        model_required = os.getenv(
+            "RECOVERY_MODEL_REQUIRED",
+            "true"
+            if os.getenv("APP_ENV", "development").strip().lower() == "production"
+            else "false",
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        trained = score.model_name == "recoverybench-catboost" and bool(
+            score.artifact_checksum
+        )
+        if model_required and not trained:
+            raise RuntimeError("trained model is required")
+        return ComponentStatus(
+            "recovery_model",
+            "ok",
+            _elapsed_ms(started_at),
+            None if trained else "deterministic_fallback",
+        )
+    except Exception:
+        return ComponentStatus(
+            "recovery_model",
+            "unavailable",
+            _elapsed_ms(started_at),
+            "artifact_probe_failed",
+        )
+
+
+DEFAULT_READINESS_CHECKS: tuple[ReadinessCheck, ...] = (
+    merchant_scope_check,
+    database_check,
+    temporal_check,
+    recovery_model_check,
+)
 
 
 async def run_readiness_checks(

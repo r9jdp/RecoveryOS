@@ -62,7 +62,7 @@ export function humanize(value: string): string {
 }
 
 export function formatEvidenceKind(kind: EvidenceKind): string {
-  return kind === "RAZORPAY_TEST_VERIFIED"
-    ? "RAZORPAY TEST VERIFIED"
-    : "Seeded demo data";
+  if (kind === "RAZORPAY_TEST_VERIFIED") return "RAZORPAY TEST VERIFIED";
+  if (kind === "SYSTEM_DERIVED") return "RecoveryOS system decision";
+  return "Seeded demo data";
 }

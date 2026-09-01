@@ -24,7 +24,9 @@ const summary: ApprovalSummary = {
   payment_surface_reference: "inv_123",
   expires_at: "2026-08-28T11:00:00Z",
   merchant_display_name: "FitBox",
-  recovery_reason: "August membership renewal failed",
+  plan_name: "FitBox Annual",
+  failure_explanation:
+    "The payment needs customer authentication before it can continue.",
 };
 
 describe("CustomerApproval", () => {
@@ -61,6 +63,12 @@ describe("CustomerApproval", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("₹1,499.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("FitBox Annual").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "The payment needs customer authentication before it can continue.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("inv_123")).toBeInTheDocument();
     expect(
       screen.getByText(/customer agent never executes a payment/i),
@@ -107,6 +115,50 @@ describe("CustomerApproval", () => {
       "Request expired",
     );
     expect(screen.getByText("inv_123")).toBeInTheDocument();
+  });
+
+  it("shows model interpretation without authorizing the payment surface", async () => {
+    const interpretLanguage = vi.fn().mockResolvedValue({
+      task_id: "task-1",
+      intent: "APPROVE",
+      confidence_basis_points: 9200,
+      explanation: "The customer clearly wants to continue.",
+      authorization_effect: "NONE",
+      requires_explicit_approval: true,
+      authoritative_scope: {
+        merchant_id: "merchant-1",
+        case_id: "case-1",
+        exact_amount_paise: 149900,
+        currency: "INR",
+        payment_surface_type: "SUBSCRIPTION_INVOICE_LINK",
+        payment_surface_reference: "inv_123",
+        expires_at: "2026-08-28T11:00:00Z",
+      },
+    });
+    const submitApproval = vi.fn();
+    render(
+      <CustomerApproval
+        taskId="task-1"
+        customerAgentOrigin="https://customer.example"
+        loadApproval={vi.fn().mockResolvedValue(summary)}
+        submitApproval={submitApproval}
+        interpretLanguage={interpretLanguage}
+      />,
+    );
+
+    const message = await screen.findByRole("textbox", {
+      name: "Message for the customer agent",
+    });
+    fireEvent.change(message, { target: { value: "Yes, I want to continue" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask customer agent" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "The customer clearly wants to continue",
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve exact surface" }),
+    ).toBeDisabled();
+    expect(submitApproval).not.toHaveBeenCalled();
   });
 
   it("provides an error state and retry action", async () => {

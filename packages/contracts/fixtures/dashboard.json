@@ -10,8 +10,8 @@
     "net_recovered_value_paise": 0,
     "active_cases": 1,
     "recovery_rate_basis_points": 0,
-    "human_review_count": 0,
-    "policy_blocked_actions": 1
+    "human_review_count": 1,
+    "policy_blocked_actions": 0
   },
   "diagnosis_distribution": [
     {"diagnosis": "AUTHENTICATION_REQUIRED", "case_count": 1}
@@ -55,7 +55,8 @@
       "case_id": "case_fitbox_aug_2026",
       "event_type": "CASE_OPENED",
       "occurred_at": "2026-08-27T10:00:01Z",
-      "correlation_id": "corr_fitbox_001"
+      "correlation_id": "corr_fitbox_001",
+      "payload": {}
     }
   ]
 }

@@ -1,9 +1,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PolicySettingsPanel } from "./PolicySettingsPanel";
 
-afterEach(cleanup);
+beforeEach(() => vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "demo"));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("PolicySettingsPanel", () => {
   it("persists action-based approval requirements", async () => {
@@ -11,7 +15,7 @@ describe("PolicySettingsPanel", () => {
     render(<PolicySettingsPanel saveSettings={saveSettings} />);
 
     fireEvent.click(
-      screen.getByRole("checkbox", { name: /Start voice outreach/i }),
+      await screen.findByRole("checkbox", { name: /Start voice outreach/i }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
     await screen.findByText(/safeguards were saved/i);
@@ -25,7 +29,9 @@ describe("PolicySettingsPanel", () => {
     render(<PolicySettingsPanel saveSettings={saveSettings} />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Pause all recovery actions" }),
+      await screen.findByRole("button", {
+        name: "Pause all recovery actions",
+      }),
     );
     expect(
       screen.getByRole("alertdialog", { name: "Pause all recovery actions?" }),
@@ -49,7 +55,9 @@ describe("PolicySettingsPanel", () => {
         saveSettings={vi.fn().mockRejectedValue(new Error("Version conflict"))}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Save policy" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save policy" }),
+    );
     expect(await screen.findByText(/Version conflict/)).toBeInTheDocument();
     expect(screen.getByText("Recovery active")).toBeInTheDocument();
   });
@@ -58,7 +66,7 @@ describe("PolicySettingsPanel", () => {
     const saveSettings = vi.fn(async (settings) => settings);
     render(<PolicySettingsPanel saveSettings={saveSettings} />);
 
-    fireEvent.change(screen.getByLabelText(/Quiet hours begin/), {
+    fireEvent.change(await screen.findByLabelText(/Quiet hours begin/), {
       target: { value: "" },
     });
     fireEvent.change(screen.getByLabelText(/Maximum contacts in 7 days/), {

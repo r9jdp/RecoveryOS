@@ -68,7 +68,11 @@ def recovery_request(
                             "expires_at": (datetime.now(UTC) + timedelta(minutes=10)).isoformat(),
                             "context": {
                                 "merchant_display_name": "FitBox",
-                                "recovery_reason": "August membership renewal failed",
+                                "plan_name": "FitBox Annual",
+                                "failure_explanation": (
+                                    "The payment needs customer authentication before it can "
+                                    "continue."
+                                ),
                             },
                         }
                     }
@@ -222,6 +226,10 @@ async def test_send_get_approval_and_receipt_lifecycle(client: httpx.AsyncClient
     summary = await client.get(f"/v1/tasks/{task['id']}/approval")
     assert summary.json()["exact_amount_paise"] == 149900
     assert summary.json()["merchant_display_name"] == "FitBox"
+    assert summary.json()["plan_name"] == "FitBox Annual"
+    assert summary.json()["failure_explanation"].startswith(
+        "The payment needs customer authentication"
+    )
 
     approved = await client.post(
         f"/v1/tasks/{task['id']}/approval",
@@ -239,6 +247,9 @@ async def test_send_get_approval_and_receipt_lifecycle(client: httpx.AsyncClient
     signed = approved_task["artifacts"][0]["parts"][0]["data"]
     assert signed["algorithm"] == "Ed25519"
     assert signed["data"]["authorized_action"] == "OPEN_EXACT_PAYMENT_SURFACE"
+    assert "merchant_display_name" not in signed["data"]
+    assert "plan_name" not in signed["data"]
+    assert "failure_explanation" not in signed["data"]
 
     receipt = receipt_rpc(task_id=task["id"], mandate_id=signed["data"]["mandate_id"])
     completed = await client.post("/rpc", json=receipt)
@@ -247,6 +258,20 @@ async def test_send_get_approval_and_receipt_lifecycle(client: httpx.AsyncClient
     assert (
         result["artifacts"][1]["parts"][0]["data"]["data"]["provider_reference"] == "pay_captured_1"
     )
+
+
+@pytest.mark.asyncio
+async def test_recovery_request_without_database_display_context_fails_closed(
+    client: httpx.AsyncClient,
+) -> None:
+    request = recovery_request(request_id="missing-display-context")
+    del request["params"]["message"]["parts"][0]["data"]["context"]
+
+    response = await client.post("/rpc", json=request)
+
+    assert response.status_code == 200
+    assert response.json()["error"]["code"] == -32602
+    assert response.json()["error"]["message"] == "Invalid params"
 
 
 @pytest.mark.asyncio

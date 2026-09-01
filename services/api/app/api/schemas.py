@@ -201,11 +201,42 @@ class DashboardMetricsResponse(ApiModel):
     policy_blocked_actions: int
 
 
+class RecoveryChannelResponse(ApiModel):
+    channel: Literal[
+        "SUBSCRIPTION_CARD_UPDATE",
+        "SUBSCRIPTION_INVOICE_LINK",
+        "STANDARD_PAYMENT_LINK",
+        "VOICE",
+        "CUSTOMER_AGENT",
+    ]
+    case_count: int
+    recovered_paise: int
+
+
+class ApprovalQueueItemResponse(ApiModel):
+    case_id: str
+    action_id: str
+    customer_display_name: str
+    plan_name: str
+    amount_at_risk_paise: int
+    recommended_action: RecoveryActionType
+    payment_surface_type: PaymentSurfaceType | None
+    policy_reason: str
+    deadline: datetime
+    evidence_kind: EvidenceKind
+    provider: Literal["RAZORPAY_TEST", "RECOVERYOS"]
+
+
+class ApprovalQueueResponse(ApiModel):
+    items: list[ApprovalQueueItemResponse]
+
+
 class DashboardResponse(ApiModel):
     evidence_kind: EvidenceKind = EvidenceKind.SIMULATED
     currency: str = "INR"
     metrics: DashboardMetricsResponse
     diagnosis_distribution: list[DiagnosisBucketResponse]
+    recovery_by_channel: list[RecoveryChannelResponse]
     recent_events: list[RecentEventResponse]
 
 
@@ -229,6 +260,16 @@ class CaseCommandRequest(ApiModel):
 
 class OperatorCommandRequest(ApiModel):
     command: Literal["APPROVE", "REJECT", "STOP", "ESCALATE_TO_HUMAN"]
+    action_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_action_scope(self) -> OperatorCommandRequest:
+        action_scoped = self.command in {"APPROVE", "REJECT"}
+        if action_scoped and self.action_id is None:
+            raise ValueError("action_id is required for APPROVE and REJECT commands")
+        if not action_scoped and self.action_id is not None:
+            raise ValueError("action_id is accepted only for APPROVE and REJECT commands")
+        return self
 
 
 class OperatorCommandResponse(ApiModel):

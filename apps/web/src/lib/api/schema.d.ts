@@ -113,6 +113,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/approval-queue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Approval Queue */
+    get: operations["get_approval_queue_v1_approval_queue_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/recovery-cases": {
     parameters: {
       query?: never;
@@ -357,6 +374,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/razorpay/test-onboarding/subscriptions/{subscription_id}/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Sync Razorpay Test Subscription
+     * @description Persist provider-owned IDs so signed webhooks can correlate safely.
+     */
+    post: operations["sync_razorpay_test_subscription_v1_razorpay_test_onboarding_subscriptions__subscription_id__sync_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/voice/contacts": {
     parameters: {
       query?: never;
@@ -368,6 +405,40 @@ export interface paths {
     put?: never;
     /** Start Voice Contact */
     post: operations["start_voice_contact_v1_voice_contacts_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/cases/{case_id}/contact-setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Configure Voice Contact */
+    put: operations["configure_voice_contact_v1_voice_cases__case_id__contact_setup_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/cases/{case_id}/eligibility": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Voice Eligibility */
+    get: operations["voice_eligibility_v1_voice_cases__case_id__eligibility_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -453,6 +524,26 @@ export interface paths {
     put?: never;
     /** Elevenlabs Post Call Webhook */
     post: operations["elevenlabs_post_call_webhook_v1_voice_webhooks_elevenlabs_post_call_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/voice/tools/elevenlabs/intent": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Elevenlabs Live Intent Tool
+     * @description Receive authenticated live intent tools; opt-out persists before hang-up.
+     */
+    post: operations["elevenlabs_live_intent_tool_v1_voice_tools_elevenlabs_intent_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -554,6 +645,39 @@ export interface components {
       | "SUCCEEDED"
       | "FAILED"
       | "CANCELLED";
+    /** ApprovalQueueItemResponse */
+    ApprovalQueueItemResponse: {
+      /** Case Id */
+      case_id: string;
+      /** Action Id */
+      action_id: string;
+      /** Customer Display Name */
+      customer_display_name: string;
+      /** Plan Name */
+      plan_name: string;
+      /** Amount At Risk Paise */
+      amount_at_risk_paise: number;
+      recommended_action: components["schemas"]["RecoveryActionType"];
+      payment_surface_type: components["schemas"]["PaymentSurfaceType"] | null;
+      /** Policy Reason */
+      policy_reason: string;
+      /**
+       * Deadline
+       * Format: date-time
+       */
+      deadline: string;
+      evidence_kind: components["schemas"]["EvidenceKind"];
+      /**
+       * Provider
+       * @enum {string}
+       */
+      provider: "RAZORPAY_TEST" | "RECOVERYOS";
+    };
+    /** ApprovalQueueResponse */
+    ApprovalQueueResponse: {
+      /** Items */
+      items: components["schemas"]["ApprovalQueueItemResponse"][];
+    };
     /** ArtifactMetadata */
     ArtifactMetadata: {
       /** Schema Version */
@@ -735,6 +859,8 @@ export interface components {
       metrics: components["schemas"]["DashboardMetricsResponse"];
       /** Diagnosis Distribution */
       diagnosis_distribution: components["schemas"]["DiagnosisBucketResponse"][];
+      /** Recovery By Channel */
+      recovery_by_channel: components["schemas"]["RecoveryChannelResponse"][];
       /** Recent Events */
       recent_events: components["schemas"]["RecentEventResponse"][];
     };
@@ -777,7 +903,7 @@ export interface components {
      * EvidenceKind
      * @enum {string}
      */
-    EvidenceKind: "SIMULATED" | "RAZORPAY_TEST_VERIFIED";
+    EvidenceKind: "SIMULATED" | "SYSTEM_DERIVED" | "RAZORPAY_TEST_VERIFIED";
     /** FailureSimulationRequest */
     FailureSimulationRequest: {
       /**
@@ -868,6 +994,34 @@ export interface components {
       metrics: components["schemas"]["MetricSummary"];
       guardrails: components["schemas"]["LabGuardrails"];
     };
+    /** LiveVoiceIntentRequest */
+    LiveVoiceIntentRequest: {
+      /** Attempt Id */
+      attempt_id: string;
+      /** Event Id */
+      event_id?: string | null;
+      /** Intent */
+      intent: string;
+      /** Confidence Basis Points */
+      confidence_basis_points?: number | null;
+    };
+    /** LiveVoiceIntentResponse */
+    LiveVoiceIntentResponse: {
+      /**
+       * Accepted
+       * @default true
+       * @constant
+       */
+      accepted: true;
+      /** Duplicate */
+      duplicate: boolean;
+      /** Detected Intent */
+      detected_intent: string;
+      /** Contact Must End */
+      contact_must_end: boolean;
+      /** Suppression Persisted */
+      suppression_persisted: boolean;
+    };
     /** MetricSummary */
     MetricSummary: {
       /** Pr Auc */
@@ -917,6 +1071,8 @@ export interface components {
        * @enum {string}
        */
       command: "APPROVE" | "REJECT" | "STOP" | "ESCALATE_TO_HUMAN";
+      /** Action Id */
+      action_id?: string | null;
     };
     /** OperatorCommandResponse */
     OperatorCommandResponse: {
@@ -1075,6 +1231,44 @@ export interface components {
       /** Recovery Kill Switch */
       recovery_kill_switch: boolean;
     };
+    /**
+     * RazorpayTestSubscriptionSyncRequest
+     * @description Local customer identity for a provider subscription.
+     *
+     *     Email and phone values are deliberately not accepted here. Provider
+     *     onboarding establishes correlation only; contact consent and destinations
+     *     are managed by their dedicated, authenticated flows.
+     */
+    RazorpayTestSubscriptionSyncRequest: {
+      /** Customer External Id */
+      customer_external_id: string;
+      /** Customer Display Name */
+      customer_display_name: string;
+      /**
+       * Preferred Language
+       * @default en-IN
+       */
+      preferred_language: string;
+      /**
+       * Customer Agent Available
+       * @default false
+       */
+      customer_agent_available: boolean;
+    };
+    /** RazorpayTestSubscriptionSyncResponse */
+    RazorpayTestSubscriptionSyncResponse: {
+      /**
+       * Mode
+       * @default razorpay_test
+       */
+      mode: string;
+      /** Merchant Id */
+      merchant_id: string;
+      customer: components["schemas"]["SyncedCustomerResponse"];
+      subscription: components["schemas"]["SyncedSubscriptionResponse"];
+      /** Invoices */
+      invoices: components["schemas"]["SyncedInvoiceResponse"][];
+    };
     /** RazorpayWebhookAckResponse */
     RazorpayWebhookAckResponse: {
       /** Provider Event Id */
@@ -1173,6 +1367,23 @@ export interface components {
        * Format: date-time
        */
       updated_at: string;
+    };
+    /** RecoveryChannelResponse */
+    RecoveryChannelResponse: {
+      /**
+       * Channel
+       * @enum {string}
+       */
+      channel:
+        | "SUBSCRIPTION_CARD_UPDATE"
+        | "SUBSCRIPTION_INVOICE_LINK"
+        | "STANDARD_PAYMENT_LINK"
+        | "VOICE"
+        | "CUSTOMER_AGENT";
+      /** Case Count */
+      case_count: number;
+      /** Recovered Paise */
+      recovered_paise: number;
     };
     /** RejectActionRequest */
     RejectActionRequest: {
@@ -1311,6 +1522,56 @@ export interface components {
       | "PAUSED"
       | "CANCELLED"
       | "COMPLETED";
+    /** SyncedCustomerResponse */
+    SyncedCustomerResponse: {
+      /** Id */
+      id: string;
+      /** External Id */
+      external_id: string;
+      /** Created */
+      created: boolean;
+    };
+    /** SyncedInvoiceResponse */
+    SyncedInvoiceResponse: {
+      /** Id */
+      id: string;
+      /** Provider Invoice Id */
+      provider_invoice_id: string;
+      /** Billing Cycle Key */
+      billing_cycle_key: string;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Amount Paid Paise */
+      amount_paid_paise: number;
+      /** Currency */
+      currency: string;
+      /** Invoice State */
+      invoice_state: string;
+      /** Payment Url */
+      payment_url?: string | null;
+      /** Created */
+      created: boolean;
+    };
+    /** SyncedSubscriptionResponse */
+    SyncedSubscriptionResponse: {
+      /** Id */
+      id: string;
+      /** Provider Subscription Id */
+      provider_subscription_id: string;
+      /** Provider Plan Id */
+      provider_plan_id: string;
+      /** Plan Name */
+      plan_name: string;
+      /** Amount Paise */
+      amount_paise: number;
+      /** Currency */
+      currency: string;
+      subscription_state: components["schemas"]["SubscriptionState"];
+      /** Authorization Url */
+      authorization_url?: string | null;
+      /** Created */
+      created: boolean;
+    };
     /** TimelineEventResponse */
     TimelineEventResponse: {
       /** Id */
@@ -1382,6 +1643,36 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /** VoiceContactSetupRequest */
+    VoiceContactSetupRequest: {
+      /** Destination Token */
+      destination_token: string;
+      /** Preferred Language */
+      preferred_language: string;
+      /** Consent Granted */
+      consent_granted: boolean;
+    };
+    /** VoiceEligibilityResponse */
+    VoiceEligibilityResponse: {
+      /** Case Id */
+      case_id: string;
+      /** Customer Id */
+      customer_id: string | null;
+      /** Eligible */
+      eligible: boolean;
+      /** Reason Code */
+      reason_code: string;
+      /** Destination Configured */
+      destination_configured: boolean;
+      /** Destination Allowlisted */
+      destination_allowlisted: boolean;
+      /** Consent Verified At */
+      consent_verified_at: string | null;
+      /** Opted Out At */
+      opted_out_at: string | null;
+      /** Preferred Language */
+      preferred_language: string | null;
     };
     /** VoiceTimelineResponse */
     VoiceTimelineResponse: {
@@ -1618,6 +1909,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["DashboardResponse"];
+        };
+      };
+    };
+  };
+  get_approval_queue_v1_approval_queue_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApprovalQueueResponse"];
         };
       };
     };
@@ -2131,6 +2442,46 @@ export interface operations {
       };
     };
   };
+  sync_razorpay_test_subscription_v1_razorpay_test_onboarding_subscriptions__subscription_id__sync_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
+      };
+      path: {
+        subscription_id: string;
+      };
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RazorpayTestSubscriptionSyncRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RazorpayTestSubscriptionSyncResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   start_voice_contact_v1_voice_contacts_post: {
     parameters: {
       query?: never;
@@ -2170,14 +2521,98 @@ export interface operations {
       };
     };
   };
-  voice_timeline_v1_voice_cases__case_id__timeline_get: {
+  configure_voice_contact_v1_voice_cases__case_id__contact_setup_put: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-Recovery-Operator-Token"?: string | null;
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
+      };
       path: {
         case_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VoiceContactSetupRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VoiceEligibilityResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  voice_eligibility_v1_voice_cases__case_id__eligibility_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Recovery-Operator-Token"?: string | null;
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VoiceEligibilityResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  voice_timeline_v1_voice_cases__case_id__timeline_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-Recovery-Operator-Token"?: string | null;
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody?: never;
     responses: {
@@ -2206,11 +2641,16 @@ export interface operations {
       query?: never;
       header: {
         "x-voice-event-id": string;
+        "X-Recovery-Operator-Token"?: string | null;
+        "X-RecoveryOS-Operator-Token"?: string | null;
+        "X-RecoveryOS-CSRF-Token"?: string | null;
       };
       path: {
         attempt_id: string;
       };
-      cookie?: never;
+      cookie?: {
+        recoveryos_operator_session?: string | null;
+      };
     };
     requestBody: {
       content: {
@@ -2307,7 +2747,6 @@ export interface operations {
       query?: never;
       header?: {
         "ElevenLabs-Signature"?: string | null;
-        "ElevenLabs-Timestamp"?: string | null;
       };
       path?: never;
       cookie?: never;
@@ -2321,6 +2760,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WebhookAcceptedResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  elevenlabs_live_intent_tool_v1_voice_tools_elevenlabs_intent_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "X-ElevenLabs-Tool-Secret"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LiveVoiceIntentRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LiveVoiceIntentResponse"];
         };
       };
       /** @description Validation Error */
@@ -2370,7 +2844,7 @@ export interface operations {
         };
         content: {
           "application/json": {
-            [key: string]: string;
+            [key: string]: string | boolean;
           };
         };
       };

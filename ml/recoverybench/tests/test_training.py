@@ -8,9 +8,15 @@ def test_checked_in_report_checksum_and_metric_bounds() -> None:
     artifact_dir = Path(__file__).resolve().parents[1] / "artifacts" / "recoverybench.v1"
     report = json.loads((artifact_dir / "report.json").read_text(encoding="utf-8"))
     manifest = json.loads((artifact_dir / "manifest.json").read_text(encoding="utf-8"))
+    calibration = json.loads((artifact_dir / "calibration.json").read_text(encoding="utf-8"))
 
     assert artifact_checksum(artifact_dir) == manifest["artifact_checksum"]
     assert report["artifact"]["artifact_checksum"] == manifest["artifact_checksum"]
+    assert "payment_surface_type" in manifest["feature_columns"]
+    assert "payment_surface_type" in manifest["categorical_features"]
+    assert calibration["method"] == "isotonic_shrinkage"
+    assert 0 < calibration["isotonic_weight"] < 1
+    assert report["dataset"]["generator_version"] == ("hidden-customer-state.v2-surface-aware")
     assert report["dataset"]["evaluation_case_count"] >= 100
     assert report["guardrails"] == {
         "label": "simulated incremental recovery",

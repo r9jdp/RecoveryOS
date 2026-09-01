@@ -31,6 +31,11 @@ async def test_approval_creates_one_exact_mandate_and_rejects_replay() -> None:
         payment_surface_type="SUBSCRIPTION_INVOICE_LINK",
         payment_surface_reference="inv-1",
         expires_at=expires_at,
+        context={
+            "merchant_display_name": "FitBox",
+            "plan_name": "FitBox Annual",
+            "failure_explanation": "Authentication was not completed.",
+        },
     )
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://customer-agent.test"

@@ -34,5 +34,16 @@ app.include_router(a2a_router)
 
 
 @app.get("/", tags=["meta"])
-async def root() -> dict[str, str]:
-    return {"service": "recovery-os-api", "status": "ok", "mode": "mock"}
+async def root() -> dict[str, str | bool]:
+    return {
+        "service": "recovery-os-api",
+        "status": "ok",
+        "environment": os.getenv("APP_ENV", "development"),
+        "payment_provider": os.getenv("PAYMENT_PROVIDER", "mock").strip().lower(),
+        "recovery_activity_mode": os.getenv("RECOVERY_ACTIVITY_MODE", "mock")
+        .strip()
+        .lower(),
+        "a2a_enabled": os.getenv("A2A_ENABLED", "false").strip().lower()
+        in {"1", "true", "yes", "on"},
+        "voice_provider": os.getenv("VOICE_PROVIDER", "mock").strip().lower(),
+    }

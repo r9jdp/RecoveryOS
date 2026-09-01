@@ -1,17 +1,18 @@
 import { recoveryBenchFixture } from "./fixture";
 import type { LabReport, LabReportResult } from "./types";
-
-function apiBaseUrl(): string | null {
-  const configured = process.env.NEXT_PUBLIC_RECOVERY_API_URL?.trim();
-  return configured ? configured.replace(/\/$/, "") : null;
-}
+import { demoDataEnabled, recoveryLabApiOrigin } from "@/lib/runtime-config";
 
 export async function getLabReport(
   signal?: AbortSignal,
 ): Promise<LabReportResult> {
-  const baseUrl = apiBaseUrl();
+  const baseUrl = recoveryLabApiOrigin();
   if (!baseUrl) {
-    return { data: recoveryBenchFixture, source: "mock" };
+    if (demoDataEnabled()) {
+      return { data: recoveryBenchFixture, source: "mock" };
+    }
+    throw new Error(
+      "Recovery Lab requires NEXT_PUBLIC_API_BASE_URL. Bundled reports are disabled in live mode.",
+    );
   }
   try {
     const response = await fetch(`${baseUrl}/v1/lab/reports/latest`, {
@@ -24,6 +25,11 @@ export async function getLabReport(
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
+    }
+    if (!demoDataEnabled()) {
+      throw new Error(
+        `The live Recovery Lab report could not be loaded: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
     }
     return {
       data: recoveryBenchFixture,

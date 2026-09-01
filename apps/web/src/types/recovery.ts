@@ -1,4 +1,7 @@
-export type EvidenceKind = "SIMULATED" | "RAZORPAY_TEST_VERIFIED";
+export type EvidenceKind =
+  | "SIMULATED"
+  | "SYSTEM_DERIVED"
+  | "RAZORPAY_TEST_VERIFIED";
 
 export type CaseOutcome =
   | "OPEN"
@@ -79,7 +82,7 @@ export interface ApprovalItem {
   policy_reason: string;
   deadline: string | null;
   evidence_kind: EvidenceKind;
-  provider: "RAZORPAY_TEST" | "MOCK";
+  provider: "RAZORPAY_TEST" | "RECOVERYOS" | "MOCK";
 }
 
 export interface PolicySettings {
@@ -115,7 +118,7 @@ export interface DashboardFixture {
   fixture_version: "screens.v1";
   screen: "/dashboard";
   evidence_kind: EvidenceKind;
-  currency: "INR";
+  currency: string;
   metrics: {
     revenue_at_risk_paise: number;
     verified_recovered_revenue_paise: number;
@@ -140,6 +143,7 @@ export interface DashboardFixture {
     event_type: string;
     occurred_at: string;
     correlation_id: string;
+    payload: Record<string, unknown>;
   }>;
 }
 
@@ -181,7 +185,7 @@ export interface CaseDetailFixture {
     id: string;
     plan_name: string;
     amount_paise: number;
-    currency: "INR";
+    currency: string;
     subscription_state: SubscriptionState;
   };
   payment_failure: {
@@ -202,10 +206,18 @@ export interface CaseDetailFixture {
   recommendation: {
     action: RecoveryAction;
     payment_surface_type: PaymentSurfaceType | null;
-    predicted_recovery_probability: number;
-    expected_recovered_paise: number;
-    expected_utility_paise: number;
-    confidence: number;
+    predicted_recovery_probability: number | null;
+    expected_recovered_paise: number | null;
+    expected_utility_paise: number | null;
+    confidence: number | null;
+    model_name?: string;
+    model_version?: string;
+    artifact_checksum?: string | null;
+    scoring_mode?:
+      | "CHECKSUM_VERIFIED_MODEL"
+      | "TRAINED_MODEL"
+      | "CUSTOM_SCORER"
+      | "DETERMINISTIC_FALLBACK";
     reason_codes: string[];
     reasons: string[];
     rejected_alternatives: Array<{
@@ -239,6 +251,7 @@ export interface CaseDetailFixture {
     evidence_kind: EvidenceKind;
     occurred_at: string;
     correlation_id: string;
+    payload: Record<string, unknown>;
   }>;
 }
 

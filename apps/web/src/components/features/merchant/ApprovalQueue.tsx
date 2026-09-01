@@ -29,8 +29,10 @@ import {
   TableRow,
 } from "@/components/shadcn/table";
 import { useRecoveryResource } from "@/hooks/use-recovery-resource";
-import { executeCaseCommand, getDashboard } from "@/lib/api/recovery-client";
-import { buildApprovalItems } from "@/lib/merchant-demo";
+import {
+  executeCaseCommand,
+  getApprovalQueue,
+} from "@/lib/api/recovery-client";
 import {
   formatDateTime,
   formatEvidenceKind,
@@ -84,11 +86,8 @@ export function ApprovalQueue({
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const resource = useRecoveryResource(getDashboard);
-  const approvalItems = useMemo(
-    () => (resource.data ? buildApprovalItems(resource.data) : []),
-    [resource.data],
-  );
+  const resource = useRecoveryResource(getApprovalQueue);
+  const approvalItems = resource.data ?? [];
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return approvalItems.filter((item) =>

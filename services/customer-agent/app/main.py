@@ -17,9 +17,18 @@ from .cards import (
     customer_agent_card,
 )
 from .config import CustomerAgentSettings
+from .llm import (
+    CustomerLanguageInterpreter,
+    DisabledCustomerLanguageInterpreter,
+    LanguageInterpreterNotConfiguredError,
+    LanguageInterpreterProviderError,
+    LanguageInterpreterTimeoutError,
+    OpenAIResponsesLanguageInterpreter,
+)
 from .models import (
     ApprovalDecision,
     CancelTaskParams,
+    CustomerLanguageRequest,
     GetTaskParams,
     JsonRpcRequest,
     SendMessageParams,
@@ -33,6 +42,7 @@ def create_app(
     settings: CustomerAgentSettings | None = None,
     *,
     task_store: TaskStore | None = None,
+    language_interpreter: CustomerLanguageInterpreter | None = None,
 ) -> FastAPI:
     active_settings = settings or CustomerAgentSettings()
     signer = MandateSigner.from_seed(
@@ -46,17 +56,22 @@ def create_app(
             active_settings.durable_database_url() if active_settings.task_store == "sql" else None
         ),
     )
+    interpreter = language_interpreter or _create_language_interpreter(active_settings)
     service = CustomerAgentService(
         store=store,
         signer=signer,
         receipt_verifier=ReceiptVerifier(pinned_public_keys=recovery_receipt_public_keys),
+        language_interpreter=interpreter,
         mandate_ttl_seconds=active_settings.request_ttl_seconds,
     )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        yield
-        await store.close()
+        try:
+            yield
+        finally:
+            await interpreter.close()
+            await store.close()
 
     app = FastAPI(
         title="RecoveryOS Customer Authorization Agent",
@@ -73,6 +88,7 @@ def create_app(
     )
     app.state.customer_agent_service = service
     app.state.customer_agent_store = store
+    app.state.customer_language_interpreter = interpreter
 
     @app.get("/health/live", tags=["health"])
     async def live() -> dict[str, str]:
@@ -189,7 +205,45 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return task.public_dict()
 
+    @app.post("/v1/tasks/{task_id}/interpretation", tags=["customer-approval"])
+    async def interpret_customer_language(
+        task_id: str,
+        request: CustomerLanguageRequest,
+    ) -> dict[str, object]:
+        try:
+            interpretation = await service.interpret_customer_language(
+                task_id=task_id,
+                request=request,
+            )
+        except TaskNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Task not found") from exc
+        except TaskConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except LanguageInterpreterNotConfiguredError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except LanguageInterpreterTimeoutError as exc:
+            raise HTTPException(status_code=504, detail=str(exc)) from exc
+        except LanguageInterpreterProviderError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return interpretation.model_dump(mode="json")
+
     return app
+
+
+def _create_language_interpreter(
+    settings: CustomerAgentSettings,
+) -> CustomerLanguageInterpreter:
+    if settings.llm_provider == "disabled":
+        return DisabledCustomerLanguageInterpreter()
+    api_key = settings.openai_api_key
+    model = settings.openai_model
+    if api_key is None or model is None:  # Guarded by settings validation.
+        raise ValueError("OpenAI language interpreter is not fully configured")
+    return OpenAIResponsesLanguageInterpreter(
+        api_key=api_key.get_secret_value(),
+        model=model,
+        timeout_seconds=settings.llm_timeout_seconds,
+    )
 
 
 def _rpc_error(

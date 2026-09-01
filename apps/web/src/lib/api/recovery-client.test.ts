@@ -22,6 +22,7 @@ afterEach(() => {
 describe("Recovery API live composition", () => {
   it("falls back to bundled dashboard data when configured reads fail", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "demo");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new Error("gateway offline")),
@@ -32,6 +33,19 @@ describe("Recovery API live composition", () => {
     expect(result.source).toBe("mock");
     expect(result.warning).toMatch(/gateway offline/i);
     expect(result.data.cases[0]?.id).toBe("case_fitbox_aug_2026");
+  });
+
+  it("fails visibly when live dashboard reads fail", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("gateway offline")),
+    );
+
+    await expect(getDashboard()).rejects.toThrow(
+      "Live Control Tower data could not be loaded: gateway offline",
+    );
   });
 
   it("composes Control Tower data from live metrics and cases", async () => {
@@ -57,6 +71,13 @@ describe("Recovery API live composition", () => {
             total_cases: 1,
             verified_recovered_revenue_paise: 0,
           },
+          recovery_by_channel: [
+            {
+              case_count: 1,
+              channel: "SUBSCRIPTION_CARD_UPDATE",
+              recovered_paise: 149900,
+            },
+          ],
           recent_events: [],
         }),
       )
@@ -84,6 +105,19 @@ describe("Recovery API live composition", () => {
           ],
           page: { has_more: false, limit: 100, next_cursor: null },
         }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          max_contacts_per_7_days: 3,
+          quiet_hours_end: "09:00",
+          quiet_hours_start: "20:00",
+          recovery_kill_switch: false,
+          require_approval_above_paise: 100000,
+          require_approval_actions: ["START_VOICE"],
+          timezone: "Asia/Kolkata",
+          updated_at: "2026-08-28T00:00:00Z",
+          version: 3,
+        }),
       );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -99,12 +133,88 @@ describe("Recovery API live composition", () => {
       "https://api.example.test/v1/recovery-cases?limit=100",
       expect.any(Object),
     );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://api.example.test/v1/policy-settings",
+      expect.any(Object),
+    );
     expect(result.source).toBe("api");
     expect(result.data.cases[0]?.customer_display_name).toBe("Live Customer");
     expect(result.data.evidence_kind).toBe("RAZORPAY_TEST_VERIFIED");
+    expect(result.data.policy_settings.require_approval_above_paise).toBe(
+      100000,
+    );
+    expect(result.data.recovery_by_channel[0]).toEqual({
+      case_count: 1,
+      channel: "SUBSCRIPTION_CARD_UPDATE",
+      recovered_paise: 149900,
+    });
   });
 
-  it("composes a live case from detail and timeline without FitBox scoring", async () => {
+  it("supports the deployed dashboard contract without recovery channel facts", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            currency: "INR",
+            diagnosis_distribution: [],
+            evidence_kind: "RAZORPAY_TEST_VERIFIED",
+            metrics: {
+              active_cases: 0,
+              human_review_count: 0,
+              net_recovered_value_paise: 0,
+              policy_blocked_actions: 0,
+              recovered_cases: 0,
+              recovery_rate_basis_points: 0,
+              revenue_at_risk_paise: 0,
+              simulated_incremental_recovery_paise: 0,
+              total_cases: 0,
+              verified_recovered_revenue_paise: 0,
+            },
+            recent_events: [],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            items: [],
+            page: { has_more: false, limit: 100, next_cursor: null },
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            max_contacts_per_7_days: 3,
+            quiet_hours_end: "09:00",
+            quiet_hours_start: "20:00",
+            recovery_kill_switch: false,
+            require_approval_above_paise: 100000,
+            require_approval_actions: [],
+            timezone: "Asia/Kolkata",
+            updated_at: "2026-08-28T00:00:00Z",
+            version: 1,
+          }),
+        ),
+    );
+
+    const result = await getDashboard();
+
+    expect(result.source).toBe("api");
+    expect(result.data.recovery_by_channel).toHaveLength(5);
+    expect(result.data.recovery_by_channel).toEqual(
+      expect.arrayContaining([
+        {
+          case_count: 0,
+          channel: "SUBSCRIPTION_CARD_UPDATE",
+          recovered_paise: 0,
+        },
+      ]),
+    );
+  });
+
+  it("composes a live case with its persisted model ranking", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.example.test");
     const fetchMock = vi
       .fn()
@@ -191,6 +301,56 @@ describe("Recovery API live composition", () => {
               recorded_at: "2026-08-28T09:00:01Z",
               source: "razorpay",
             },
+            {
+              case_id: "case_live",
+              correlation_id: "corr_live",
+              evidence_kind: "SIMULATED",
+              event_type: "ACTION_RECOMMENDED",
+              id: "event_decision",
+              occurred_at: "2026-08-28T09:00:02Z",
+              payload: {
+                ranked_candidates: [
+                  {
+                    action_type: "ESCALATE_TO_HUMAN",
+                    payment_surface_type: null,
+                    recovery_probability: 0.61,
+                    expected_recovered_paise: 152500,
+                    expected_utility_paise: 151000,
+                    explanation: ["Calibrated CatBoost recoverability estimate."],
+                    model: {
+                      name: "recoverybench-catboost",
+                      version: "recoverybench.v1",
+                      artifact_checksum: "checksum-1",
+                      scoring_mode: "CHECKSUM_VERIFIED_MODEL",
+                    },
+                    policy: {
+                      reason_codes: ["WITHIN_RECOVERY_WINDOW"],
+                      reasons: ["The case is inside its recovery window."],
+                    },
+                    selected: true,
+                  },
+                  {
+                    action_type: "STOP",
+                    payment_surface_type: null,
+                    recovery_probability: 0.2,
+                    expected_recovered_paise: 50000,
+                    expected_utility_paise: 50000,
+                    explanation: [],
+                    model: {
+                      name: "recoverybench-catboost",
+                      version: "recoverybench.v1",
+                      scoring_mode: "CHECKSUM_VERIFIED_MODEL",
+                    },
+                    policy: { reason_codes: [], reasons: [] },
+                    selected: false,
+                    rejection_code: "LOWER_EXPECTED_UTILITY",
+                    rejection_reason: "Lower expected utility.",
+                  },
+                ],
+              },
+              recorded_at: "2026-08-28T09:00:03Z",
+              source: "decision-engine",
+            },
           ],
         }),
       );
@@ -200,8 +360,12 @@ describe("Recovery API live composition", () => {
 
     expect(result.source).toBe("api");
     expect(result.data.customer.display_name).toBe("Live Customer");
-    expect(result.data.recommendation.predicted_recovery_probability).toBe(0);
-    expect(result.data.recommendation.reason_codes).toEqual(["NO_LIVE_ACTION"]);
+    expect(result.data.recommendation.predicted_recovery_probability).toBe(0.61);
+    expect(result.data.recommendation.model_name).toBe("recoverybench-catboost");
+    expect(result.data.recommendation.scoring_mode).toBe(
+      "CHECKSUM_VERIFIED_MODEL",
+    );
+    expect(result.data.recommendation.rejected_alternatives).toHaveLength(1);
     expect(result.data.timeline[0]?.source).toBe("razorpay");
   });
 

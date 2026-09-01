@@ -5,12 +5,14 @@ import Link from "next/link";
 
 import { Alert, Badge, Button } from "@/components/ui";
 import {
+  interpretCustomerLanguage,
   loadApprovalSummary,
   submitApprovalDecision,
   type ApprovalChoice,
   type ApprovalResult,
   type ApprovalSubmission,
   type ApprovalSummary,
+  type LanguageInterpretation,
 } from "@/lib/a2a/client";
 
 import styles from "./a2a.module.css";
@@ -26,6 +28,10 @@ interface CustomerApprovalProps {
     taskId: string,
     submission: ApprovalSubmission,
   ) => Promise<ApprovalResult>;
+  interpretLanguage?: (
+    taskId: string,
+    text: string,
+  ) => Promise<LanguageInterpretation>;
 }
 
 type ViewState = "loading" | "ready" | "approved" | "rejected" | "error";
@@ -35,11 +41,16 @@ export function CustomerApproval({
   customerAgentOrigin,
   loadApproval,
   submitApproval,
+  interpretLanguage,
 }: CustomerApprovalProps) {
   const [summary, setSummary] = useState<ApprovalSummary | null>(null);
   const [viewState, setViewState] = useState<ViewState>("loading");
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState<ApprovalChoice | null>(null);
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [interpreting, setInterpreting] = useState(false);
+  const [interpretation, setInterpretation] =
+    useState<LanguageInterpretation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const confirmationId = useId();
 
@@ -112,6 +123,29 @@ export function CustomerApproval({
     }
   };
 
+  const interpret = async () => {
+    const text = customerMessage.trim();
+    if (!text) return;
+    setInterpreting(true);
+    setInterpretation(null);
+    setError(null);
+    try {
+      setInterpretation(
+        await (interpretLanguage
+          ? interpretLanguage(taskId, text)
+          : interpretCustomerLanguage(customerAgentOrigin, taskId, text)),
+      );
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "The customer agent could not interpret that message.",
+      );
+    } finally {
+      setInterpreting(false);
+    }
+  };
+
   return (
     <main className={styles.canvas}>
       <header className={styles.header}>
@@ -146,8 +180,8 @@ export function CustomerApproval({
               <div className={styles.eyebrow}>Customer authorization</div>
               <h1 id="approval-title">Review recovery authorization</h1>
               <p className={styles.intro}>
-                {summary.merchant_display_name} is asking you to approve one
-                exact payment surface for a failed subscription renewal.
+                {summary.merchant_display_name} is asking you to review a
+                recovery option for {summary.plan_name}.
               </p>
             </header>
 
@@ -177,8 +211,12 @@ export function CustomerApproval({
                   <dd>{summary.merchant_display_name}</dd>
                 </div>
                 <div>
-                  <dt>Reason</dt>
-                  <dd>{summary.recovery_reason}</dd>
+                  <dt>Plan</dt>
+                  <dd>{summary.plan_name}</dd>
+                </div>
+                <div>
+                  <dt>What happened</dt>
+                  <dd>{summary.failure_explanation}</dd>
                 </div>
                 <div>
                   <dt>Payment surface</dt>
@@ -215,6 +253,50 @@ export function CustomerApproval({
                   A browser callback is never accepted as proof of payment.
                 </li>
               </ul>
+            </section>
+
+            <section
+              className={styles.agentPanel}
+              aria-labelledby="customer-agent-heading"
+            >
+              <div className={styles.sectionHeading}>
+                <h2 id="customer-agent-heading">Talk to the customer agent</h2>
+                <p>
+                  Describe what you want in your own words. The model explains
+                  its interpretation, but it cannot approve or reject for you.
+                </p>
+              </div>
+              <textarea
+                aria-label="Message for the customer agent"
+                value={customerMessage}
+                onChange={(event) => setCustomerMessage(event.target.value)}
+                placeholder="For example: I understand this request and want to continue."
+                rows={3}
+              />
+              <Button
+                variant="secondary"
+                disabled={!customerMessage.trim()}
+                loading={interpreting}
+                onClick={() => void interpret()}
+              >
+                Ask customer agent
+              </Button>
+              {interpretation && (
+                <Alert
+                  tone={
+                    interpretation.intent === "APPROVE"
+                      ? "success"
+                      : interpretation.intent === "REJECT"
+                        ? "warning"
+                        : "info"
+                  }
+                  title={`Understood as ${interpretation.intent.replaceAll("_", " ").toLowerCase()}`}
+                >
+                  {interpretation.explanation} Confidence: {" "}
+                  {(interpretation.confidence_basis_points / 100).toFixed(0)}%.
+                  You must still use the explicit controls below.
+                </Alert>
+              )}
             </section>
 
             <section

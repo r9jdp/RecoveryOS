@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from html import escape
 from typing import Any
 
 import httpx
@@ -34,19 +33,6 @@ class TwilioConfig:
             raise ValueError("Twilio India outreach must use an international caller ID")
         if not self.public_voice_origin.startswith("https://"):
             raise ValueError("public voice origin must use HTTPS")
-
-
-def render_elevenlabs_twiml(*, stream_url: str, attempt_id: str) -> str:
-    if not stream_url.startswith("wss://"):
-        raise ValueError("voice stream must use wss")
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<Response><Connect><Stream url="'
-        f'{escape(stream_url, quote=True)}"'
-        '><Parameter name="attempt_id" value="'
-        f'{escape(attempt_id, quote=True)}" />'
-        "</Stream></Connect></Response>"
-    )
 
 
 CallSidResolver = Callable[[str], Awaitable[str | None]]
@@ -198,9 +184,17 @@ class TwilioVoiceProvider:
         if self._start_breaker.uncertain_submission:
             self._start_breaker.record_success()
         duration = payload.get("duration")
+        raw_status = str(payload.get("status", "unknown")).strip().upper()
+        normalized_status = {
+            "QUEUED": "SUBMITTED",
+            "INITIATED": "SUBMITTED",
+            "IN-PROGRESS": "IN_PROGRESS",
+            "NO-ANSWER": "NO_ANSWER",
+            "CANCELLED": "CANCELED",
+        }.get(raw_status, raw_status)
         return VoiceContactSnapshot(
             contact_attempt_id=contact_attempt_id,
-            status=str(payload.get("status", "unknown")).upper(),
+            status=normalized_status,
             duration_seconds=int(duration) if duration else None,
             observed_at=datetime.now(UTC),
         )

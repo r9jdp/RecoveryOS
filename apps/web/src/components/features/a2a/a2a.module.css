@@ -55,6 +55,7 @@
 .requestHeader,
 .summaryCard,
 .safetyPanel,
+.agentPanel,
 .decisionPanel,
 .stateCard,
 .loadingCard {
@@ -72,6 +73,7 @@
 .requestHeader,
 .summaryCard,
 .safetyPanel,
+.agentPanel,
 .decisionPanel {
   padding: clamp(1.25rem, 3vw, 1.5rem);
 }
@@ -176,6 +178,33 @@
 
 .safetyPanel li + li {
   margin-top: var(--ros-space-2);
+}
+
+.agentPanel {
+  display: grid;
+  gap: var(--ros-space-3);
+}
+
+.agentPanel textarea {
+  width: 100%;
+  min-height: 6rem;
+  padding: var(--ros-space-3);
+  resize: vertical;
+  color: var(--ros-ink-secondary);
+  background: var(--ros-bg-primary);
+  border: 1px solid var(--ros-border-strong);
+  border-radius: var(--ros-radius-sm);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.agentPanel textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--ros-shadow-focus);
+}
+
+.agentPanel button {
+  justify-self: start;
 }
 
 .confirmation {

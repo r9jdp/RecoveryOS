@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import uuid4
@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.db.session import get_async_session
 from services.api.app.domain.enums import (
+    ActionStatus,
     CaseOutcome,
     ContactDisposition,
     Diagnosis,
+    EvidenceKind,
     SubscriptionState,
 )
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
@@ -26,8 +28,14 @@ from services.api.app.integrations.razorpay.errors import RazorpayIntegrationErr
 from services.api.app.models import Merchant, MerchantPolicySetting
 from services.api.app.providers.interfaces import PaymentProvider
 from services.api.app.repositories import CaseFilters, CaseRepository, InvalidCursorError
+from services.api.app.runtime_mode import (
+    demo_mode_enabled,
+    payment_provider_mode,
+    require_demo_mode,
+)
 from services.api.app.services.cases import (
     ApplicationServiceError,
+    CaseConflictError,
     CaseNotFoundError,
     RecoveryCaseService,
 )
@@ -44,6 +52,8 @@ from .operator_auth import operator_router, require_operator_for_non_mock_paymen
 from .schemas import (
     ActionDecisionResponse,
     ActionResponse,
+    ApprovalQueueItemResponse,
+    ApprovalQueueResponse,
     CaseCommandRequest,
     CaseDetailResponse,
     CaseListResponse,
@@ -65,6 +75,7 @@ from .schemas import (
     RecentEventResponse,
     RecommendActionRequest,
     RecoveryCaseResponse,
+    RecoveryChannelResponse,
     RejectActionRequest,
     SafetyDispositionRequest,
     SafetyDispositionResponse,
@@ -124,10 +135,22 @@ def get_merchant_scope() -> str:
 
 
 async def get_payment_provider() -> AsyncIterator[PaymentProvider]:
-    provider = os.getenv("PAYMENT_PROVIDER", "mock").strip().lower()
+    provider = payment_provider_mode()
     if provider == "mock":
+        if not demo_mode_enabled():
+            raise RazorpayIntegrationError(
+                "MOCK_PAYMENT_DISABLED",
+                "The mock payment provider is restricted to local/demo deployments.",
+                status_code=503,
+            )
         yield MockPaymentProvider()
         return
+    if not provider:
+        raise RazorpayIntegrationError(
+            "PAYMENT_PROVIDER_NOT_CONFIGURED",
+            "PAYMENT_PROVIDER must be configured for a hosted deployment.",
+            status_code=503,
+        )
     if provider != "razorpay":
         raise RazorpayIntegrationError(
             "PAYMENT_PROVIDER_UNSUPPORTED",
@@ -375,19 +398,112 @@ async def generate_failure_simulation(
     return FailureSimulationResponse.model_validate(scenario.to_api_dict())
 
 
+def _dashboard_evidence_kind(kinds: Iterable[EvidenceKind]) -> EvidenceKind:
+    observed = set(kinds)
+    if EvidenceKind.RAZORPAY_TEST_VERIFIED in observed:
+        return EvidenceKind.RAZORPAY_TEST_VERIFIED
+    if EvidenceKind.SYSTEM_DERIVED in observed:
+        return EvidenceKind.SYSTEM_DERIVED
+    if EvidenceKind.SIMULATED in observed:
+        return EvidenceKind.SIMULATED
+    return EvidenceKind.SYSTEM_DERIVED
+
+
 @router.get("/dashboard/metrics", response_model=DashboardResponse)
-async def get_dashboard(service: Service, merchant_id: MerchantScope) -> DashboardResponse:
+async def get_dashboard(
+    service: Service,
+    merchant_id: MerchantScope,
+    session: Session,
+) -> DashboardResponse:
+    merchant = await session.get(Merchant, merchant_id)
+    if merchant is None:
+        raise CaseNotFoundError(
+            "The configured merchant was not found.",
+            metadata={"merchant_id": merchant_id},
+        )
     snapshot = await service.dashboard(merchant_id=merchant_id)
     return DashboardResponse(
+        currency=merchant.currency,
+        evidence_kind=_dashboard_evidence_kind(
+            event.evidence_kind for event in snapshot.recent_events
+        ),
         metrics=DashboardMetricsResponse.model_validate(snapshot.metrics),
         diagnosis_distribution=[
             DiagnosisBucketResponse(diagnosis=diagnosis, case_count=count)
             for diagnosis, count in snapshot.diagnosis_distribution
         ],
+        recovery_by_channel=[
+            RecoveryChannelResponse.model_validate(
+                {
+                    "channel": channel,
+                    "case_count": case_count,
+                    "recovered_paise": recovered_paise,
+                }
+            )
+            for channel, case_count, recovered_paise in snapshot.recovery_by_channel
+        ],
         recent_events=[
             RecentEventResponse.model_validate(event) for event in snapshot.recent_events
         ],
     )
+
+
+@router.get("/approval-queue", response_model=ApprovalQueueResponse)
+async def get_approval_queue(
+    service: Service,
+    merchant_id: MerchantScope,
+) -> ApprovalQueueResponse:
+    page = await service.list_cases(
+        merchant_id=merchant_id,
+        filters=CaseFilters(),
+        cursor=None,
+        limit=100,
+    )
+    items: list[ApprovalQueueItemResponse] = []
+    for recovery_case in page.items:
+        aggregate = await service.get_case(
+            merchant_id=merchant_id,
+            case_id=recovery_case.id,
+        )
+        action = aggregate.latest_action
+        policy = aggregate.latest_policy
+        if (
+            action is None
+            or policy is None
+            or action.status != ActionStatus.AWAITING_APPROVAL
+        ):
+            continue
+        events = await service.timeline(
+            merchant_id=merchant_id,
+            case_id=recovery_case.id,
+        )
+        provider_verified = any(
+            event.evidence_kind == EvidenceKind.RAZORPAY_TEST_VERIFIED for event in events
+        )
+        items.append(
+            ApprovalQueueItemResponse(
+                case_id=recovery_case.id,
+                action_id=action.id,
+                customer_display_name=aggregate.customer.display_name,
+                plan_name=aggregate.subscription.plan_name,
+                amount_at_risk_paise=recovery_case.amount_at_risk_paise,
+                recommended_action=action.action_type,
+                payment_surface_type=action.payment_surface_type,
+                policy_reason=(
+                    policy.reasons[0]
+                    if policy.reasons
+                    else "Merchant policy requires an operator decision."
+                ),
+                deadline=recovery_case.recovery_deadline,
+                evidence_kind=(
+                    EvidenceKind.RAZORPAY_TEST_VERIFIED
+                    if provider_verified
+                    else EvidenceKind.SYSTEM_DERIVED
+                ),
+                provider="RAZORPAY_TEST" if provider_verified else "RECOVERYOS",
+            )
+        )
+    return ApprovalQueueResponse(items=items)
 
 
 @router.get("/recovery-cases", response_model=CaseListResponse)
@@ -455,6 +571,18 @@ async def get_recovery_case(
     case_id: str, service: Service, merchant_id: MerchantScope
 ) -> CaseDetailResponse:
     aggregate = await service.get_case(merchant_id=merchant_id, case_id=case_id)
+    available_commands: list[str] = []
+    if aggregate.recovery_case.case_outcome == CaseOutcome.OPEN:
+        available_commands.extend(["STOP", "ESCALATE_TO_HUMAN"])
+        if aggregate.latest_action is not None:
+            if aggregate.latest_action.status == ActionStatus.AWAITING_APPROVAL:
+                available_commands.append("APPROVE")
+            if aggregate.latest_action.status in {
+                ActionStatus.PROPOSED,
+                ActionStatus.AWAITING_APPROVAL,
+                ActionStatus.SCHEDULED,
+            }:
+                available_commands.append("REJECT")
     return CaseDetailResponse(
         case=RecoveryCaseResponse.model_validate(aggregate.recovery_case),
         customer=aggregate.customer,
@@ -463,7 +591,7 @@ async def get_recovery_case(
         payment_failure=aggregate.failed_payment,
         latest_action=aggregate.latest_action,
         latest_policy=aggregate.latest_policy,
-        available_commands=["APPROVE", "REJECT", "STOP", "ESCALATE_TO_HUMAN"],
+        available_commands=available_commands,
     )
 
 
@@ -493,11 +621,13 @@ async def execute_operator_command(
     if request.command in {"APPROVE", "REJECT"}:
         aggregate = await service.get_case(merchant_id=merchant_id, case_id=case_id)
         action = aggregate.latest_action
-        if action is None:
-            action, _ = await service.recommend_action(
-                merchant_id=merchant_id,
-                case_id=case_id,
-                now=occurred_at,
+        if action is None or action.id != request.action_id:
+            raise CaseConflictError(
+                "The displayed recovery action is missing or no longer current.",
+                metadata={
+                    "requested_action_id": request.action_id,
+                    "current_action_id": action.id if action is not None else None,
+                },
             )
         if request.command == "APPROVE":
             await service.approve_action(
@@ -738,7 +868,10 @@ async def escalate_recovery_case(
 @router.post(
     "/mock/recovery-cases/{case_id}/payment-surfaces",
     response_model=ActionResponse,
-    dependencies=[Depends(require_operator_for_non_mock_payment)],
+    dependencies=[
+        Depends(require_demo_mode),
+        Depends(require_operator_for_non_mock_payment),
+    ],
 )
 async def open_mock_payment_surface(
     case_id: str,
@@ -771,7 +904,10 @@ async def open_mock_payment_surface(
 @router.post(
     "/mock/recovery-cases/{case_id}/payment-success",
     response_model=MockPaymentSuccessResponse,
-    dependencies=[Depends(require_operator_for_non_mock_payment)],
+    dependencies=[
+        Depends(require_demo_mode),
+        Depends(require_operator_for_non_mock_payment),
+    ],
 )
 async def apply_mock_payment_success(
     case_id: str,

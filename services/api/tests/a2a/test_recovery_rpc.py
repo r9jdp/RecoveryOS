@@ -13,6 +13,7 @@ class FakeCustomerAgentClient:
         self, request: CustomerAgentRecoveryRequest
     ) -> CustomerAgentTask:
         assert request.exact_amount_paise == 149_900
+        assert request.context.plan_name == "FitBox Annual"
         return CustomerAgentTask(
             remote_task_id="task-1",
             state="AUTH_REQUIRED",
@@ -79,6 +80,13 @@ async def test_recovery_rpc_delegates_exact_request(monkeypatch: pytest.MonkeyPa
                                     "payment_surface_type": "SUBSCRIPTION_INVOICE_LINK",
                                     "payment_surface_reference": "inv-1",
                                     "expires_at": "2026-08-28T12:00:00Z",
+                                    "context": {
+                                        "merchant_display_name": "FitBox",
+                                        "plan_name": "FitBox Annual",
+                                        "failure_explanation": (
+                                            "Authentication was not completed."
+                                        ),
+                                    },
                                 }
                             }
                         ]

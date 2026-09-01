@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .training import ARTIFACT_VERSION, DEFAULT_SEED, train_artifact
+from .training import ARTIFACT_VERSION, DEFAULT_CASE_COUNT, DEFAULT_SEED, train_artifact
 
 
 def main() -> None:
@@ -16,7 +16,7 @@ def main() -> None:
         default=Path(__file__).parent / "artifacts" / ARTIFACT_VERSION,
     )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("--case-count", type=int, default=1_200)
+    parser.add_argument("--case-count", type=int, default=DEFAULT_CASE_COUNT)
     args = parser.parse_args()
     report = train_artifact(args.output, seed=args.seed, case_count=args.case_count)
     print(

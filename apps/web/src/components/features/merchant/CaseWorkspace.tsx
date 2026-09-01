@@ -121,11 +121,17 @@ function optimisticOutcome(
   return current;
 }
 
-function paymentSurfaceLabel(type: PaymentSurfaceType | null): string {
-  return type ? humanize(type) : "Not selected";
+function recoveryStepLabel(
+  action: CaseDetailFixture["recommendation"]["action"],
+  type: PaymentSurfaceType | null,
+): string {
+  return type ? humanize(type) : humanize(action);
 }
 
-function customerInstruction(type: PaymentSurfaceType | null): string {
+function customerInstruction(
+  action: CaseDetailFixture["recommendation"]["action"],
+  type: PaymentSurfaceType | null,
+): string {
   if (type === "SUBSCRIPTION_CARD_UPDATE") {
     return "Update the saved card and complete authentication";
   }
@@ -135,6 +141,15 @@ function customerInstruction(type: PaymentSurfaceType | null): string {
   if (type === "STANDARD_PAYMENT_LINK") {
     return "Open the secure payment link and complete payment";
   }
+  if (action === "SEND_TO_CUSTOMER_AGENT") {
+    return "Ask the customer agent for an exact, signed payment mandate";
+  }
+  if (action === "START_VOICE") {
+    return "Start one consented, operator-approved recovery call";
+  }
+  if (action === "ESCALATE_TO_HUMAN") return "Send this case to human review";
+  if (action === "WAIT_FOR_GATEWAY_RETRY") return "Wait for Razorpay's native retry";
+  if (action === "STOP") return "Stop automated recovery safely";
   return "Complete the operator-approved recovery step";
 }
 
@@ -422,12 +437,18 @@ function CaseContent({
     "SIMULATED";
   const diagnosisLabel = humanize(recoveryCase.diagnosis);
   const failureReason = humanize(fixture.payment_failure.error_reason);
-  const recommendedSurface = paymentSurfaceLabel(
+  const recommendedSurface = recoveryStepLabel(
+    fixture.recommendation.action,
     fixture.recommendation.payment_surface_type,
   );
-  const hasReliableScore =
-    fixture.recommendation.confidence > 0 &&
-    fixture.recommendation.predicted_recovery_probability > 0;
+  const customerAgentTaskId = [...fixture.timeline]
+    .reverse()
+    .find((event) => event.event_type === "A2A_AUTHORIZATION_STARTED")
+    ?.payload.remote_task_id;
+  const customerAgentHref =
+    typeof customerAgentTaskId === "string" && customerAgentTaskId
+      ? `/a2a/${encodeURIComponent(customerAgentTaskId)}`
+      : null;
 
   const applySafetyDisposition = useCallback(async () => {
     if (!selectedSafety) return;
@@ -499,7 +520,10 @@ function CaseContent({
     { label: "Subscription ID", value: recoveryCase.subscription_id },
     {
       label: "Recovery method",
-      value: paymentSurfaceLabel(fixture.payment_surface.type),
+      value: recoveryStepLabel(
+        fixture.recommendation.action,
+        fixture.payment_surface.type,
+      ),
     },
     {
       label: "Method status",
@@ -634,6 +658,7 @@ function CaseContent({
               </p>
               <p className="mt-2 text-base leading-6 text-muted-foreground">
                 {customerInstruction(
+                  fixture.recommendation.action,
                   fixture.recommendation.payment_surface_type,
                 )}
                 . RecoveryOS then waits for authoritative Razorpay proof before
@@ -670,6 +695,17 @@ function CaseContent({
                 nativeButton={false}
               >
                 Open customer payment surface
+                <ExternalLink data-icon="inline-end" />
+              </Button>
+            )}
+            {customerAgentHref && (
+              <Button
+                variant="outline"
+                className="self-start"
+                render={<Link href={customerAgentHref} />}
+                nativeButton={false}
+              >
+                Open customer authorization
                 <ExternalLink data-icon="inline-end" />
               </Button>
             )}
@@ -997,28 +1033,59 @@ function CaseContent({
               },
               {
                 label: "Recovery score",
-                value: hasReliableScore
-                  ? formatProbability(
-                      fixture.recommendation.predicted_recovery_probability,
-                    )
-                  : "Not enough data",
+                value:
+                  fixture.recommendation.predicted_recovery_probability === null
+                    ? "Unavailable"
+                    : formatProbability(
+                        fixture.recommendation.predicted_recovery_probability,
+                      ),
               },
               {
                 label: "Score confidence",
-                value: formatProbability(fixture.recommendation.confidence),
+                value:
+                  fixture.recommendation.confidence === null
+                    ? "Unavailable"
+                    : formatProbability(fixture.recommendation.confidence),
               },
               {
                 label: "Expected recovery",
-                value: formatPaise(
-                  fixture.recommendation.expected_recovered_paise,
-                ),
+                value:
+                  fixture.recommendation.expected_recovered_paise === null
+                    ? "Unavailable"
+                    : formatPaise(
+                        fixture.recommendation.expected_recovered_paise,
+                      ),
               },
               {
                 label: "Expected utility",
-                value: formatPaise(
-                  fixture.recommendation.expected_utility_paise,
-                ),
+                value:
+                  fixture.recommendation.expected_utility_paise === null
+                    ? "Unavailable"
+                    : formatPaise(fixture.recommendation.expected_utility_paise),
               },
+              ...(fixture.recommendation.model_name
+                ? [
+                    {
+                      label: "Ranking model",
+                      value: `${fixture.recommendation.model_name} · ${fixture.recommendation.model_version ?? "version unavailable"}`,
+                    },
+                  ]
+                : []),
+              ...(fixture.recommendation.scoring_mode
+                ? [
+                    {
+                      label: "Scoring mode",
+                      value:
+                        fixture.recommendation.scoring_mode ===
+                          "CHECKSUM_VERIFIED_MODEL" ||
+                        fixture.recommendation.scoring_mode === "TRAINED_MODEL"
+                          ? "Checksum-verified trained model"
+                          : fixture.recommendation.scoring_mode === "CUSTOM_SCORER"
+                            ? "Configured recovery scorer"
+                          : "Deterministic fallback",
+                    },
+                  ]
+                : []),
               {
                 label: "Policy version",
                 value: fixture.policy.policy_version,

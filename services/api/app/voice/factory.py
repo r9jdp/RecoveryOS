@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 import httpx
@@ -25,12 +26,35 @@ def voice_provider_ready() -> bool:
         "TWILIO_AUTH_TOKEN",
         "TWILIO_FROM_NUMBER",
         "VOICE_PUBLIC_ORIGIN",
+        "ELEVENLABS_API_KEY",
+        "ELEVENLABS_AGENT_ID",
+        "ELEVENLABS_WEBHOOK_SECRET",
+        "VOICE_OPERATOR_TOKEN",
     )
-    return (
+    allowlist = {
+        item.strip()
+        for item in os.getenv("VOICE_ALLOWLIST_DESTINATIONS", "").split(",")
+        if item.strip()
+    }
+    configured = (
         os.getenv("VOICE_PROVIDER", "mock").strip().casefold() == "twilio"
         and _truthy(os.getenv("VOICE_REAL_CALLS_ENABLED"))
         and all(os.getenv(name, "").strip() for name in required)
+        and bool(allowlist)
+        and all(re.fullmatch(r"\+[1-9]\d{7,14}", item) for item in allowlist)
     )
+    if not configured:
+        return False
+    try:
+        TwilioConfig(
+            account_sid=os.environ["TWILIO_ACCOUNT_SID"],
+            auth_token=os.environ["TWILIO_AUTH_TOKEN"],
+            from_number=os.environ["TWILIO_FROM_NUMBER"],
+            public_voice_origin=os.environ["VOICE_PUBLIC_ORIGIN"].rstrip("/"),
+        )
+    except ValueError:
+        return False
+    return True
 
 
 @dataclass

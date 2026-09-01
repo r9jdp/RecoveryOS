@@ -12,18 +12,38 @@ import {
   Timeline,
 } from "@/components/ui";
 import {
+  fetchVoiceTimeline,
   startRealVoiceContact,
   submitBrowserTranscript,
   type BrowserTranscriptResult,
   type StartVoiceResult,
+  type VoiceTimelineItem,
 } from "@/lib/voice/voice-client";
+import { getDashboard } from "@/lib/api/recovery-client";
 
 import styles from "./voice.module.css";
 
-const CASE_ID = "case_fitbox_aug_2026";
+interface VoiceCaseOption {
+  id: string;
+  label: string;
+  eligible: boolean;
+}
+
+async function loadLiveVoiceCases(): Promise<VoiceCaseOption[]> {
+  const { data } = await getDashboard();
+  return data.cases.map((item) => ({
+    id: item.id,
+    label: `${item.customer_display_name} · ${item.plan_name}`,
+    eligible: item.case_outcome === "OPEN" && item.payment_state !== "CAPTURED",
+  }));
+}
 
 interface VoiceConsoleProps {
   attemptId?: string;
+  initialCases?: VoiceCaseOption[];
+  initialTimeline?: VoiceTimelineItem[];
+  loadCases?: () => Promise<VoiceCaseOption[]>;
+  loadTimeline?: (caseId: string) => Promise<VoiceTimelineItem[]>;
   submitTranscript?: (
     attemptId: string,
     transcript: string,
@@ -32,7 +52,11 @@ interface VoiceConsoleProps {
 }
 
 export function VoiceConsole({
-  attemptId = "browser-rehearsal-fitbox",
+  attemptId,
+  initialCases,
+  initialTimeline,
+  loadCases = loadLiveVoiceCases,
+  loadTimeline = fetchVoiceTimeline,
   submitTranscript = submitBrowserTranscript,
   startCall = startRealVoiceContact,
 }: VoiceConsoleProps) {
@@ -44,6 +68,14 @@ export function VoiceConsole({
   const [submitting, setSubmitting] = useState(false);
   const [realCallConfirmed, setRealCallConfirmed] = useState(false);
   const [callResult, setCallResult] = useState<StartVoiceResult | null>(null);
+  const [cases, setCases] = useState<VoiceCaseOption[]>(initialCases ?? []);
+  const [selectedCaseId, setSelectedCaseId] = useState(
+    initialCases?.find((item) => item.eligible)?.id ?? "",
+  );
+  const [timeline, setTimeline] = useState<VoiceTimelineItem[]>(
+    initialTimeline ?? [],
+  );
+  const [loadingCases, setLoadingCases] = useState(initialCases === undefined);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -54,6 +86,43 @@ export function VoiceConsole({
     },
     [audioUrl],
   );
+
+  useEffect(() => {
+    if (initialCases !== undefined) return;
+    let active = true;
+    void loadCases()
+      .then((items) => {
+        if (!active) return;
+        setCases(items);
+        setSelectedCaseId((current) => current || items.find((item) => item.eligible)?.id || "");
+      })
+      .catch((reason) => {
+        if (!active) return;
+        setError(reason instanceof Error ? reason.message : "Recovery cases could not be loaded.");
+      })
+      .finally(() => {
+        if (active) setLoadingCases(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [initialCases, loadCases]);
+
+  useEffect(() => {
+    if (!selectedCaseId || initialTimeline !== undefined) return;
+    let active = true;
+    void loadTimeline(selectedCaseId)
+      .then((items) => {
+        if (active) setTimeline(items);
+      })
+      .catch((reason) => {
+        if (active)
+          setError(reason instanceof Error ? reason.message : "Voice history could not be loaded.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [initialTimeline, loadTimeline, selectedCaseId]);
 
   async function toggleRecording() {
     setError(null);
@@ -103,7 +172,9 @@ export function VoiceConsole({
     setError(null);
     setResult(null);
     try {
-      setResult(await submitTranscript(attemptId, transcript.trim()));
+      const rehearsalId =
+        attemptId ?? `browser-rehearsal-${selectedCaseId || "unassigned"}`;
+      setResult(await submitTranscript(rehearsalId, transcript.trim()));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -116,10 +187,15 @@ export function VoiceConsole({
   }
 
   async function requestRealCall() {
+    if (!selectedCaseId) return;
     setSubmitting(true);
     setError(null);
     try {
-      setCallResult(await startCall(CASE_ID));
+      const submitted = await startCall(selectedCaseId);
+      setCallResult(submitted);
+      if (initialTimeline === undefined) {
+        setTimeline(await loadTimeline(selectedCaseId));
+      }
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Call request failed.",
@@ -142,7 +218,7 @@ export function VoiceConsole({
           </p>
         </div>
         <Badge tone="info" showDot>
-          Mock mode default
+          Provider-gated
         </Badge>
       </header>
 
@@ -230,6 +306,32 @@ export function VoiceConsole({
             action={<Badge tone="warning">Guarded</Badge>}
           />
           <CardBody className={styles.stack}>
+            <label className={styles.field}>
+              <span>Recovery case</span>
+              <small>
+                Only an open, unpaid case can be submitted to the guarded call
+                path.
+              </small>
+              <select
+                aria-label="Recovery case for voice outreach"
+                value={selectedCaseId}
+                disabled={loadingCases}
+                onChange={(event) => {
+                  setSelectedCaseId(event.target.value);
+                  setCallResult(null);
+                  setTimeline([]);
+                }}
+              >
+                <option value="">
+                  {loadingCases ? "Loading cases…" : "Select a recovery case"}
+                </option>
+                {cases.map((item) => (
+                  <option key={item.id} value={item.id} disabled={!item.eligible}>
+                    {item.label}{item.eligible ? "" : " · not eligible"}
+                  </option>
+                ))}
+              </select>
+            </label>
             <ul className={styles.guardrails}>
               <li>Pre-consented, team-owned destinations only</li>
               <li>
@@ -253,7 +355,7 @@ export function VoiceConsole({
             <Button
               variant="danger"
               onClick={requestRealCall}
-              disabled={!realCallConfirmed}
+              disabled={!realCallConfirmed || !selectedCaseId}
               loading={submitting}
             >
               Request guarded test call
@@ -277,26 +379,43 @@ export function VoiceConsole({
           description="Transcript, confidence, duration, provider callbacks, and safety decisions remain auditable."
         />
         <CardBody>
-          <Timeline
-            items={[
-              {
-                id: "prepared",
-                title: "Browser rehearsal prepared",
-                timestamp: "Now · Local rehearsal",
-                description:
-                  "No external provider contacted; recording remains local until submitted.",
-                tone: "info",
-              },
-              {
-                id: "disclosure",
-                title: "AI disclosure policy loaded",
-                timestamp: "Before conversation",
-                description:
-                  "Case details remain hidden until disclosure and identity confirmation.",
-                tone: "success",
-              },
-            ]}
-          />
+          {timeline.length ? (
+            <Timeline
+              items={timeline.map((item) => ({
+                id: item.id,
+                title: item.detected_intent
+                  ? item.detected_intent.replaceAll("_", " ")
+                  : item.status.replaceAll("_", " "),
+                timestamp: new Intl.DateTimeFormat("en-IN", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(item.created_at)),
+                description: [
+                  item.transcript,
+                  item.duration_seconds === null
+                    ? null
+                    : `${item.duration_seconds}s call`,
+                  item.confidence_basis_points === null
+                    ? null
+                    : `${(item.confidence_basis_points / 100).toFixed(0)}% confidence`,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                tone:
+                  item.disposition === "OPT_OUT" || item.status === "FAILED"
+                    ? "danger"
+                    : item.status === "COMPLETED"
+                      ? "success"
+                      : "info",
+              }))}
+            />
+          ) : (
+            <p className={styles.emptyTimeline}>
+              {selectedCaseId
+                ? "No provider callbacks have been recorded for this case yet."
+                : "Select a live recovery case to load its voice history."}
+            </p>
+          )}
         </CardBody>
       </Card>
     </div>

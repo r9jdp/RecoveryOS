@@ -1,4 +1,5 @@
 import { operatorMutationHeaders } from "@/lib/operator-session";
+import { requireRecoveryApiOrigin } from "@/lib/runtime-config";
 
 export interface BrowserTranscriptResult {
   detected_intent: string;
@@ -30,7 +31,7 @@ export interface VoiceTimelineItem {
 }
 
 function apiOrigin(): string {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+  return requireRecoveryApiOrigin("Voice operations");
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

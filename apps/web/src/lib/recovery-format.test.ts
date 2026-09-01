@@ -20,6 +20,9 @@ describe("recovery formatting", () => {
       "Subscription Card Update",
     );
     expect(formatEvidenceKind("SIMULATED")).toBe("Seeded demo data");
+    expect(formatEvidenceKind("SYSTEM_DERIVED")).toBe(
+      "RecoveryOS system decision",
+    );
     expect(formatEvidenceKind("RAZORPAY_TEST_VERIFIED")).toBe(
       "RAZORPAY TEST VERIFIED",
     );

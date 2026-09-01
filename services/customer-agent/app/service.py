@@ -11,9 +11,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+from .llm import CustomerLanguageInterpreter
 from .models import (
     ApprovalDecision,
     ApprovalSummary,
+    AuthoritativeApprovalScope,
+    CustomerLanguageInterpretation,
+    CustomerLanguageRequest,
     Message,
     RecoveryMandateData,
     RecoveryReceiptData,
@@ -41,11 +45,13 @@ class CustomerAgentService:
         store: TaskStore,
         signer: MandateSigner,
         receipt_verifier: ReceiptVerifier,
+        language_interpreter: CustomerLanguageInterpreter,
         mandate_ttl_seconds: int = 900,
     ) -> None:
         self._store = store
         self._signer = signer
         self._receipt_verifier = receipt_verifier
+        self._language_interpreter = language_interpreter
         self._mandate_ttl = timedelta(seconds=mandate_ttl_seconds)
 
     async def send_message(self, message: Message) -> TaskRecord:
@@ -143,6 +149,46 @@ class CustomerAgentService:
 
     async def approval_summary(self, task_id: str) -> ApprovalSummary:
         task = await self.get_task(task_id)
+        return self._approval_summary(task)
+
+    async def interpret_customer_language(
+        self,
+        *,
+        task_id: str,
+        request: CustomerLanguageRequest,
+    ) -> CustomerLanguageInterpretation:
+        task = await self.get_task(task_id)
+        if task.state != "TASK_STATE_AUTH_REQUIRED":
+            raise TaskConflictError("task is not awaiting customer authorization")
+        revision = task.revision
+        summary = self._approval_summary(task)
+        interpretation = await self._language_interpreter.interpret(
+            request=request,
+            summary=summary,
+        )
+        # Do not return a stale advisory result if an explicit decision landed
+        # while the non-authoritative model call was in flight.
+        latest = await self.get_task(task_id)
+        if latest.revision != revision or latest.state != "TASK_STATE_AUTH_REQUIRED":
+            raise TaskConflictError("authorization changed while language was interpreted")
+        return CustomerLanguageInterpretation(
+            task_id=task.id,
+            intent=interpretation.intent,
+            confidence_basis_points=interpretation.confidence_basis_points,
+            explanation=interpretation.explanation,
+            authoritative_scope=AuthoritativeApprovalScope(
+                merchant_id=summary.merchant_id,
+                case_id=summary.case_id,
+                exact_amount_paise=summary.exact_amount_paise,
+                currency=summary.currency,
+                payment_surface_type=summary.payment_surface_type,
+                payment_surface_reference=summary.payment_surface_reference,
+                expires_at=summary.expires_at,
+            ),
+        )
+
+    @staticmethod
+    def _approval_summary(task: TaskRecord) -> ApprovalSummary:
         request = task.request
         return ApprovalSummary(
             task_id=task.id,
@@ -154,10 +200,9 @@ class CustomerAgentService:
             payment_surface_type=request.payment_surface_type,
             payment_surface_reference=request.payment_surface_reference,
             expires_at=request.expires_at,
-            merchant_display_name=str(request.context.get("merchant_display_name", "Merchant")),
-            recovery_reason=str(
-                request.context.get("recovery_reason", "Subscription payment failed")
-            ),
+            merchant_display_name=request.context.merchant_display_name,
+            plan_name=request.context.plan_name,
+            failure_explanation=request.context.failure_explanation,
         )
 
     async def decide(self, *, task_id: str, decision: ApprovalDecision) -> TaskRecord:

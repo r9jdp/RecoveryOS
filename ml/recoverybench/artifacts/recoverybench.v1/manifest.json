@@ -1,14 +1,16 @@
 {
-  "artifact_checksum": "6e32c34262eb8a6daac10d6109c6beb0de68cad5e8d85be3dd8a91e56e9f5183",
+  "artifact_checksum": "6df41ad70ae91831d67f5261aef7c0b7f1887b802d892eea3e10ce6f0e838894",
   "artifact_version": "recoverybench.v1",
   "categorical_features": [
     "diagnosis",
-    "candidate_action"
+    "candidate_action",
+    "payment_surface_type"
   ],
   "feature_columns": [
     "amount_at_risk_paise",
     "diagnosis",
     "candidate_action",
+    "payment_surface_type",
     "tenure_days",
     "prior_successful_payments",
     "failed_attempt_count",
@@ -16,7 +18,7 @@
     "voice_consent",
     "is_quiet_hours"
   ],
-  "model_type": "CatBoostClassifier+isotonic",
+  "model_type": "CatBoostClassifier+isotonic-shrinkage",
   "schema_version": "recoverybench.artifact.v1",
   "training_seed": 20260827
 }

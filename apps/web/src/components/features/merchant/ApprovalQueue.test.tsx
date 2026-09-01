@@ -1,9 +1,17 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApprovalQueue } from "./ApprovalQueue";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "demo");
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("ApprovalQueue", () => {
   it("filters items and confirms the exact surface before approval", async () => {

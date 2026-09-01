@@ -142,3 +142,70 @@ async def test_captured_outbox_starts_invoice_workflow_and_signals_payment() -> 
         ]
     finally:
         await engine.dispose()
+
+
+async def test_a2a_recommendation_starts_with_exact_failed_invoice_surface() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await seed_fitbox(session)
+            subscription = await session.scalar(select(Subscription))
+            invoice = await session.scalar(select(Invoice))
+            assert subscription is not None and invoice is not None
+            subscription.provider_subscription_id = "sub_provider_worker_a2a"
+            invoice.provider_invoice_id = "inv_provider_worker_a2a"
+            raw = json.loads((FIXTURES / "payment.failed.json").read_text(encoding="utf-8"))
+            event = normalize_webhook(provider_event_id="evt_worker_a2a", payload=raw)
+            action = RecoveryActionRecord(
+                id="action_worker_a2a",
+                case_id=FITBOX_CASE_ID,
+                action_type=RecoveryActionType.SEND_TO_CUSTOMER_AGENT,
+                payment_surface_type=None,
+                status=ActionStatus.PROPOSED,
+                idempotency_key="case:worker:a2a",
+            )
+            policy = PolicyDecisionRecord(
+                id="policy_worker_a2a",
+                case_id=FITBOX_CASE_ID,
+                action_id=action.id,
+                disposition=PolicyDisposition.ALLOW,
+                decision_code="WITHIN_RECOVERY_WINDOW",
+                reason_codes=["WITHIN_RECOVERY_WINDOW"],
+                reasons=["A2A authorization is available."],
+                policy_version="recovery-safety.v2",
+            )
+            session.add_all([action, policy])
+            await session.commit()
+            fake_client = FakeTemporalClient()
+            dispatcher = TemporalRazorpaySignalDispatcher(
+                session,
+                cast(Client, fake_client),
+                task_queue="recovery-os-test",
+            )
+
+            await dispatcher(
+                RazorpayDownstreamSignal(
+                    idempotency_key="razorpay:worker-a2a",
+                    merchant_id="merchant_fitbox",
+                    provider_event_id=event.provider_event_id,
+                    event_type=event.event_type,
+                    case_id=FITBOX_CASE_ID,
+                    normalized_event=event,
+                    effects={
+                        "dispatch_required": True,
+                        "recommended_action_id": action.id,
+                    },
+                )
+            )
+
+        assert len(fake_client.starts) == 1
+        _, command, _ = fake_client.starts[0]
+        assert command.candidate_action == "SEND_TO_CUSTOMER_AGENT"
+        assert command.payment_surface_type == "SUBSCRIPTION_INVOICE_LINK"
+        assert command.failed_invoice_id == "inv_fitbox_aug_2026"
+        assert command.provider_subscription_id == "sub_provider_worker_a2a"
+        assert command.provider_invoice_id == "inv_provider_worker_a2a"
+    finally:
+        await engine.dispose()

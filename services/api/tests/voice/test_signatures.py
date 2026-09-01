@@ -30,8 +30,17 @@ def test_elevenlabs_signature_binds_timestamp_and_raw_body() -> None:
     body = b'{"event_id":"evt_1"}'
     supplied = elevenlabs_signature(secret="hook-secret", body=body, timestamp="1720000000")
     assert verify_elevenlabs_signature(
-        secret="hook-secret", body=body, timestamp="1720000000", supplied=supplied
+        secret="hook-secret", body=body, supplied=supplied, now=1720000000
     )
     assert not verify_elevenlabs_signature(
-        secret="hook-secret", body=body + b" ", timestamp="1720000000", supplied=supplied
+        secret="hook-secret", body=body + b" ", supplied=supplied, now=1720000000
+    )
+    assert not verify_elevenlabs_signature(
+        secret="hook-secret", body=body, supplied=supplied, now=1720001801
+    )
+    assert not verify_elevenlabs_signature(
+        secret="hook-secret",
+        body=body,
+        supplied=supplied.replace("t=1720000000", "t=not-a-time"),
+        now=1720000000,
     )

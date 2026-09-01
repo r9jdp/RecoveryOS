@@ -15,6 +15,7 @@ from services.api.app.models.entities import (
     Merchant,
     MerchantPolicySetting,
     RecoveryCase,
+    Subscription,
 )
 
 from .models import VoiceContactAttemptRecord, VoiceSuppressionRecord, VoiceWebhookReceiptRecord
@@ -22,7 +23,9 @@ from .service import (
     AI_DISCLOSURE,
     VoiceAttempt,
     VoiceCancellationClaim,
+    VoiceReservationClaim,
     VoiceSubject,
+    can_advance_voice_status,
 )
 
 _ACTIVE_VOICE_STATUSES = {"RESERVED", "SUBMITTED", "RINGING", "IN_PROGRESS"}
@@ -58,23 +61,22 @@ class SqlVoiceRepository:
 
     async def load_subject(self, case_id: str) -> VoiceSubject | None:
         statement = (
-            select(RecoveryCase, Customer, Merchant, MerchantPolicySetting)
+            select(RecoveryCase, Customer, Merchant, MerchantPolicySetting, Subscription)
             .join(Customer, Customer.id == RecoveryCase.customer_id)
             .join(Merchant, Merchant.id == RecoveryCase.merchant_id)
+            .join(Subscription, Subscription.id == RecoveryCase.subscription_id)
             .outerjoin(MerchantPolicySetting, MerchantPolicySetting.merchant_id == Merchant.id)
             .where(RecoveryCase.id == case_id)
         )
         row = (await self.session.execute(statement)).one_or_none()
         if row is None:
             return None
-        recovery_case, customer, merchant, setting = row
-        if not customer.phone_token:
-            return None
+        recovery_case, customer, merchant, setting, subscription = row
         return VoiceSubject(
             merchant_id=recovery_case.merchant_id,
             case_id=recovery_case.id,
             customer_id=customer.id,
-            destination_token=customer.phone_token,
+            destination_token=customer.phone_token or "",
             preferred_language=customer.preferred_language,
             consent_verified_at=customer.voice_consent_at,
             opted_out_at=customer.opted_out_at,
@@ -82,7 +84,36 @@ class SqlVoiceRepository:
             kill_switch=setting.recovery_kill_switch if setting else False,
             quiet_hours_start=_parse_time(setting.quiet_hours_start if setting else "20:00"),
             quiet_hours_end=_parse_time(setting.quiet_hours_end if setting else "09:00"),
+            merchant_display_name=merchant.display_name,
+            customer_display_name=customer.display_name,
+            amount_at_risk_paise=recovery_case.amount_at_risk_paise,
+            currency=subscription.currency,
+            diagnosis=recovery_case.diagnosis.value,
+            plan_name=subscription.plan_name,
         )
+
+    async def configure_subject(
+        self,
+        *,
+        case_id: str,
+        destination_token: str,
+        preferred_language: str,
+        consent_granted: bool,
+        now: datetime,
+    ) -> VoiceSubject | None:
+        customer = await self.session.scalar(
+            select(Customer)
+            .join(RecoveryCase, RecoveryCase.customer_id == Customer.id)
+            .where(RecoveryCase.id == case_id)
+            .with_for_update()
+        )
+        if customer is None:
+            return None
+        customer.phone_token = destination_token
+        customer.preferred_language = preferred_language
+        customer.voice_consent_at = now if consent_granted else None
+        await self.session.flush()
+        return await self.load_subject(case_id)
 
     async def get_by_idempotency(self, idempotency_key: str) -> VoiceAttempt | None:
         record = await self.session.scalar(
@@ -157,6 +188,23 @@ class SqlVoiceRepository:
         await self.session.flush()
         return _to_attempt(record)
 
+    async def reserve_attempt(self, attempt: VoiceAttempt) -> VoiceReservationClaim:
+        existing = await self.get_by_idempotency(attempt.idempotency_key)
+        if existing is not None:
+            return VoiceReservationClaim(attempt=existing, claimed=False)
+        try:
+            reserved = await self.save_attempt(attempt)
+            # The durable reservation is the at-most-once boundary. It must be
+            # visible before Twilio can receive a submission.
+            await self.session.commit()
+            return VoiceReservationClaim(attempt=reserved, claimed=True)
+        except IntegrityError:
+            await self.session.rollback()
+            existing = await self.get_by_idempotency(attempt.idempotency_key)
+            if existing is None:  # pragma: no cover - defensive DB invariant
+                raise
+            return VoiceReservationClaim(attempt=existing, claimed=False)
+
     async def get_attempt(self, attempt_id: str) -> VoiceAttempt | None:
         record = await self.session.get(VoiceContactAttemptRecord, attempt_id)
         return _to_attempt(record) if record else None
@@ -191,9 +239,14 @@ class SqlVoiceRepository:
         record = await self.session.get(VoiceContactAttemptRecord, attempt_id)
         if record is None or duplicate:
             return (_to_attempt(record) if record else None), duplicate
+        incoming_status = changes.get("status")
+        status_can_advance = not isinstance(incoming_status, str) or can_advance_voice_status(
+            record.status, incoming_status
+        )
         for name, value in changes.items():
             if name not in {
                 "status",
+                "provider_call_id",
                 "disposition",
                 "transcript",
                 "detected_intent",
@@ -202,6 +255,8 @@ class SqlVoiceRepository:
                 "disclosure_delivered_at",
             }:
                 raise ValueError(f"unsupported voice callback field: {name}")
+            if not status_can_advance and name in {"status", "disposition"}:
+                continue
             setattr(record, name, value)
         await self.session.flush()
         return _to_attempt(record), False
@@ -230,6 +285,9 @@ class SqlVoiceRepository:
             if recovery_case:
                 recovery_case.contact_disposition = ContactDisposition.OPTED_OUT
             await self.session.flush()
+            # Opt-out is authoritative safety state. Persist it before any
+            # best-effort provider cancellation crosses the network boundary.
+            await self.session.commit()
         return created
 
     async def claim_payment_cancellation(

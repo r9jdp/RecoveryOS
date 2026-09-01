@@ -89,6 +89,7 @@ class Diagnosis(StringEnum):
 
 class EvidenceKind(StringEnum):
     SIMULATED = "SIMULATED"
+    SYSTEM_DERIVED = "SYSTEM_DERIVED"
     RAZORPAY_TEST_VERIFIED = "RAZORPAY_TEST_VERIFIED"
 
 

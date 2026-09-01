@@ -130,7 +130,8 @@
       "source": "simulator",
       "evidence_kind": "SIMULATED",
       "occurred_at": "2026-08-27T10:00:00Z",
-      "correlation_id": "corr_fitbox_001"
+      "correlation_id": "corr_fitbox_001",
+      "payload": {}
     },
     {
       "id": "event_002",
@@ -138,7 +139,8 @@
       "source": "decision-engine",
       "evidence_kind": "SIMULATED",
       "occurred_at": "2026-08-27T10:00:02Z",
-      "correlation_id": "corr_fitbox_001"
+      "correlation_id": "corr_fitbox_001",
+      "payload": {}
     }
   ]
 }

@@ -329,6 +329,27 @@
         }
       }
     },
+    "/v1/approval-queue": {
+      "get": {
+        "tags": [
+          "recovery"
+        ],
+        "summary": "Get Approval Queue",
+        "operationId": "get_approval_queue_v1_approval_queue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalQueueResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/recovery-cases": {
       "get": {
         "tags": [
@@ -1539,6 +1560,107 @@
         }
       }
     },
+    "/v1/razorpay/test-onboarding/subscriptions/{subscription_id}/sync": {
+      "post": {
+        "tags": [
+          "razorpay"
+        ],
+        "summary": "Sync Razorpay Test Subscription",
+        "description": "Persist provider-owned IDs so signed webhooks can correlate safely.",
+        "operationId": "sync_razorpay_test_subscription_v1_razorpay_test_onboarding_subscriptions__subscription_id__sync_post",
+        "parameters": [
+          {
+            "name": "subscription_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Subscription Id"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RazorpayTestSubscriptionSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RazorpayTestSubscriptionSyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/voice/contacts": {
       "post": {
         "tags": [
@@ -1646,6 +1768,228 @@
         }
       }
     },
+    "/v1/voice/cases/{case_id}/contact-setup": {
+      "put": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Configure Voice Contact",
+        "operationId": "configure_voice_contact_v1_voice_cases__case_id__contact_setup_put",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-Recovery-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recovery-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceContactSetupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceEligibilityResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/cases/{case_id}/eligibility": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Voice Eligibility",
+        "operationId": "voice_eligibility_v1_voice_cases__case_id__eligibility_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-Recovery-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recovery-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceEligibilityResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/voice/cases/{case_id}/timeline": {
       "get": {
         "tags": [
@@ -1661,6 +2005,70 @@
             "schema": {
               "type": "string",
               "title": "Case Id"
+            }
+          },
+          {
+            "name": "X-Recovery-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recovery-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -1713,6 +2121,70 @@
               "type": "string",
               "minLength": 1,
               "title": "X-Voice-Event-Id"
+            }
+          },
+          {
+            "name": "X-Recovery-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recovery-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-Operator-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Operator-Token"
+            }
+          },
+          {
+            "name": "X-RecoveryOS-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Recoveryos-Csrf-Token"
+            }
+          },
+          {
+            "name": "recoveryos_operator_session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recoveryos Operator Session"
             }
           }
         ],
@@ -1883,9 +2355,43 @@
               ],
               "title": "Elevenlabs-Signature"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAcceptedResponse"
+                }
+              }
+            }
           },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/voice/tools/elevenlabs/intent": {
+      "post": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "Elevenlabs Live Intent Tool",
+        "description": "Receive authenticated live intent tools; opt-out persists before hang-up.",
+        "operationId": "elevenlabs_live_intent_tool_v1_voice_tools_elevenlabs_intent_post",
+        "parameters": [
           {
-            "name": "ElevenLabs-Timestamp",
+            "name": "X-ElevenLabs-Tool-Secret",
             "in": "header",
             "required": false,
             "schema": {
@@ -1897,17 +2403,27 @@
                   "type": "null"
                 }
               ],
-              "title": "Elevenlabs-Timestamp"
+              "title": "X-Elevenlabs-Tool-Secret"
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveVoiceIntentRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WebhookAcceptedResponse"
+                  "$ref": "#/components/schemas/LiveVoiceIntentResponse"
                 }
               }
             }
@@ -1964,7 +2480,14 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
                   },
                   "type": "object",
                   "title": "Response Root  Get"
@@ -2153,6 +2676,96 @@
           "CANCELLED"
         ],
         "title": "ActionStatus"
+      },
+      "ApprovalQueueItemResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "action_id": {
+            "type": "string",
+            "title": "Action Id"
+          },
+          "customer_display_name": {
+            "type": "string",
+            "title": "Customer Display Name"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "amount_at_risk_paise": {
+            "type": "integer",
+            "title": "Amount At Risk Paise"
+          },
+          "recommended_action": {
+            "$ref": "#/components/schemas/RecoveryActionType"
+          },
+          "payment_surface_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentSurfaceType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy_reason": {
+            "type": "string",
+            "title": "Policy Reason"
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Deadline"
+          },
+          "evidence_kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "RAZORPAY_TEST",
+              "RECOVERYOS"
+            ],
+            "title": "Provider"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "action_id",
+          "customer_display_name",
+          "plan_name",
+          "amount_at_risk_paise",
+          "recommended_action",
+          "payment_surface_type",
+          "policy_reason",
+          "deadline",
+          "evidence_kind",
+          "provider"
+        ],
+        "title": "ApprovalQueueItemResponse"
+      },
+      "ApprovalQueueResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalQueueItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ApprovalQueueResponse"
       },
       "ArtifactMetadata": {
         "properties": {
@@ -2694,6 +3307,13 @@
             "type": "array",
             "title": "Diagnosis Distribution"
           },
+          "recovery_by_channel": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryChannelResponse"
+            },
+            "type": "array",
+            "title": "Recovery By Channel"
+          },
           "recent_events": {
             "items": {
               "$ref": "#/components/schemas/RecentEventResponse"
@@ -2707,6 +3327,7 @@
         "required": [
           "metrics",
           "diagnosis_distribution",
+          "recovery_by_channel",
           "recent_events"
         ],
         "title": "DashboardResponse"
@@ -2794,6 +3415,7 @@
         "type": "string",
         "enum": [
           "SIMULATED",
+          "SYSTEM_DERIVED",
           "RAZORPAY_TEST_VERIFIED"
         ],
         "title": "EvidenceKind"
@@ -3016,6 +3638,90 @@
         ],
         "title": "LabReport"
       },
+      "LiveVoiceIntentRequest": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Attempt Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
+          },
+          "intent": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Intent"
+          },
+          "confidence_basis_points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Basis Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "intent"
+        ],
+        "title": "LiveVoiceIntentRequest"
+      },
+      "LiveVoiceIntentResponse": {
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true,
+            "title": "Accepted",
+            "default": true
+          },
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
+          },
+          "detected_intent": {
+            "type": "string",
+            "title": "Detected Intent"
+          },
+          "contact_must_end": {
+            "type": "boolean",
+            "title": "Contact Must End"
+          },
+          "suppression_persisted": {
+            "type": "boolean",
+            "title": "Suppression Persisted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "duplicate",
+          "detected_intent",
+          "contact_must_end",
+          "suppression_persisted"
+        ],
+        "title": "LiveVoiceIntentResponse"
+      },
       "MetricSummary": {
         "properties": {
           "pr_auc": {
@@ -3163,6 +3869,19 @@
               "ESCALATE_TO_HUMAN"
             ],
             "title": "Command"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
           }
         },
         "additionalProperties": false,
@@ -3650,6 +4369,77 @@
         ],
         "title": "PolicySettingsUpdate"
       },
+      "RazorpayTestSubscriptionSyncRequest": {
+        "properties": {
+          "customer_external_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Customer External Id"
+          },
+          "customer_display_name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Customer Display Name"
+          },
+          "preferred_language": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 2,
+            "title": "Preferred Language",
+            "default": "en-IN"
+          },
+          "customer_agent_available": {
+            "type": "boolean",
+            "title": "Customer Agent Available",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_external_id",
+          "customer_display_name"
+        ],
+        "title": "RazorpayTestSubscriptionSyncRequest",
+        "description": "Local customer identity for a provider subscription.\n\nEmail and phone values are deliberately not accepted here. Provider\nonboarding establishes correlation only; contact consent and destinations\nare managed by their dedicated, authenticated flows."
+      },
+      "RazorpayTestSubscriptionSyncResponse": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "razorpay_test"
+          },
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/SyncedCustomerResponse"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/SyncedSubscriptionResponse"
+          },
+          "invoices": {
+            "items": {
+              "$ref": "#/components/schemas/SyncedInvoiceResponse"
+            },
+            "type": "array",
+            "title": "Invoices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "merchant_id",
+          "customer",
+          "subscription",
+          "invoices"
+        ],
+        "title": "RazorpayTestSubscriptionSyncResponse"
+      },
       "RazorpayWebhookAckResponse": {
         "properties": {
           "provider_event_id": {
@@ -3913,6 +4703,37 @@
           "updated_at"
         ],
         "title": "RecoveryCaseResponse"
+      },
+      "RecoveryChannelResponse": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "SUBSCRIPTION_CARD_UPDATE",
+              "SUBSCRIPTION_INVOICE_LINK",
+              "STANDARD_PAYMENT_LINK",
+              "VOICE",
+              "CUSTOMER_AGENT"
+            ],
+            "title": "Channel"
+          },
+          "case_count": {
+            "type": "integer",
+            "title": "Case Count"
+          },
+          "recovered_paise": {
+            "type": "integer",
+            "title": "Recovered Paise"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "channel",
+          "case_count",
+          "recovered_paise"
+        ],
+        "title": "RecoveryChannelResponse"
       },
       "RejectActionRequest": {
         "properties": {
@@ -4188,6 +5009,158 @@
         ],
         "title": "SubscriptionState"
       },
+      "SyncedCustomerResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "external_id": {
+            "type": "string",
+            "title": "External Id"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "external_id",
+          "created"
+        ],
+        "title": "SyncedCustomerResponse"
+      },
+      "SyncedInvoiceResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider_invoice_id": {
+            "type": "string",
+            "title": "Provider Invoice Id"
+          },
+          "billing_cycle_key": {
+            "type": "string",
+            "title": "Billing Cycle Key"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amount Paise"
+          },
+          "amount_paid_paise": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amount Paid Paise"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "invoice_state": {
+            "type": "string",
+            "title": "Invoice State"
+          },
+          "payment_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Url"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "provider_invoice_id",
+          "billing_cycle_key",
+          "amount_paise",
+          "amount_paid_paise",
+          "currency",
+          "invoice_state",
+          "created"
+        ],
+        "title": "SyncedInvoiceResponse"
+      },
+      "SyncedSubscriptionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "provider_subscription_id": {
+            "type": "string",
+            "title": "Provider Subscription Id"
+          },
+          "provider_plan_id": {
+            "type": "string",
+            "title": "Provider Plan Id"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "amount_paise": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amount Paise"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "subscription_state": {
+            "$ref": "#/components/schemas/SubscriptionState"
+          },
+          "authorization_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^https://"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Url"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "provider_subscription_id",
+          "provider_plan_id",
+          "plan_name",
+          "amount_paise",
+          "currency",
+          "subscription_state",
+          "created"
+        ],
+        "title": "SyncedSubscriptionResponse"
+      },
       "TimelineEventResponse": {
         "properties": {
           "id": {
@@ -4405,6 +5378,119 @@
           "created_at"
         ],
         "title": "VoiceAttemptResponse"
+      },
+      "VoiceContactSetupRequest": {
+        "properties": {
+          "destination_token": {
+            "type": "string",
+            "maxLength": 16,
+            "pattern": "^\\+[1-9]\\d{7,14}$",
+            "title": "Destination Token"
+          },
+          "preferred_language": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 2,
+            "pattern": "^[A-Za-z]{2,3}(-[A-Za-z]{2})?$",
+            "title": "Preferred Language"
+          },
+          "consent_granted": {
+            "type": "boolean",
+            "title": "Consent Granted"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "destination_token",
+          "preferred_language",
+          "consent_granted"
+        ],
+        "title": "VoiceContactSetupRequest"
+      },
+      "VoiceEligibilityResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "title": "Case Id"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
+          },
+          "eligible": {
+            "type": "boolean",
+            "title": "Eligible"
+          },
+          "reason_code": {
+            "type": "string",
+            "title": "Reason Code"
+          },
+          "destination_configured": {
+            "type": "boolean",
+            "title": "Destination Configured"
+          },
+          "destination_allowlisted": {
+            "type": "boolean",
+            "title": "Destination Allowlisted"
+          },
+          "consent_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Verified At"
+          },
+          "opted_out_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opted Out At"
+          },
+          "preferred_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Language"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "case_id",
+          "customer_id",
+          "eligible",
+          "reason_code",
+          "destination_configured",
+          "destination_allowlisted",
+          "consent_verified_at",
+          "opted_out_at",
+          "preferred_language"
+        ],
+        "title": "VoiceEligibilityResponse"
       },
       "VoiceTimelineResponse": {
         "properties": {

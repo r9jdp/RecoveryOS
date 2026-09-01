@@ -38,7 +38,11 @@ async def test_frozen_customer_agent_client_maps_auth_required_and_cancel() -> N
                 payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
                 payment_surface_reference="inv_123",
                 expires_at=datetime.now(UTC) + timedelta(minutes=10),
-                context={"merchant_display_name": "FitBox"},
+                context={
+                    "merchant_display_name": "FitBox",
+                    "plan_name": "FitBox Annual",
+                    "failure_explanation": "Authentication was not completed.",
+                },
             )
         )
         assert task.state == "AUTH_REQUIRED"
@@ -82,6 +86,11 @@ async def test_customer_agent_client_completes_task_with_exact_idempotent_receip
                 payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
                 payment_surface_reference="inv_receipt",
                 expires_at=datetime.now(UTC) + timedelta(minutes=10),
+                context={
+                    "merchant_display_name": "FitBox",
+                    "plan_name": "FitBox Annual",
+                    "failure_explanation": "Authentication was not completed.",
+                },
             )
         )
         approved = await http_client.post(
@@ -165,6 +174,11 @@ async def test_configured_recovery_receipt_signer_must_match_customer_agent_pin(
                 payment_surface_type=PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
                 payment_surface_reference="inv_hosted",
                 expires_at=datetime.now(UTC) + timedelta(minutes=10),
+                context={
+                    "merchant_display_name": "FitBox",
+                    "plan_name": "FitBox Annual",
+                    "failure_explanation": "Authentication was not completed.",
+                },
             )
         )
         approved = await http_client.post(

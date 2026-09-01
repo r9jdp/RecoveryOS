@@ -30,7 +30,7 @@ class PolicyContext:
     amount_at_risk_paise: int
     require_approval_above_paise: int = 500_000
     recovery_kill_switch: bool = False
-    policy_version: str = "fitbox-demo.v1"
+    policy_version: str = "recovery-safety.v1"
 
 
 def _decision(

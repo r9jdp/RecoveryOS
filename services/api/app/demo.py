@@ -6,14 +6,20 @@ import json
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from services.api.app.runtime_mode import require_demo_mode
 
 router = APIRouter(prefix="/v1/demo", tags=["demo"])
 FixtureName = Literal["dashboard", "case-detail", "customer-agent", "customer-voice", "ml-lab"]
 FIXTURE_ROOT = Path(__file__).resolve().parents[3] / "packages" / "contracts" / "fixtures"
 
 
-@router.get("/fixtures/{fixture_name}", operation_id="getDemoFixture")
+@router.get(
+    "/fixtures/{fixture_name}",
+    operation_id="getDemoFixture",
+    dependencies=[Depends(require_demo_mode)],
+)
 async def get_demo_fixture(fixture_name: FixtureName) -> dict[str, Any]:
     """Return a versioned, synthetic screen fixture with no provider side effects."""
 

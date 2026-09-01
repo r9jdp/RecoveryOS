@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic.types import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,7 +18,11 @@ _MOCK_RECEIPT_SIGNER_KEY_ID = "recoveryos-receipt-mock-2026-01"
 
 
 class CustomerAgentSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CUSTOMER_AGENT_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="CUSTOMER_AGENT_",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     origin: str = "http://localhost:8010"
     web_origin: str = "http://localhost:3000"
@@ -30,6 +34,29 @@ class CustomerAgentSettings(BaseSettings):
     database_url: SecretStr | None = None
     receipt_verification_mode: Literal["mock", "pinned"] = "mock"
     recovery_agent_public_keys_json: SecretStr | None = None
+    llm_provider: Literal["disabled", "openai"] = Field(
+        default="disabled",
+        validation_alias="LLM_PROVIDER",
+    )
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="OPENAI_API_KEY",
+    )
+    openai_model: str | None = Field(
+        default=None,
+        validation_alias="OPENAI_MODEL",
+    )
+    llm_timeout_seconds: float = Field(default=8.0, ge=1.0, le=30.0)
+
+    @model_validator(mode="after")
+    def require_openai_configuration(self) -> CustomerAgentSettings:
+        if self.llm_provider != "openai":
+            return self
+        if self.openai_api_key is None or not self.openai_api_key.get_secret_value().strip():
+            raise ValueError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+        if self.openai_model is None or not self.openai_model.strip():
+            raise ValueError("OPENAI_MODEL is required when LLM_PROVIDER=openai")
+        return self
 
     def signing_seed(self) -> bytes:
         if self.real_signing_enabled:

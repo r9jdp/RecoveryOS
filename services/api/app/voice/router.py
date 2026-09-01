@@ -6,7 +6,7 @@ import hmac
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 import httpx
 from fastapi import (
@@ -26,6 +26,8 @@ from services.api.app.db.session import get_async_session
 from services.api.app.integrations.voice.elevenlabs import (
     ElevenLabsAgentConfig,
     ElevenLabsCallRegistrar,
+    ElevenLabsRecoveryContext,
+    parse_elevenlabs_post_call,
 )
 from services.api.app.integrations.voice.safety import VoiceIntent, detect_voice_intent
 from services.api.app.integrations.voice.signatures import (
@@ -37,9 +39,13 @@ from .factory import create_voice_service_from_env, voice_provider_ready
 from .schemas import (
     BrowserTranscriptRequest,
     BrowserTranscriptResponse,
+    LiveVoiceIntentRequest,
+    LiveVoiceIntentResponse,
     StartVoiceContactRequest,
     StartVoiceContactResponse,
     VoiceAttemptResponse,
+    VoiceContactSetupRequest,
+    VoiceEligibilityResponse,
     VoiceTimelineResponse,
     WebhookAcceptedResponse,
 )
@@ -65,8 +71,7 @@ async def get_voice_service(
 
 
 async def get_call_registrar() -> AsyncIterator[ElevenLabsCallRegistrar]:
-    required = ("ELEVENLABS_API_KEY", "ELEVENLABS_AGENT_ID")
-    if not voice_provider_ready() or not all(os.getenv(name, "").strip() for name in required):
+    if not voice_provider_ready():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -89,6 +94,15 @@ async def get_call_registrar() -> AsyncIterator[ElevenLabsCallRegistrar]:
 
 VoiceServiceDependency = Annotated[VoiceContactService, Depends(get_voice_service)]
 RegistrarDependency = Annotated[ElevenLabsCallRegistrar, Depends(get_call_registrar)]
+
+
+def _real_voice_requested() -> bool:
+    return os.getenv("VOICE_REAL_CALLS_ENABLED", "false").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _authorize_voice_start(
@@ -138,6 +152,59 @@ def _authorize_voice_start(
     return False
 
 
+def _require_voice_operator(
+    *,
+    service: VoiceContactService,
+    supplied_voice_operator_token: str | None,
+    supplied_recoveryos_operator_token: str | None,
+    supplied_csrf_token: str | None,
+    operator_session: str | None,
+) -> None:
+    """Authenticate configuration and sensitive reads even in degraded mode."""
+
+    from services.api.app.api.operator_auth import (
+        OperatorAuthorizationNotConfiguredError,
+        _authorization_required,
+        require_operator_for_non_mock_payment,
+    )
+
+    if (
+        service.operator_token
+        and supplied_voice_operator_token is not None
+        and hmac.compare_digest(supplied_voice_operator_token, service.operator_token)
+    ):
+        return
+    if _authorization_required():
+        require_operator_for_non_mock_payment(
+            x_recoveryos_operator_token=supplied_recoveryos_operator_token,
+            x_recoveryos_csrf_token=supplied_csrf_token,
+            operator_session=operator_session,
+        )
+        return
+    raise OperatorAuthorizationNotConfiguredError(
+        "Voice operator endpoints require VOICE_OPERATOR_TOKEN or the RecoveryOS "
+        "operator-auth gate."
+    )
+
+
+def _protect_real_voice_data(
+    *,
+    service: VoiceContactService,
+    supplied_voice_operator_token: str | None,
+    supplied_recoveryos_operator_token: str | None,
+    supplied_csrf_token: str | None,
+    operator_session: str | None,
+) -> None:
+    if service.real_calls_enabled or _real_voice_requested():
+        _require_voice_operator(
+            service=service,
+            supplied_voice_operator_token=supplied_voice_operator_token,
+            supplied_recoveryos_operator_token=supplied_recoveryos_operator_token,
+            supplied_csrf_token=supplied_csrf_token,
+            operator_session=operator_session,
+        )
+
+
 @router.post("/contacts", response_model=StartVoiceContactResponse)
 async def start_voice_contact(
     payload: StartVoiceContactRequest,
@@ -176,8 +243,101 @@ async def start_voice_contact(
     )
 
 
+def _eligibility_response(value: object) -> VoiceEligibilityResponse:
+    from .service import VoiceEligibility
+
+    if not isinstance(value, VoiceEligibility):  # pragma: no cover - internal invariant
+        raise TypeError("voice eligibility service returned an invalid result")
+    return VoiceEligibilityResponse(
+        case_id=value.case_id,
+        customer_id=value.customer_id,
+        eligible=value.eligible,
+        reason_code=value.reason_code,
+        destination_configured=value.destination_configured,
+        destination_allowlisted=value.destination_allowlisted,
+        consent_verified_at=value.consent_verified_at,
+        opted_out_at=value.opted_out_at,
+        preferred_language=value.preferred_language,
+    )
+
+
+@router.put("/cases/{case_id}/contact-setup", response_model=VoiceEligibilityResponse)
+async def configure_voice_contact(
+    case_id: str,
+    payload: VoiceContactSetupRequest,
+    service: VoiceServiceDependency,
+    x_recovery_operator_token: Annotated[
+        str | None, Header(alias="X-Recovery-Operator-Token")
+    ] = None,
+    x_recoveryos_operator_token: Annotated[
+        str | None, Header(alias="X-RecoveryOS-Operator-Token")
+    ] = None,
+    x_recoveryos_csrf_token: Annotated[str | None, Header(alias="X-RecoveryOS-CSRF-Token")] = None,
+    operator_session: Annotated[str | None, Cookie(alias="recoveryos_operator_session")] = None,
+) -> VoiceEligibilityResponse:
+    _require_voice_operator(
+        service=service,
+        supplied_voice_operator_token=x_recovery_operator_token,
+        supplied_recoveryos_operator_token=x_recoveryos_operator_token,
+        supplied_csrf_token=x_recoveryos_csrf_token,
+        operator_session=operator_session,
+    )
+    now = datetime.now(UTC)
+    subject = await service.configure_subject(
+        case_id=case_id,
+        destination_token=payload.destination_token,
+        preferred_language=payload.preferred_language,
+        consent_granted=payload.consent_granted,
+        now=now,
+    )
+    if subject is None:
+        raise HTTPException(status_code=404, detail={"code": "VOICE_SUBJECT_NOT_FOUND"})
+    return _eligibility_response(await service.eligibility(case_id=case_id, now=now))
+
+
+@router.get("/cases/{case_id}/eligibility", response_model=VoiceEligibilityResponse)
+async def voice_eligibility(
+    case_id: str,
+    service: VoiceServiceDependency,
+    x_recovery_operator_token: Annotated[
+        str | None, Header(alias="X-Recovery-Operator-Token")
+    ] = None,
+    x_recoveryos_operator_token: Annotated[
+        str | None, Header(alias="X-RecoveryOS-Operator-Token")
+    ] = None,
+    x_recoveryos_csrf_token: Annotated[str | None, Header(alias="X-RecoveryOS-CSRF-Token")] = None,
+    operator_session: Annotated[str | None, Cookie(alias="recoveryos_operator_session")] = None,
+) -> VoiceEligibilityResponse:
+    _require_voice_operator(
+        service=service,
+        supplied_voice_operator_token=x_recovery_operator_token,
+        supplied_recoveryos_operator_token=x_recoveryos_operator_token,
+        supplied_csrf_token=x_recoveryos_csrf_token,
+        operator_session=operator_session,
+    )
+    return _eligibility_response(await service.eligibility(case_id=case_id, now=datetime.now(UTC)))
+
+
 @router.get("/cases/{case_id}/timeline", response_model=VoiceTimelineResponse)
-async def voice_timeline(case_id: str, service: VoiceServiceDependency) -> VoiceTimelineResponse:
+async def voice_timeline(
+    case_id: str,
+    service: VoiceServiceDependency,
+    x_recovery_operator_token: Annotated[
+        str | None, Header(alias="X-Recovery-Operator-Token")
+    ] = None,
+    x_recoveryos_operator_token: Annotated[
+        str | None, Header(alias="X-RecoveryOS-Operator-Token")
+    ] = None,
+    x_recoveryos_csrf_token: Annotated[str | None, Header(alias="X-RecoveryOS-CSRF-Token")] = None,
+    operator_session: Annotated[str | None, Cookie(alias="recoveryos_operator_session")] = None,
+) -> VoiceTimelineResponse:
+    _protect_real_voice_data(
+        service=service,
+        supplied_voice_operator_token=x_recovery_operator_token,
+        supplied_recoveryos_operator_token=x_recoveryos_operator_token,
+        supplied_csrf_token=x_recoveryos_csrf_token,
+        operator_session=operator_session,
+    )
     attempts = await service.repository.list_attempts(case_id)
     return VoiceTimelineResponse(
         items=[
@@ -204,7 +364,22 @@ async def browser_transcript(
     payload: BrowserTranscriptRequest,
     service: VoiceServiceDependency,
     x_voice_event_id: Annotated[str, Header(min_length=1)],
+    x_recovery_operator_token: Annotated[
+        str | None, Header(alias="X-Recovery-Operator-Token")
+    ] = None,
+    x_recoveryos_operator_token: Annotated[
+        str | None, Header(alias="X-RecoveryOS-Operator-Token")
+    ] = None,
+    x_recoveryos_csrf_token: Annotated[str | None, Header(alias="X-RecoveryOS-CSRF-Token")] = None,
+    operator_session: Annotated[str | None, Cookie(alias="recoveryos_operator_session")] = None,
 ) -> BrowserTranscriptResponse:
+    _protect_real_voice_data(
+        service=service,
+        supplied_voice_operator_token=x_recovery_operator_token,
+        supplied_recoveryos_operator_token=x_recoveryos_operator_token,
+        supplied_csrf_token=x_recoveryos_csrf_token,
+        operator_session=operator_session,
+    )
     if await service.repository.get_attempt(attempt_id) is None:
         if attempt_id.startswith("browser-rehearsal-"):
             intent = detect_voice_intent(payload.transcript)
@@ -259,14 +434,39 @@ async def twiml_for_elevenlabs(
     call_sid = form.get("CallSid")
     if not call_sid:
         raise HTTPException(status_code=422, detail={"code": "TWILIO_CALL_SID_REQUIRED"})
-    stream_url = await registrar.register(twilio_call_sid=call_sid, attempt_id=attempt_id)
-    # Import locally so router import remains free of provider configuration.
-    from services.api.app.integrations.voice.twilio import render_elevenlabs_twiml
-
-    return Response(
-        render_elevenlabs_twiml(stream_url=stream_url, attempt_id=attempt_id),
-        media_type="application/xml",
+    if attempt.provider_call_id and not hmac.compare_digest(attempt.provider_call_id, call_sid):
+        raise HTTPException(status_code=403, detail={"code": "TWILIO_CALL_SCOPE_MISMATCH"})
+    from_number = form.get("From")
+    to_number = form.get("To")
+    if not from_number or not to_number:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TWILIO_CALL_PARTICIPANTS_REQUIRED"},
+        )
+    subject = await service.repository.load_subject(attempt.case_id)
+    if subject is None:
+        raise HTTPException(status_code=409, detail={"code": "VOICE_CONTEXT_NOT_FOUND"})
+    twiml = await registrar.register(
+        twilio_call_sid=call_sid,
+        attempt_id=attempt_id,
+        from_number=from_number,
+        to_number=to_number,
+        direction="outbound",
+        context=ElevenLabsRecoveryContext(
+            merchant_id=subject.merchant_id,
+            merchant_display_name=subject.merchant_display_name,
+            case_id=subject.case_id,
+            customer_id=subject.customer_id,
+            customer_display_name=subject.customer_display_name,
+            preferred_language=subject.preferred_language,
+            amount_at_risk_paise=subject.amount_at_risk_paise,
+            currency=subject.currency,
+            diagnosis=subject.diagnosis,
+            plan_name=subject.plan_name,
+        ),
     )
+    # ElevenLabs owns the complete TwiML document. Do not rebuild or escape it.
+    return Response(twiml, media_type="application/xml")
 
 
 @router.post("/webhooks/twilio/status", response_model=WebhookAcceptedResponse)
@@ -286,15 +486,36 @@ async def twilio_status_webhook(
         supplied=x_twilio_signature,
     ):
         raise HTTPException(status_code=401, detail={"code": "INVALID_TWILIO_SIGNATURE"})
-    event_id = (
-        form.get("SequenceNumber") or f"{form.get('CallSid', '')}:{form.get('CallStatus', '')}"
-    )
-    duplicate = await service.apply_twilio_status(
-        event_id=event_id,
-        attempt_id=attempt_id,
-        status=form.get("CallStatus", "unknown"),
-        duration_seconds=int(form["CallDuration"]) if form.get("CallDuration") else None,
-    )
+    attempt = await service.repository.get_attempt(attempt_id)
+    if attempt is None:
+        raise HTTPException(status_code=404, detail={"code": "VOICE_ATTEMPT_NOT_FOUND"})
+    call_sid = form.get("CallSid")
+    if not call_sid:
+        raise HTTPException(status_code=422, detail={"code": "TWILIO_CALL_SID_REQUIRED"})
+    if attempt.provider_call_id and not hmac.compare_digest(attempt.provider_call_id, call_sid):
+        raise HTTPException(status_code=403, detail={"code": "TWILIO_CALL_SCOPE_MISMATCH"})
+    callback_status = form.get("CallStatus", "unknown")
+    event_id = f"{call_sid}:{form.get('SequenceNumber') or callback_status}"
+    try:
+        duration_seconds = int(form["CallDuration"]) if form.get("CallDuration") else None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TWILIO_CALL_DURATION_INVALID"},
+        ) from exc
+    try:
+        duplicate = await service.apply_twilio_status(
+            event_id=event_id,
+            attempt_id=attempt_id,
+            status=callback_status,
+            duration_seconds=duration_seconds,
+            provider_call_id=call_sid,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "TWILIO_CALL_STATUS_INVALID", "message": str(exc)},
+        ) from exc
     return WebhookAcceptedResponse(duplicate=duplicate)
 
 
@@ -303,38 +524,89 @@ async def elevenlabs_post_call_webhook(
     request: Request,
     service: VoiceServiceDependency,
     elevenlabs_signature: Annotated[str | None, Header(alias="ElevenLabs-Signature")] = None,
-    elevenlabs_timestamp: Annotated[str | None, Header(alias="ElevenLabs-Timestamp")] = None,
 ) -> WebhookAcceptedResponse:
     raw = await request.body()
     if not verify_elevenlabs_signature(
         secret=os.getenv("ELEVENLABS_WEBHOOK_SECRET", ""),
         body=raw,
         supplied=elevenlabs_signature,
-        timestamp=elevenlabs_timestamp,
     ):
         raise HTTPException(status_code=401, detail={"code": "INVALID_ELEVENLABS_SIGNATURE"})
-    payload: dict[str, Any] = await request.json()
-    attempt_id = str(payload.get("attempt_id", ""))
-    event_id = str(payload.get("event_id", ""))
-    if not attempt_id or not event_id:
-        raise HTTPException(status_code=422, detail={"code": "VOICE_WEBHOOK_IDS_REQUIRED"})
-    raw_analysis = payload.get("analysis")
-    analysis: dict[str, Any] = (
-        {str(key): value for key, value in raw_analysis.items()}
-        if isinstance(raw_analysis, dict)
-        else {}
-    )
-    duplicate = await service.apply_elevenlabs_post_call(
-        event_id=event_id,
-        attempt_id=attempt_id,
-        transcript=str(payload.get("transcript", "")),
-        confidence_basis_points=max(
-            0, min(10_000, int(analysis.get("confidence_basis_points", 0)))
-        ),
-        duration_seconds=max(0, min(180, int(payload.get("duration_seconds", 0)))),
-        disclosure_delivered=bool(analysis.get("ai_disclosure_delivered", False)),
-    )
+    try:
+        event = parse_elevenlabs_post_call(
+            raw,
+            expected_agent_id=os.getenv("ELEVENLABS_AGENT_ID", "").strip() or None,
+        )
+        if await service.repository.get_attempt(event.attempt_id) is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "VOICE_ATTEMPT_NOT_FOUND"},
+            )
+        occurred_at = datetime.fromtimestamp(event.event_timestamp, UTC)
+        duplicate = await service.apply_elevenlabs_post_call(
+            event_id=f"{event.event_type}:{event.conversation_id}",
+            attempt_id=event.attempt_id,
+            transcript=event.transcript,
+            intent_transcript=event.user_transcript,
+            provider_intent=event.provider_intent,
+            confidence_basis_points=event.confidence_basis_points,
+            duration_seconds=event.duration_seconds,
+            disclosure_delivered=event.disclosure_delivered,
+            occurred_at=occurred_at,
+        )
+    except HTTPException:
+        raise
+    except (ValueError, OSError, OverflowError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_ELEVENLABS_POST_CALL",
+                "message": str(exc),
+            },
+        ) from exc
     return WebhookAcceptedResponse(duplicate=duplicate)
+
+
+@router.post("/tools/elevenlabs/intent", response_model=LiveVoiceIntentResponse)
+async def elevenlabs_live_intent_tool(
+    payload: LiveVoiceIntentRequest,
+    service: VoiceServiceDependency,
+    x_elevenlabs_tool_secret: Annotated[
+        str | None, Header(alias="X-ElevenLabs-Tool-Secret")
+    ] = None,
+) -> LiveVoiceIntentResponse:
+    """Receive authenticated live intent tools; opt-out persists before hang-up."""
+
+    expected_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET", "").strip()
+    if (
+        not voice_provider_ready()
+        or not expected_secret
+        or x_elevenlabs_tool_secret is None
+        or not hmac.compare_digest(x_elevenlabs_tool_secret, expected_secret)
+    ):
+        raise HTTPException(status_code=401, detail={"code": "INVALID_ELEVENLABS_TOOL_AUTH"})
+    attempt = await service.repository.get_attempt(payload.attempt_id)
+    if attempt is None:
+        raise HTTPException(status_code=404, detail={"code": "VOICE_ATTEMPT_NOT_FOUND"})
+    try:
+        intent, must_end, suppression_persisted, duplicate = await service.apply_live_intent(
+            event_id=payload.event_id
+            or f"live:{payload.attempt_id}:{payload.intent.strip().upper()}",
+            attempt_id=payload.attempt_id,
+            intent=payload.intent.strip().upper(),
+            confidence_basis_points=payload.confidence_basis_points,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_ELEVENLABS_INTENT", "message": str(exc)},
+        ) from exc
+    return LiveVoiceIntentResponse(
+        duplicate=duplicate,
+        detected_intent=intent.value,
+        contact_must_end=must_end,
+        suppression_persisted=suppression_persisted,
+    )
 
 
 @router.get("/intents", response_model=list[str])

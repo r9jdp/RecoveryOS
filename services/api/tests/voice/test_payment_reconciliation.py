@@ -4,17 +4,18 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from services.api.app.db import Base
+from services.api.app.models import Customer
 from services.api.app.providers.contracts import (
     VoiceContactRequest,
     VoiceContactResult,
     VoiceContactSnapshot,
 )
 from services.api.app.seed import FITBOX_CASE_ID, seed_fitbox
-from services.api.app.voice.factory import create_voice_service_from_env
+from services.api.app.voice.factory import create_voice_service_from_env, voice_provider_ready
 from services.api.app.voice.models import VoiceContactAttemptRecord, VoiceWebhookReceiptRecord
 from services.api.app.voice.repository import SqlVoiceRepository
 from services.api.app.voice.service import (
@@ -54,6 +55,25 @@ class CancellationProvider:
             contact_attempt_id=contact_attempt_id,
             status=self.observed_status,
             observed_at=NOW,
+        )
+
+
+class ReservationObservingProvider(CancellationProvider):
+    def __init__(self, engine: AsyncEngine) -> None:
+        super().__init__()
+        self.engine = engine
+        self.reservation_visible = False
+
+    async def start_contact(self, request: VoiceContactRequest) -> VoiceContactResult:
+        async with AsyncSession(self.engine, expire_on_commit=False) as observer:
+            self.reservation_visible = (
+                await observer.get(VoiceContactAttemptRecord, request.idempotency_key) is not None
+            )
+        return VoiceContactResult(
+            provider="twilio",
+            contact_attempt_id=request.idempotency_key,
+            provider_call_id="CA-RESERVATION-1",
+            status="SUBMITTED",
         )
 
 
@@ -116,6 +136,40 @@ async def test_runtime_factory_preserves_mock_disabled_default(
             await resources.aclose()
     finally:
         await engine.dispose()
+
+
+def test_voice_readiness_requires_complete_twilio_elevenlabs_and_operator_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    complete = {
+        "VOICE_PROVIDER": "twilio",
+        "VOICE_REAL_CALLS_ENABLED": "true",
+        "TWILIO_ACCOUNT_SID": "AC123",
+        "TWILIO_AUTH_TOKEN": "twilio-secret",
+        "TWILIO_FROM_NUMBER": "+12025550100",
+        "VOICE_PUBLIC_ORIGIN": "https://voice.recovery.test",
+        "ELEVENLABS_API_KEY": "eleven-api-key",
+        "ELEVENLABS_AGENT_ID": "agent-recovery",
+        "ELEVENLABS_WEBHOOK_SECRET": "webhook-secret",
+        "VOICE_OPERATOR_TOKEN": "operator-secret",
+        "VOICE_ALLOWLIST_DESTINATIONS": "+919999999999",
+    }
+    for name, value in complete.items():
+        monkeypatch.setenv(name, value)
+    assert voice_provider_ready()
+
+    for required in (
+        "ELEVENLABS_API_KEY",
+        "ELEVENLABS_AGENT_ID",
+        "ELEVENLABS_WEBHOOK_SECRET",
+        "VOICE_OPERATOR_TOKEN",
+        "VOICE_ALLOWLIST_DESTINATIONS",
+    ):
+        monkeypatch.delenv(required)
+        assert not voice_provider_ready(), required
+        monkeypatch.setenv(required, complete[required])
+    monkeypatch.setenv("VOICE_ALLOWLIST_DESTINATIONS", " , ")
+    assert not voice_provider_ready()
 
 
 @pytest.mark.asyncio
@@ -307,5 +361,55 @@ async def test_sql_repository_persists_claim_timeline_and_duplicate_guard() -> N
             assert record.provider_payload["payment_cancellation"]["state"] == "CONFIRMED"
             assert receipt_count == 1
             assert provider.cancel_calls == [("voice-sql-1", "AUTHORITATIVE_PAYMENT_SUCCESS")]
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sql_reservation_commits_before_provider_and_loads_real_case_context() -> None:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    provider = ReservationObservingProvider(engine)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await seed_fitbox(session)
+            customer = await session.get(Customer, "customer_fitbox_001")
+            assert customer is not None
+            customer.phone_token = "+919999999999"
+            customer.voice_consent_at = NOW
+            customer.preferred_language = "hi-IN"
+            await session.commit()
+            repository = SqlVoiceRepository(session)
+            subject = await repository.load_subject(FITBOX_CASE_ID)
+            assert subject is not None
+            assert subject.merchant_display_name == "FitBox"
+            assert subject.customer_display_name == "Aarav Sharma"
+            assert subject.amount_at_risk_paise == 149_900
+            assert subject.diagnosis == "AUTHENTICATION_REQUIRED"
+            assert subject.plan_name == "FitBox Annual"
+
+            service = VoiceContactService(
+                repository=repository,
+                provider=provider,
+                real_calls_enabled=True,
+                operator_token="operator-secret",
+                allowlisted_destinations=frozenset({"+919999999999"}),
+            )
+            result = await service.start(
+                case_id=FITBOX_CASE_ID,
+                idempotency_key="voice-reservation-committed",
+                supplied_operator_token="operator-secret",
+                max_duration_seconds=180,
+                now=NOW,
+            )
+            await session.commit()
+
+        assert result.status == "SUBMITTED"
+        assert provider.reservation_visible
     finally:
         await engine.dispose()

@@ -96,7 +96,8 @@
   font-weight: 450;
   line-height: 1.5;
 }
-.field textarea {
+.field textarea,
+.field select {
   resize: vertical;
   min-height: 7rem;
   padding: var(--ros-space-3);
@@ -107,10 +108,19 @@
   font: 450 var(--ros-text-md) / 1.55 var(--ros-font-body);
   font-weight: 450;
 }
-.field textarea:focus-visible {
+.field select {
+  min-height: 2.75rem;
+}
+.field textarea:focus-visible,
+.field select:focus-visible {
   outline: none;
   border-color: var(--ros-brand);
   box-shadow: var(--ros-shadow-focus);
+}
+.emptyTimeline {
+  margin: 0;
+  color: var(--ros-text-muted);
+  line-height: 1.6;
 }
 .guardrails {
   display: grid;

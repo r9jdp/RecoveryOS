@@ -16,6 +16,8 @@ from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
     Diagnosis,
+    PaymentSurfaceType,
+    RecoveryActionType,
     RevenueAttribution,
     SubscriptionState,
 )
@@ -419,6 +421,69 @@ class CaseRepository:
             )
         ).all()
         return [(diagnosis, int(count)) for diagnosis, count in rows]
+
+    async def recovery_by_channel(self, *, merchant_id: str) -> list[tuple[str, int, int]]:
+        """Return case volume and verified recovered paise by the latest recovery channel.
+
+        A recognition record does not currently own an action ID, so attribution uses the
+        case's latest persisted action. This is exact for the normal one-active-action flow and
+        avoids manufacturing recovered revenue when no immutable provider recognition exists.
+        """
+
+        latest_action_id = (
+            select(RecoveryActionRecord.id)
+            .where(RecoveryActionRecord.case_id == RecoveryCase.id)
+            .order_by(RecoveryActionRecord.created_at.desc(), RecoveryActionRecord.id.desc())
+            .limit(1)
+            .correlate(RecoveryCase)
+            .scalar_subquery()
+        )
+        rows = (
+            await self.session.execute(
+                select(
+                    RecoveryActionRecord.action_type,
+                    RecoveryActionRecord.payment_surface_type,
+                    func.count(func.distinct(RecoveryCase.id)),
+                    func.coalesce(func.sum(RevenueRecognitionRecord.amount_paise), 0),
+                )
+                .select_from(RecoveryCase)
+                .join(RecoveryActionRecord, RecoveryActionRecord.id == latest_action_id)
+                .outerjoin(
+                    RevenueRecognitionRecord,
+                    and_(
+                        RevenueRecognitionRecord.case_id == RecoveryCase.id,
+                        RevenueRecognitionRecord.merchant_id == merchant_id,
+                        RevenueRecognitionRecord.arrears_collected.is_(True),
+                        RevenueRecognitionRecord.attribution.in_(
+                            (
+                                RevenueAttribution.RAZORPAY_TEST_VERIFIED,
+                                RevenueAttribution.VERIFIED_EXTERNAL,
+                            )
+                        ),
+                    ),
+                )
+                .where(RecoveryCase.merchant_id == merchant_id)
+                .group_by(
+                    RecoveryActionRecord.action_type,
+                    RecoveryActionRecord.payment_surface_type,
+                )
+            )
+        ).all()
+        result: list[tuple[str, int, int]] = []
+        for action_type, surface_type, case_count, recovered_paise in rows:
+            if action_type == RecoveryActionType.START_VOICE:
+                channel = "VOICE"
+            elif action_type == RecoveryActionType.SEND_TO_CUSTOMER_AGENT:
+                channel = "CUSTOMER_AGENT"
+            elif (
+                action_type == RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE
+                and isinstance(surface_type, PaymentSurfaceType)
+            ):
+                channel = surface_type.value
+            else:
+                continue
+            result.append((channel, int(case_count), int(recovered_paise)))
+        return result
 
     async def review_and_block_counts(self, *, merchant_id: str) -> tuple[int, int]:
         review_count = await self.session.scalar(

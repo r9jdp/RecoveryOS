@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ml.recoverybench.baseline import DeterministicRecoveryScorer
 from services.api.app.domain.enums import (
     ActionStatus,
     CaseOutcome,
@@ -593,11 +594,11 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
             {},
             True,
             500_000,
-            RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
-            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
-            PolicyDisposition.BLOCK,
-            ActionStatus.CANCELLED,
-            "MERCHANT_KILL_SWITCH_ENABLED",
+            RecoveryActionType.ESCALATE_TO_HUMAN,
+            None,
+            PolicyDisposition.ALLOW,
+            ActionStatus.PROPOSED,
+            "WITHIN_RECOVERY_WINDOW",
         ),
     ],
 )
@@ -622,13 +623,15 @@ async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
         require_approval_above_paise=approval_threshold,
     )
     raw = _raw_fixture("payment.failed.json", changes=payment_changes)
-    await _ingest(
+    outbox = await _ingest(
         session,
         fixture="payment.failed.json",
         provider_event_id=f"evt_policy_{suffix}_first",
         merchant_id=merchant_id,
         raw_body=raw,
     )
+    outbox.available_at = POLICY_NOW
+    await session.commit()
     assert session.bind is not None
     verification_sessions = async_sessionmaker(session.bind, expire_on_commit=False)
     monkeypatch.setattr(
@@ -663,19 +666,22 @@ async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
         FakePaymentProvider(),
         callback,
         clock=lambda: POLICY_NOW,
+        recovery_scorer=DeterministicRecoveryScorer(),
     )
     first = await processor.process_next()
     assert first is not None and first.status == "PUBLISHED"
 
     # A separately delivered duplicate for the same failed payment converges on
     # the same case/action/policy instead of manufacturing another decision.
-    await _ingest(
+    duplicate_outbox = await _ingest(
         session,
         fixture="payment.failed.json",
         provider_event_id=f"evt_policy_{suffix}_duplicate",
         merchant_id=merchant_id,
         raw_body=raw,
     )
+    duplicate_outbox.available_at = POLICY_NOW
+    await session.commit()
     duplicate = await processor.process_next()
     assert duplicate is not None and duplicate.status == "PUBLISHED"
 
@@ -685,9 +691,15 @@ async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
         )
     )
     policy = await session.scalar(select(PolicyDecisionRecord))
+    assert action is not None and policy is not None
+    decision_event = await session.scalar(
+        select(RecoveryEventRecord).where(
+            RecoveryEventRecord.source_event_id == f"initial-recommendation:{action.case_id}"
+        )
+    )
     action_count = await session.scalar(select(func.count(RecoveryActionRecord.id)))
     policy_count = await session.scalar(select(func.count(PolicyDecisionRecord.id)))
-    assert action is not None and policy is not None
+    assert decision_event is not None
     assert action_count == policy_count == 1
     assert action.action_type == expected_action
     assert action.payment_surface_type == expected_surface
@@ -698,6 +710,22 @@ async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
     assert policy.decision_code == expected_code
     assert policy.reason_codes[0] == expected_code
     assert action.scheduled_for == policy.delay_until
+    assert decision_event.payload["selected_action_type"] == expected_action.value
+    assert decision_event.payload["selected_payment_surface_type"] == (
+        expected_surface.value if expected_surface else None
+    )
+    assert decision_event.payload["selected_model"]["scoring_mode"] == (
+        "DETERMINISTIC_FALLBACK"
+    )
+    assert decision_event.payload["feature_snapshot"]["failed_attempt_count"] == 1
+    assert isinstance(decision_event.payload["selected_expected_recovered_paise"], int)
+    assert isinstance(decision_event.payload["selected_expected_utility_paise"], int)
+    assert len(decision_event.payload["ranked_candidates"]) >= 3
+    if recovery_kill_switch:
+        assert any(
+            candidate["policy"]["decision_code"] == "MERCHANT_KILL_SWITCH_ENABLED"
+            for candidate in decision_event.payload["ranked_candidates"]
+        )
     if expected_disposition == PolicyDisposition.DELAY:
         assert action.scheduled_for == POLICY_NOW + timedelta(minutes=15)
     else:
@@ -712,12 +740,14 @@ async def test_failed_temporal_dispatch_keeps_policy_durable_for_idempotent_retr
 ) -> None:
     session = processor_session
     merchant_id = await _seed_policy_subject(session, suffix="dispatch_retry")
-    await _ingest(
+    outbox = await _ingest(
         session,
         fixture="payment.failed.json",
         provider_event_id="evt_policy_dispatch_retry",
         merchant_id=merchant_id,
     )
+    outbox.available_at = POLICY_NOW
+    await session.commit()
     fail = True
 
     async def callback(signal: RazorpayDownstreamSignal) -> None:

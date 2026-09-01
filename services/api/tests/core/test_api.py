@@ -97,6 +97,7 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         dashboard = await client.get("/v1/dashboard/metrics")
+        approval_queue = await client.get("/v1/approval-queue")
         case_list = await client.get("/v1/recovery-cases")
         detail = await client.get(f"/v1/recovery-cases/{FITBOX_CASE_ID}")
         timeline = await client.get(f"/v1/recovery-cases/{FITBOX_CASE_ID}/timeline")
@@ -124,6 +125,30 @@ async def test_exported_router_serves_dashboard_case_and_timeline(
 
     assert dashboard.status_code == 200
     assert dashboard.json()["metrics"]["revenue_at_risk_paise"] == 149_900
+    assert dashboard.json()["recovery_by_channel"] == [
+        {
+            "channel": "SUBSCRIPTION_CARD_UPDATE",
+            "case_count": 1,
+            "recovered_paise": 0,
+        }
+    ]
+    assert approval_queue.status_code == 200
+    assert approval_queue.json()["items"] == [
+        {
+            "case_id": FITBOX_CASE_ID,
+            "customer_display_name": "Aarav Sharma",
+            "plan_name": "FitBox Annual",
+            "amount_at_risk_paise": 149_900,
+            "recommended_action": "OPEN_CUSTOMER_PAYMENT_SURFACE",
+            "payment_surface_type": "SUBSCRIPTION_CARD_UPDATE",
+            "policy_reason": (
+                "The seeded FitBox recovery requires an explicit operator approval."
+            ),
+            "deadline": "2026-08-30T10:00:01Z",
+            "evidence_kind": "SYSTEM_DERIVED",
+            "provider": "RECOVERYOS",
+        }
+    ]
     assert case_list.status_code == 200
     assert case_list.json()["page"] == {
         "next_cursor": None,

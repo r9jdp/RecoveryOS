@@ -46,6 +46,14 @@ class JsonRpcRequest(WireModel):
     params: dict[str, Any]
 
 
+class RecoveryDisplayContext(WireModel):
+    """Display-only context supplied by the trusted RecoveryOS worker."""
+
+    merchant_display_name: str = Field(min_length=1, max_length=200)
+    plan_name: str = Field(min_length=1, max_length=200)
+    failure_explanation: str = Field(min_length=1, max_length=500)
+
+
 class RecoveryRequestData(WireModel):
     protocol_version: Literal["recovery.request.v1"] = "recovery.request.v1"
     idempotency_key: str = Field(min_length=1)
@@ -57,7 +65,7 @@ class RecoveryRequestData(WireModel):
     payment_surface_type: str = Field(min_length=1)
     payment_surface_reference: str = Field(min_length=1)
     expires_at: datetime
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: RecoveryDisplayContext
 
     @model_validator(mode="after")
     def require_future_utc_expiry(self) -> RecoveryRequestData:
@@ -181,4 +189,34 @@ class ApprovalSummary(WireModel):
     payment_surface_reference: str
     expires_at: datetime
     merchant_display_name: str
-    recovery_reason: str
+    plan_name: str
+    failure_explanation: str
+
+
+class CustomerLanguageRequest(WireModel):
+    text: str = Field(min_length=1, max_length=2_000)
+    channel: Literal["TEXT", "VOICE_TRANSCRIPT"] = "TEXT"
+    language: str | None = Field(default=None, min_length=2, max_length=35)
+
+
+class LanguageModelInterpretation(WireModel):
+    intent: Literal["APPROVE", "REJECT", "ASK_QUESTION", "UNCLEAR"]
+    confidence_basis_points: int = Field(ge=0, le=10_000)
+    explanation: str = Field(min_length=1, max_length=500)
+
+
+class AuthoritativeApprovalScope(WireModel):
+    merchant_id: str
+    case_id: str
+    exact_amount_paise: int = Field(gt=0)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    payment_surface_type: str
+    payment_surface_reference: str
+    expires_at: datetime
+
+
+class CustomerLanguageInterpretation(LanguageModelInterpretation):
+    task_id: str
+    authorization_effect: Literal["NONE"] = "NONE"
+    requires_explicit_approval: Literal[True] = True
+    authoritative_scope: AuthoritativeApprovalScope

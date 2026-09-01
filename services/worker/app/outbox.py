@@ -14,7 +14,7 @@ from temporalio.client import Client, WorkflowHandle
 from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from services.api.app.db import get_session_factory
-from services.api.app.domain.enums import Diagnosis, SubscriptionState
+from services.api.app.domain.enums import Diagnosis, RecoveryActionType, SubscriptionState
 from services.api.app.integrations.razorpay import create_razorpay_client_from_env
 from services.api.app.models import (
     Invoice,
@@ -155,6 +155,11 @@ class TemporalRazorpaySignalDispatcher:
             payment_surface_type = (
                 action.payment_surface_type.value if action.payment_surface_type else None
             )
+            if action.action_type == RecoveryActionType.SEND_TO_CUSTOMER_AGENT:
+                # The durable action owns no surface subtype by schema design,
+                # but its A2A mandate must authorize one exact, invoice-scoped
+                # payment surface. The trusted failed invoice is that scope.
+                payment_surface_type = "SUBSCRIPTION_INVOICE_LINK"
             if signal.event_type != "payment.failed" and (
                 action.action_type.value != "WAIT_FOR_GATEWAY_RETRY"
                 or action.payment_surface_type is not None

@@ -129,6 +129,19 @@ class RecoveryScoreResult(ProviderContract):
     explanation: list[str] = Field(default_factory=list)
 
 
+class CustomerAgentDisplayContext(ProviderContract):
+    """Non-sensitive case context shown to the customer.
+
+    These fields improve comprehension but never participate in, or broaden,
+    the exact mandate scope. They are resolved from RecoveryOS persistence by
+    the worker instead of being invented by the customer-agent service.
+    """
+
+    merchant_display_name: str = Field(min_length=1, max_length=200)
+    plan_name: str = Field(min_length=1, max_length=200)
+    failure_explanation: str = Field(min_length=1, max_length=500)
+
+
 class CustomerAgentRecoveryRequest(ProviderContract):
     protocol_version: Literal["recovery.request.v1"] = "recovery.request.v1"
     idempotency_key: str
@@ -140,7 +153,7 @@ class CustomerAgentRecoveryRequest(ProviderContract):
     payment_surface_type: PaymentSurfaceType
     payment_surface_reference: str
     expires_at: datetime
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: CustomerAgentDisplayContext
 
 
 class CustomerAgentTask(ProviderContract):

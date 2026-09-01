@@ -12,7 +12,7 @@ import random
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from services.api.app.domain.enums import Diagnosis, RecoveryActionType
+from services.api.app.domain.enums import Diagnosis, PaymentSurfaceType, RecoveryActionType
 
 DIAGNOSES = tuple(Diagnosis)
 ACTION_COST_PAISE: dict[RecoveryActionType, int] = {
@@ -41,6 +41,7 @@ class SyntheticCase:
     amount_at_risk_paise: int
     diagnosis: Diagnosis
     candidate_action: RecoveryActionType
+    payment_surface_type: PaymentSurfaceType | None
     tenure_days: int
     prior_successful_payments: int
     failed_attempt_count: int
@@ -68,6 +69,9 @@ class SyntheticCase:
             "amount_at_risk_paise": self.amount_at_risk_paise,
             "diagnosis": self.diagnosis.value,
             "candidate_action": self.candidate_action.value,
+            "payment_surface_type": (
+                self.payment_surface_type.value if self.payment_surface_type else "NONE"
+            ),
             "tenure_days": self.tenure_days,
             "prior_successful_payments": self.prior_successful_payments,
             "failed_attempt_count": self.failed_attempt_count,
@@ -82,6 +86,9 @@ class SyntheticCase:
         payload = asdict(self)
         payload["diagnosis"] = self.diagnosis.value
         payload["candidate_action"] = self.candidate_action.value
+        payload["payment_surface_type"] = (
+            self.payment_surface_type.value if self.payment_surface_type else None
+        )
         return payload
 
 
@@ -136,21 +143,74 @@ def _baseline_probability(
     )
 
 
+def _choose_payment_surface(
+    diagnosis: Diagnosis,
+    *,
+    action: RecoveryActionType,
+    rng: random.Random,
+) -> PaymentSurfaceType | None:
+    """Choose plausible customer-present surfaces without hiding the choice.
+
+    Multiple surfaces deliberately occur within each eligible diagnosis. This
+    lets the model learn a surface effect instead of treating diagnosis as a
+    proxy for the selected customer experience.
+    """
+
+    if action != RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE:
+        return None
+    surfaces = (
+        PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE,
+        PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK,
+        PaymentSurfaceType.STANDARD_PAYMENT_LINK,
+    )
+    weights = {
+        Diagnosis.AUTHENTICATION_REQUIRED: (0.62, 0.33, 0.05),
+        Diagnosis.INSTRUMENT_INVALID: (0.68, 0.24, 0.08),
+        Diagnosis.INSUFFICIENT_FUNDS: (0.12, 0.60, 0.28),
+    }.get(diagnosis, (0.34, 0.46, 0.20))
+    return rng.choices(surfaces, weights=weights, k=1)[0]
+
+
 def _treatment_probability(
     baseline: float,
     *,
     action: RecoveryActionType,
+    payment_surface_type: PaymentSurfaceType | None,
     diagnosis: Diagnosis,
     state: HiddenCustomerState,
     voice_consent: bool,
     customer_agent_available: bool,
     is_quiet_hours: bool,
 ) -> float:
+    diagnosis_surface_effects = {
+        Diagnosis.AUTHENTICATION_REQUIRED: {
+            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE: 0.34,
+            PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK: 0.14,
+            PaymentSurfaceType.STANDARD_PAYMENT_LINK: 0.07,
+        },
+        Diagnosis.INSTRUMENT_INVALID: {
+            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE: 0.29,
+            PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK: 0.12,
+            PaymentSurfaceType.STANDARD_PAYMENT_LINK: 0.08,
+        },
+        Diagnosis.INSUFFICIENT_FUNDS: {
+            PaymentSurfaceType.SUBSCRIPTION_CARD_UPDATE: 0.07,
+            PaymentSurfaceType.SUBSCRIPTION_INVOICE_LINK: 0.28,
+            PaymentSurfaceType.STANDARD_PAYMENT_LINK: 0.17,
+        },
+    }.get(diagnosis, {})
+    surface_effect = (
+        diagnosis_surface_effects.get(payment_surface_type, 0.08)
+        if payment_surface_type is not None
+        else 0.08
+    )
     effect = {
         RecoveryActionType.WAIT_FOR_GATEWAY_RETRY: (
             0.24 if diagnosis == Diagnosis.TRANSIENT_RETRYABLE else 0.03
         ),
-        RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE: (0.12 + (0.24 * state.digital_affinity)),
+        RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE: (
+            0.03 + surface_effect + (0.15 * state.digital_affinity)
+        ),
         RecoveryActionType.START_VOICE: (
             0.04 + (0.19 * state.voice_affinity) - (0.14 * state.contact_aversion)
             if voice_consent and not is_quiet_hours
@@ -196,10 +256,16 @@ def generate_paired_cases(*, count: int = 1_000, seed: int = 20_260_827) -> list
             voice_consent=voice_consent,
             failed_attempt_count=failed_attempt_count,
         )
+        payment_surface_type = _choose_payment_surface(
+            diagnosis,
+            action=action,
+            rng=rng,
+        )
         baseline_probability = _baseline_probability(state, diagnosis, failed_attempt_count)
         treatment_probability = _treatment_probability(
             baseline_probability,
             action=action,
+            payment_surface_type=payment_surface_type,
             diagnosis=diagnosis,
             state=state,
             voice_consent=voice_consent,
@@ -212,6 +278,7 @@ def generate_paired_cases(*, count: int = 1_000, seed: int = 20_260_827) -> list
                 amount_at_risk_paise=amount_at_risk_paise,
                 diagnosis=diagnosis,
                 candidate_action=action,
+                payment_surface_type=payment_surface_type,
                 tenure_days=tenure_days,
                 prior_successful_payments=prior_successful_payments,
                 failed_attempt_count=failed_attempt_count,
