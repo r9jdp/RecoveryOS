@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -171,7 +172,36 @@ async def test_deterministic_fallback_is_explicitly_tagged_not_presented_as_ml()
     )
 
 
-async def test_default_scorer_loads_the_checksum_verified_packaged_artifact() -> None:
+async def test_default_scorer_is_deterministic_when_model_is_not_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ml.recoverybench.baseline import DeterministicRecoveryScorer
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RECOVERY_MODEL_REQUIRED", "false")
+    get_default_recovery_scorer.cache_clear()
+    try:
+        scorer = get_default_recovery_scorer()
+        result = await scorer.score(
+            RecoveryScoreRequest(
+                case_id="case_deterministic",
+                amount_at_risk_paise=100_000,
+                diagnosis=Diagnosis.AUTHENTICATION_REQUIRED,
+                candidate_action=RecoveryActionType.OPEN_CUSTOMER_PAYMENT_SURFACE,
+                features={},
+            )
+        )
+
+        assert isinstance(scorer, DeterministicRecoveryScorer)
+        assert result.model_name == "recoverybench-deterministic"
+    finally:
+        get_default_recovery_scorer.cache_clear()
+
+
+async def test_default_scorer_loads_the_checksum_verified_packaged_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RECOVERY_MODEL_REQUIRED", "true")
     get_default_recovery_scorer.cache_clear()
     scorer = get_default_recovery_scorer()
     result = await scorer.score(
@@ -198,6 +228,7 @@ async def test_default_scorer_loads_the_checksum_verified_packaged_artifact() ->
     assert decision.to_audit_payload()["selected_model"]["scoring_mode"] == (
         "CHECKSUM_VERIFIED_MODEL"
     )
+    get_default_recovery_scorer.cache_clear()
 
 
 async def test_case_service_persists_ranked_envelope_for_a_new_recommendation(

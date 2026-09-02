@@ -7,7 +7,7 @@ projects:
             name: recoveryos-api
             runtime: python
             plan: free
-            buildCommand: uv sync --frozen --no-dev --group ml
+            buildCommand: uv sync --frozen --no-dev
             startCommand: uv run --no-sync alembic -c services/api/alembic.ini upgrade head && uv run --no-sync uvicorn services.api.app.main:app --host 0.0.0.0 --port $PORT
             healthCheckPath: /health/ready
             envVars:
@@ -54,13 +54,13 @@ projects:
               - key: RECOVERYBENCH_ARTIFACT_DIR
                 value: ml/recoverybench/artifacts/recoverybench.v1
               - key: RECOVERY_MODEL_REQUIRED
-                value: "true"
+                value: "false"
               - key: TEMPORAL_TASK_QUEUE
                 value: recovery-os
               - key: TEMPORAL_TLS
                 value: "true"
               - key: A2A_ENABLED
-                value: "true"
+                value: "false"
               - key: CUSTOMER_AGENT_ORIGIN
                 sync: false
               - key: CUSTOMER_AGENT_S2S_BEARER_TOKEN

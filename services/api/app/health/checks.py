@@ -123,6 +123,19 @@ async def recovery_model_check() -> ComponentStatus:
     """Prove that production can load and execute the checksum-verified scorer."""
 
     started_at = monotonic()
+    model_required = os.getenv(
+        "RECOVERY_MODEL_REQUIRED",
+        "true"
+        if os.getenv("APP_ENV", "development").strip().lower() == "production"
+        else "false",
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if not model_required:
+        return ComponentStatus(
+            "recovery_model",
+            "ok",
+            _elapsed_ms(started_at),
+            "deterministic_fallback",
+        )
     try:
         from services.api.app.domain.enums import Diagnosis, RecoveryActionType
         from services.api.app.providers.contracts import RecoveryScoreRequest
@@ -137,16 +150,10 @@ async def recovery_model_check() -> ComponentStatus:
                 features={},
             )
         )
-        model_required = os.getenv(
-            "RECOVERY_MODEL_REQUIRED",
-            "true"
-            if os.getenv("APP_ENV", "development").strip().lower() == "production"
-            else "false",
-        ).strip().lower() in {"1", "true", "yes", "on"}
         trained = score.model_name == "recoverybench-catboost" and bool(
             score.artifact_checksum
         )
-        if model_required and not trained:
+        if not trained:
             raise RuntimeError("trained model is required")
         return ComponentStatus(
             "recovery_model",

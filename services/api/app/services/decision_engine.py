@@ -112,9 +112,16 @@ def customer_agent_executor_ready() -> bool:
 
 @lru_cache(maxsize=1)
 def get_default_recovery_scorer() -> RecoveryScorer:
-    """Reuse one lazily loaded, checksum-verifying scorer per server process."""
+    """Use deterministic ranking unless a trained model is explicitly required."""
 
-    from ml.recoverybench.baseline import RecoveryBenchScorer
+    from ml.recoverybench.baseline import DeterministicRecoveryScorer, RecoveryBenchScorer
+
+    model_required = os.getenv(
+        "RECOVERY_MODEL_REQUIRED",
+        "true" if os.getenv("APP_ENV", "development").strip().lower() == "production" else "false",
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    if not model_required:
+        return DeterministicRecoveryScorer()
 
     configured_path = os.getenv("RECOVERYBENCH_ARTIFACT_DIR", "").strip()
     artifact_dir = (
@@ -126,13 +133,9 @@ def get_default_recovery_scorer() -> RecoveryScorer:
         / "artifacts"
         / "recoverybench.v1"
     )
-    model_required = os.getenv(
-        "RECOVERY_MODEL_REQUIRED",
-        "true" if os.getenv("APP_ENV", "development").strip().lower() == "production" else "false",
-    ).strip().lower() in {"1", "true", "yes", "on"}
     return RecoveryBenchScorer(
         artifact_dir,
-        allow_deterministic_fallback=not model_required,
+        allow_deterministic_fallback=False,
     )
 
 

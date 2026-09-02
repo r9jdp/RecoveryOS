@@ -10,6 +10,7 @@ from .checks import (
     ComponentStatus,
     _psycopg_dsn,
     merchant_scope_check,
+    recovery_model_check,
     run_readiness_checks,
 )
 
@@ -48,6 +49,20 @@ async def test_razorpay_readiness_accepts_configured_merchant_scope(
     result = await merchant_scope_check()
 
     assert result.status == "ok"
+
+
+@pytest.mark.asyncio
+async def test_recovery_model_is_non_blocking_in_deterministic_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("RECOVERY_MODEL_REQUIRED", "false")
+
+    result = await recovery_model_check()
+
+    assert result.name == "recovery_model"
+    assert result.status == "ok"
+    assert result.reason == "deterministic_fallback"
 
 
 @pytest.mark.asyncio
