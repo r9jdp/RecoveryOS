@@ -1,11 +1,29 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 
 import { TooltipProvider } from "@/components/shadcn/tooltip";
-import { cn } from "@/lib/utils";
 import "@/styles/globals.css";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const newsreader = Newsreader({
+  display: "swap",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-newsreader",
+});
+
+const plexSans = IBM_Plex_Sans({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--font-plex-sans",
+  weight: ["400", "500", "600"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--font-plex-mono",
+  weight: ["400", "500", "600"],
+});
 
 export const metadata: Metadata = {
   title: "RecoveryOS",
@@ -18,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("dark font-sans", geist.variable)}
+      className={`${newsreader.variable} ${plexSans.variable} ${plexMono.variable} font-sans`}
       suppressHydrationWarning
     >
       <body>

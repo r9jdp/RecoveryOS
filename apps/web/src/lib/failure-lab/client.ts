@@ -29,7 +29,7 @@ async function errorMessage(response: Response): Promise<string> {
     const validationMessage = payload.detail.find((item) => item.msg)?.msg;
     if (validationMessage) return validationMessage;
   }
-  return `Failure simulator returned status ${response.status}.`;
+  return `Failure rehearsal returned status ${response.status}.`;
 }
 
 export async function runFailureSimulation(
@@ -39,7 +39,7 @@ export async function runFailureSimulation(
   const baseUrl = apiBaseUrl();
   if (!baseUrl) {
     throw new Error(
-      "The failure simulator API is not connected. Start the API and set NEXT_PUBLIC_API_BASE_URL to run this contract lab.",
+      "The failure rehearsal API is not connected. Start the API and set NEXT_PUBLIC_API_BASE_URL to run this contract lab.",
     );
   }
 

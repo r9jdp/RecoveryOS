@@ -27,7 +27,7 @@ export function AppShell({
   return (
     <div className={styles.appShell}>
       <aside className={styles.sidebar}>
-        <Brand />
+        <Brand variant="ledger" />
         <Navigation groups={navigation} />
         <div className={styles.sidebarFooter}>
           {sidebarFooter ?? <TestModeBadge />}
@@ -36,7 +36,7 @@ export function AppShell({
 
       <main className={styles.shellMain}>
         <div className={styles.mobileHeader}>
-          <Brand />
+          <Brand variant="ledger" />
           <button
             className={styles.iconButton}
             type="button"

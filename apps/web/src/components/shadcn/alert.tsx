@@ -4,18 +4,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
-  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
+  "group/alert relative grid w-full gap-0.5 rounded-sm border border-l-2 px-2.5 py-2 text-left text-sm shadow-none has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
+        default: "border-l-primary bg-card text-card-foreground",
         destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+          "border-destructive/25 border-l-destructive bg-destructive/5 text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
         success:
-          "border-success/20 bg-success/5 text-success *:data-[slot=alert-description]:text-success/80 *:[svg]:text-current",
+          "border-success/20 border-l-success bg-success/5 text-success *:data-[slot=alert-description]:text-success/80 *:[svg]:text-current",
         warning:
-          "border-warning/20 bg-warning/5 text-warning *:data-[slot=alert-description]:text-warning/80 *:[svg]:text-current",
-        info: "border-info/20 bg-info/5 text-info *:data-[slot=alert-description]:text-info/80 *:[svg]:text-current",
+          "border-warning/20 border-l-warning bg-warning/5 text-warning *:data-[slot=alert-description]:text-warning/80 *:[svg]:text-current",
+        info: "border-info/20 border-l-info bg-info/5 text-info *:data-[slot=alert-description]:text-info/80 *:[svg]:text-current",
       },
     },
     defaultVariants: {
@@ -44,7 +44,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground",
+        "font-mono text-xs font-medium tracking-[0.06em] uppercase group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground",
         className,
       )}
       {...props}

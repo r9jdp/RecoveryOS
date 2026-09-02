@@ -48,7 +48,7 @@ function fallbackFixture<T>(fixture: T, warning?: string): FixtureResult<T> {
     source: "mock",
     warning:
       warning ??
-      "Showing the deterministic FitBox demo fixture. No provider action will run.",
+      "Preview workspace active. Provider actions remain disabled until the API connection is restored.",
   };
 }
 
@@ -94,7 +94,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 function fallbackWarning(error: unknown, resource: string): string {
   const reason =
     error instanceof Error ? error.message : "The API is unavailable.";
-  return `${resource} could not be loaded (${reason}); deterministic FitBox demo data is shown instead.`;
+  return `${resource} could not be loaded (${reason}). A read-only recovery preview is shown while you reconnect.`;
 }
 
 function liveReadError(error: unknown, resource: string): Error {
@@ -127,13 +127,15 @@ const paymentSurfaces = new Set<PaymentSurfaceType>([
 ]);
 
 function recoveryAction(value: unknown): RecoveryAction | null {
-  return typeof value === "string" && recoveryActions.has(value as RecoveryAction)
+  return typeof value === "string" &&
+    recoveryActions.has(value as RecoveryAction)
     ? (value as RecoveryAction)
     : null;
 }
 
 function paymentSurface(value: unknown): PaymentSurfaceType | null {
-  return typeof value === "string" && paymentSurfaces.has(value as PaymentSurfaceType)
+  return typeof value === "string" &&
+    paymentSurfaces.has(value as PaymentSurfaceType)
     ? (value as PaymentSurfaceType)
     : null;
 }
@@ -208,9 +210,11 @@ function liveRecommendationFromTimeline(timeline: LiveTimeline) {
         : null,
     confidence: probability,
     model_name: typeof model.name === "string" ? model.name : undefined,
-    model_version: typeof model.version === "string" ? model.version : undefined,
+    model_version:
+      typeof model.version === "string" ? model.version : undefined,
     artifact_checksum:
-      typeof model.artifact_checksum === "string" || model.artifact_checksum === null
+      typeof model.artifact_checksum === "string" ||
+      model.artifact_checksum === null
         ? model.artifact_checksum
         : undefined,
     scoring_mode: scoringMode,
@@ -222,7 +226,10 @@ function liveRecommendationFromTimeline(timeline: LiveTimeline) {
         : "DETERMINISTIC_FALLBACK",
       ...stringList(policy.reason_codes),
     ],
-    reasons: [...stringList(selected.explanation), ...stringList(policy.reasons)],
+    reasons: [
+      ...stringList(selected.explanation),
+      ...stringList(policy.reasons),
+    ],
     rejected_alternatives: rejected,
   };
 }
@@ -305,7 +312,8 @@ function composeDashboard(
     recovery_by_channel: channels.map((channel) => {
       const facts = channelFacts.get(channel);
       const matchingCases = cases.filter((item) => {
-        if (channel === "VOICE") return item.recommended_action === "START_VOICE";
+        if (channel === "VOICE")
+          return item.recommended_action === "START_VOICE";
         if (channel === "CUSTOMER_AGENT") {
           return item.recommended_action === "SEND_TO_CUSTOMER_AGENT";
         }
@@ -470,7 +478,7 @@ export async function getDashboard(
     if (demoDataEnabled()) return fallbackFixture(dashboardFixture);
     return Promise.reject(
       new Error(
-        "The Control Tower requires NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+        "The Control Tower requires NEXT_PUBLIC_API_BASE_URL in connected mode.",
       ),
     );
   }
@@ -480,7 +488,9 @@ export async function getDashboard(
       fetchJson<LiveCaseList>(`${baseUrl}/v1/recovery-cases?limit=100`, {
         signal,
       }),
-      fetchJson<LivePolicySettings>(`${baseUrl}/v1/policy-settings`, { signal }),
+      fetchJson<LivePolicySettings>(`${baseUrl}/v1/policy-settings`, {
+        signal,
+      }),
     ]);
     return {
       data: composeDashboard(dashboard, cases, policySettings),
@@ -510,7 +520,7 @@ export async function getApprovalQueue(
     }
     return Promise.reject(
       new Error(
-        "The approval queue requires NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+        "The approval queue requires NEXT_PUBLIC_API_BASE_URL in connected mode.",
       ),
     );
   }
@@ -548,7 +558,7 @@ export async function getCaseDetail(
     if (!demoDataEnabled()) {
       return Promise.reject(
         new Error(
-          "Case details require NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+          "Case details require NEXT_PUBLIC_API_BASE_URL in connected mode.",
         ),
       );
     }
@@ -556,7 +566,7 @@ export async function getCaseDetail(
       caseDetailFixture,
       caseDetailFixture.case.id === caseId
         ? undefined
-        : `Case ${caseId} is not present in the bundled fixture; the FitBox reference case is shown.`,
+        : `Case ${caseId} is not available in this workspace; a reference recovery case is shown.`,
     );
   }
   try {
@@ -579,7 +589,7 @@ export async function getCaseDetail(
     if (!demoDataEnabled()) throw liveReadError(error, `Live case ${caseId}`);
     return fallbackFixture(
       caseDetailFixture,
-      `${fallbackWarning(error, `Live case ${caseId}`)} The FitBox reference case is shown.`,
+      `${fallbackWarning(error, `Live case ${caseId}`)} A reference recovery case is shown.`,
     );
   }
 }
@@ -593,7 +603,7 @@ export async function getPolicySettings(
       return fallbackFixture(dashboardFixture.policy_settings);
     return Promise.reject(
       new Error(
-        "Policy settings require NEXT_PUBLIC_API_BASE_URL. Demo data is disabled in live mode.",
+        "Policy settings require NEXT_PUBLIC_API_BASE_URL in connected mode.",
       ),
     );
   }
@@ -624,7 +634,7 @@ export async function executeCaseCommand(
     return {
       command,
       message:
-        "The command was accepted by the mock provider. No external action was taken.",
+        "The recovery command was recorded in this workspace. Provider execution remains disabled.",
       occurred_at: new Date().toISOString(),
       source: "mock",
       status: "ACCEPTED",
@@ -672,7 +682,7 @@ export async function executeSafetyDisposition(
     await new Promise((resolve) => window.setTimeout(resolve, 350));
     return {
       disposition,
-      message: `${disposition.replaceAll("_", " ")} recorded in local demo mode. No provider action was taken.`,
+      message: `${disposition.replaceAll("_", " ")} recorded in this workspace. Provider execution remains disabled.`,
       occurred_at: new Date().toISOString(),
       source: "mock",
       status: "ACCEPTED",

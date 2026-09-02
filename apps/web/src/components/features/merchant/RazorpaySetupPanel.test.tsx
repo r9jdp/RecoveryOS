@@ -64,7 +64,7 @@ describe("RazorpaySetupPanel", () => {
     );
 
     expect(
-      await screen.findByText("Real Razorpay Test data connected"),
+      await screen.findByText("Razorpay subscription connected"),
     ).toBeInTheDocument();
     expect(screen.getByText("plan_test_001")).toBeInTheDocument();
     expect(screen.getByText("sub_test_001")).toBeInTheDocument();

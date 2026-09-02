@@ -1,41 +1,40 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* OLED surfaces stay neutral. Accent color is reserved for interaction,
-     provider context, data visualization, and semantic status. */
-  --ros-bg-primary: #000000;
-  --ros-bg-secondary: #0a0a0a;
-  --ros-bg-card: #080808;
-  --ros-bg-hover: #151515;
-  --ros-brand: #4f8cff;
-  --ros-brand-hover: #6aa0ff;
-  --ros-brand-pressed: #3d72dc;
-  --ros-brand-soft: rgb(79 140 255 / 12%);
-  --ros-link: #75a6ff;
-  --ros-ink: #fafafa;
-  --ros-ink-secondary: #f4f4f5;
-  --ros-text-muted: #a1a1aa;
-  --ros-canvas: var(--ros-bg-card);
-  --ros-surface-subtle: #000000;
-  --ros-surface-muted: #0f0f0f;
-  --ros-surface-strong: #171717;
-  --ros-border: rgb(255 255 255 / 9%);
-  --ros-border-strong: rgb(255 255 255 / 14%);
-  --ros-success: #32d583;
-  --ros-success-soft: rgb(50 213 131 / 11%);
-  --ros-warning: #fdb022;
-  --ros-warning-soft: rgb(253 176 34 / 11%);
-  --ros-danger: #f04438;
-  --ros-danger-soft: rgb(240 68 56 / 11%);
-  --ros-info-soft: rgb(79 140 255 / 10%);
-  --ros-dark: #000000;
-  --ros-dark-raised: #0a0a0a;
-  --ros-accent-purple: #a875ff;
-  --ros-accent-pink: #f36bb5;
+  /* Audit Ledger: warm paper, exact rules, and cobalt reserved for action. */
+  --ros-bg-primary: #fafaf7;
+  --ros-bg-secondary: #f4f6fa;
+  --ros-bg-card: #ffffff;
+  --ros-bg-hover: #eef2fb;
+  --ros-brand: #1748ff;
+  --ros-brand-hover: #0e35cc;
+  --ros-brand-pressed: #09299f;
+  --ros-brand-soft: rgb(23 72 255 / 10%);
+  --ros-link: #143fd9;
+  --ros-ink: #111318;
+  --ros-ink-secondary: #252a35;
+  --ros-text-muted: #596174;
+  --ros-canvas: #ffffff;
+  --ros-surface-subtle: #fafaf7;
+  --ros-surface-muted: #f1f3f7;
+  --ros-surface-strong: #eaf0ff;
+  --ros-border: #d8deea;
+  --ros-border-strong: #aeb8cb;
+  --ros-success: #167052;
+  --ros-success-soft: #e6f5ef;
+  --ros-warning: #8a5a00;
+  --ros-warning-soft: #fff4d8;
+  --ros-danger: #bd302d;
+  --ros-danger-soft: #fdebea;
+  --ros-info-soft: #eaf0ff;
+  --ros-dark: #111318;
+  --ros-dark-raised: #252a35;
+  --ros-accent-purple: #6941c6;
+  --ros-accent-pink: #a63c71;
 
-  --ros-font-display: var(--font-geist), "Segoe UI", sans-serif;
-  --ros-font-body: var(--font-geist), "Segoe UI", sans-serif;
-  --ros-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ros-font-display: var(--font-newsreader), Georgia, serif;
+  --ros-font-body: var(--font-plex-sans), "Segoe UI", sans-serif;
+  --ros-font-mono: var(--font-plex-mono), "SFMono-Regular", Consolas, monospace;
 
   --ros-text-xs: 0.75rem;
   --ros-text-sm: 0.875rem;
@@ -56,16 +55,16 @@
   --ros-space-12: 2.5rem;
   --ros-space-16: 3rem;
 
-  --ros-radius-xs: 0.375rem;
-  --ros-radius-sm: 0.5rem;
-  --ros-radius-md: 0.625rem;
-  --ros-radius-lg: 0.75rem;
-  --ros-radius-pill: 999px;
+  --ros-radius-xs: 0.0625rem;
+  --ros-radius-sm: 0.125rem;
+  --ros-radius-md: 0.1875rem;
+  --ros-radius-lg: 0.25rem;
+  --ros-radius-pill: 0.125rem;
 
-  --ros-shadow-xs: 0 1px 2px rgb(0 0 0 / 18%);
-  --ros-shadow-sm: 0 8px 24px rgb(0 0 0 / 30%);
-  --ros-shadow-md: 0 18px 48px rgb(0 0 0 / 44%);
-  --ros-shadow-focus: 0 0 0 3px rgb(79 140 255 / 26%);
+  --ros-shadow-xs: none;
+  --ros-shadow-sm: none;
+  --ros-shadow-md: none;
+  --ros-shadow-focus: 0 0 0 3px rgb(23 72 255 / 24%);
 
   --ros-duration-fast: 160ms;
   --ros-duration-base: 220ms;

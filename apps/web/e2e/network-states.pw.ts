@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("dashboard exposes a labelled loading state before deterministic fallback", async ({
+test("dashboard exposes a labelled loading state before the recovery workspace", async ({
   page,
 }) => {
   let releaseRequests!: () => void;
@@ -18,9 +18,8 @@ test("dashboard exposes a labelled loading state before deterministic fallback",
   await expect(
     page.getByRole("heading", { level: 1, name: "Control Tower" }),
   ).toBeVisible();
-  await expect(page.getByText("Demo data active")).toBeVisible();
   await expect(
-    page.getByText("deterministic FitBox demo data is shown instead"),
+    page.getByText("Recovery workspace", { exact: true }).first(),
   ).toBeVisible();
 });
 
@@ -28,14 +27,19 @@ test("voice transport failure is visible and does not trigger another request", 
   page,
 }) => {
   let attempts = 0;
-  await page.route("**/__e2e-api/v1/voice/**", async (route) => {
-    attempts += 1;
-    await route.fulfill({
-      status: 503,
-      contentType: "application/json",
-      body: JSON.stringify({ detail: { code: "VOICE_PROVIDER_UNAVAILABLE" } }),
-    });
-  });
+  await page.route(
+    "**/__e2e-api/v1/voice/contacts/*/browser-transcript",
+    async (route) => {
+      attempts += 1;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          detail: { code: "VOICE_PROVIDER_UNAVAILABLE" },
+        }),
+      });
+    },
+  );
   await page.goto("/voice");
   await page
     .getByPlaceholder("Example: Please stop calling, I will pay tomorrow.")

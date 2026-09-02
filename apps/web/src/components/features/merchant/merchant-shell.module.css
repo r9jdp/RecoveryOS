@@ -38,16 +38,30 @@
 }
 
 .shellBrand > span:first-child {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: var(--radius-sm);
-  background: var(--sidebar-primary);
+  width: 1.25rem;
+  height: 1.25rem;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
 .shellBrand > span:first-child::before,
 .shellBrand > span:first-child::after {
-  background: var(--sidebar);
+  left: 0;
+  height: 0.1875rem;
+  border-radius: 0;
+  background: var(--sidebar-primary);
+}
+
+.shellBrand > span:first-child::before {
+  top: 0.3125rem;
+  width: 1.125rem;
+}
+
+.shellBrand > span:first-child::after {
+  top: 0.8125rem;
+  width: 0.75rem;
 }
 
 .shellBrand > span:last-child {
@@ -55,6 +69,63 @@
   font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.navigationLabel {
+  color: var(--sidebar-foreground);
+  font-family: var(--font-plex-mono), Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.navigationItem {
+  border-left: 2px solid transparent;
+  border-radius: 0;
+}
+
+.navigationItem[data-active] {
+  border-left-color: var(--sidebar-primary);
+  background: var(--sidebar-accent);
+}
+
+.navigationItem[data-active] svg {
+  color: var(--sidebar-primary);
+}
+
+.workspaceHeader {
+  box-shadow: none;
+}
+
+.topbarEyebrow {
+  color: var(--primary);
+  font-family: var(--font-plex-mono), Consolas, monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.topbarTitle {
+  color: var(--foreground);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.sidebarNote {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-family: var(--font-plex-mono), Consolas, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-transform: uppercase;
 }
 
 .demoGuideSlot {

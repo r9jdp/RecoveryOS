@@ -48,7 +48,7 @@ describe("DemoGuide", () => {
     ).toHaveAttribute("href", "/cases/case_fitbox_aug_2026");
   });
 
-  it("resets only walkthrough progress and returns to the seeded dashboard", async () => {
+  it("resets only walkthrough progress and returns to the dashboard", async () => {
     window.sessionStorage.setItem(
       "recoveryos-fitbox-demo-progress-v1",
       JSON.stringify(["control-tower", "fitbox-case"]),

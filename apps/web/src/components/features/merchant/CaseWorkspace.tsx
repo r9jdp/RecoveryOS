@@ -34,7 +34,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   formatDateTime,
-  formatEvidenceKind,
   formatPaise,
   formatProbability,
   humanize,
@@ -126,6 +125,20 @@ function recoveryStepLabel(
   type: PaymentSurfaceType | null,
 ): string {
   return type ? humanize(type) : humanize(action);
+}
+
+function timelineSourceLabel(source: string): string {
+  const normalized = source.trim().toLowerCase();
+  if (normalized.includes("razorpay")) return "Razorpay";
+  if (normalized.includes("operator")) return "Operator";
+  if (normalized.includes("customer-agent") || normalized.includes("a2a")) {
+    return "Customer agent";
+  }
+  if (normalized.includes("decision")) return "RecoveryOS decision engine";
+  if (normalized.includes("webhook") || normalized.includes("provider")) {
+    return "Provider webhook";
+  }
+  return "RecoveryOS workflow";
 }
 
 function customerInstruction(
@@ -226,13 +239,13 @@ function Disclosure({
 
   return (
     <details
-      className="group rounded-xl border border-border bg-card"
+      className="group border border-border bg-card"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 flex-col gap-1">
-          <strong className="text-base font-medium">{title}</strong>
+          <strong className="font-heading text-xl font-normal">{title}</strong>
           <small className="text-sm leading-5 text-muted-foreground">
             {description}
           </small>
@@ -260,15 +273,15 @@ function SummaryMetricCard({
   value: ReactNode;
 }) {
   return (
-    <Card size="sm">
+    <Card className="border-0" size="sm">
       <CardHeader>
         <CardDescription className="text-sm">{label}</CardDescription>
       </CardHeader>
       <CardContent>
         <p
           className={cn(
-            "font-semibold leading-tight",
-            emphasized ? "text-2xl" : "text-lg",
+            "font-heading font-normal leading-tight",
+            emphasized ? "text-3xl" : "text-xl",
             tone,
           )}
         >
@@ -288,7 +301,9 @@ function DetailGrid({
     <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <div className="min-w-0" key={item.label}>
-          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
+            {item.label}
+          </dt>
           <dd className="mt-1 break-words text-base leading-6 font-medium">
             {item.value}
           </dd>
@@ -310,9 +325,9 @@ export function CaseLoading() {
         <Skeleton className="h-8 w-full max-w-lg" />
         <Skeleton className="h-4 w-full max-w-xl" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Card size="sm" key={index}>
+          <Card className="border-0" size="sm" key={index}>
             <CardHeader>
               <Skeleton className="h-4 w-24" />
             </CardHeader>
@@ -322,9 +337,9 @@ export function CaseLoading() {
           </Card>
         ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+      <div className="grid gap-px border border-border bg-border lg:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
         {Array.from({ length: 2 }, (_, index) => (
-          <Card key={index}>
+          <Card className="border-0" key={index}>
             <CardHeader>
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-4 w-full max-w-md" />
@@ -406,7 +421,11 @@ function CaseContent({
 
   const timeline = useMemo(() => {
     const base = fixture.timeline.map((event) => ({
-      description: `Source: ${event.source} · Evidence: ${formatEvidenceKind(event.evidence_kind)}`,
+      description: `Source: ${timelineSourceLabel(event.source)} · Evidence: ${
+        source === "api" && event.evidence_kind === "RAZORPAY_TEST_VERIFIED"
+          ? "Razorpay verified"
+          : "Workflow record"
+      }`,
       id: event.id,
       meta: `${formatDateTime(event.occurred_at)} · ${event.correlation_id}`,
       optimistic: false,
@@ -440,7 +459,7 @@ function CaseContent({
       });
     }
     return base;
-  }, [fixture.timeline, pendingCommand, result, safetyResult]);
+  }, [fixture.timeline, pendingCommand, result, safetyResult, source]);
 
   const canRun = (command: CaseCommand) =>
     fixture.available_commands.includes(command);
@@ -568,10 +587,10 @@ function CaseContent({
         </Button>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="font-mono text-xs font-medium tracking-[0.1em] text-muted-foreground uppercase">
               Payment recovery case
             </p>
-            <h1 className="mt-1 break-words text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
+            <h1 className="mt-1 break-words font-heading text-3xl leading-tight font-normal tracking-[-0.025em] sm:text-4xl">
               {fixture.customer.display_name} · {fixture.subscription.plan_name}
             </h1>
             <p className="mt-1 text-base leading-6 text-muted-foreground">
@@ -587,7 +606,9 @@ function CaseContent({
               {humanize(displayedOutcome)}
             </Badge>
             <Badge variant={source === "api" ? "success" : "info"}>
-              {source === "api" ? "Backend connected" : "Local demo"}
+              {source === "api"
+                ? "Provider data connected"
+                : "Recovery workspace"}
             </Badge>
             <Badge
               variant={
@@ -596,9 +617,10 @@ function CaseContent({
                   : "warning"
               }
             >
-              {displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
-                ? "Razorpay test verified"
-                : "Seeded demo data"}
+              {source === "api" &&
+              displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
+                ? "Razorpay verified"
+                : "Workflow evidence"}
             </Badge>
           </div>
         </div>
@@ -606,14 +628,14 @@ function CaseContent({
 
       <section className="flex flex-col gap-3" aria-labelledby="summary-title">
         <div>
-          <h2 id="summary-title" className="text-lg font-medium">
+          <h2 id="summary-title" className="font-heading text-xl font-normal">
             At a glance
           </h2>
           <p className="text-sm text-muted-foreground">
             The four facts that define this recovery window.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
           <SummaryMetricCard
             emphasized
             label="Amount to recover"
@@ -638,10 +660,10 @@ function CaseContent({
         </div>
       </section>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
-        <Card>
+      <div className="grid items-stretch gap-px border border-border bg-border xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+        <Card className="border-0">
           <CardHeader className="border-b">
-            <CardTitle className="text-lg">
+            <CardTitle className="font-heading text-xl font-normal">
               <h2>Recommended next step</h2>
             </CardTitle>
             <CardDescription className="text-base leading-6">
@@ -660,10 +682,10 @@ function CaseContent({
             </Badge>
 
             <div>
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className="font-mono text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
                 Proposed recovery surface
               </p>
-              <p className="mt-1 text-2xl leading-tight font-semibold text-primary">
+              <p className="mt-1 font-heading text-3xl leading-tight font-normal text-primary">
                 {recommendedSurface}
               </p>
               <p className="mt-2 text-base leading-6 text-muted-foreground">
@@ -722,9 +744,9 @@ function CaseContent({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0">
           <CardHeader className="border-b">
-            <CardTitle className="text-lg">
+            <CardTitle className="font-heading text-xl font-normal">
               <h2>Why this step</h2>
             </CardTitle>
             <CardDescription className="text-base leading-6">
@@ -780,7 +802,7 @@ function CaseContent({
 
       <Card>
         <CardHeader className="border-b">
-          <CardTitle className="text-lg">
+          <CardTitle className="font-heading text-xl font-normal">
             <h2>Your decision</h2>
           </CardTitle>
           <CardDescription className="text-base leading-6">
@@ -877,14 +899,14 @@ function CaseContent({
         </CardFooter>
       </Card>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Card>
+      <div className="grid items-stretch gap-px border border-border bg-border lg:grid-cols-2">
+        <Card className="border-0">
           <CardHeader className="border-b">
-            <CardTitle className="text-lg">
+            <CardTitle className="font-heading text-xl font-normal">
               <h2>Diagnosis</h2>
             </CardTitle>
             <CardDescription className="text-base leading-6">
-              The provider evidence that explains why this payment failed.
+              Evidence that explains why this payment failed.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -899,7 +921,10 @@ function CaseContent({
                     : "warning"
                 }
               >
-                {formatEvidenceKind(displayedEvidenceKind)}
+                {source === "api" &&
+                displayedEvidenceKind === "RAZORPAY_TEST_VERIFIED"
+                  ? "Razorpay verified"
+                  : "Workflow evidence"}
               </Badge>
             </div>
             <p className="text-base leading-6 text-muted-foreground">
@@ -911,9 +936,9 @@ function CaseContent({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0">
           <CardHeader className="border-b">
-            <CardTitle className="text-lg">
+            <CardTitle className="font-heading text-xl font-normal">
               <h2>Customer safeguards</h2>
             </CardTitle>
             <CardDescription className="text-base leading-6">
@@ -982,13 +1007,13 @@ function CaseContent({
         >
           {fixture.evidence.length > 0 && (
             <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className="font-mono text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
                 Evidence received
               </p>
               <ul className="grid gap-2 sm:grid-cols-2">
                 {fixture.evidence.map((item) => (
                   <li
-                    className="rounded-lg border border-border bg-muted/30 px-3 py-2"
+                    className="border border-l-2 border-l-primary bg-muted/20 px-3 py-2"
                     key={`${item.source_event}-${item.field}`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -1002,7 +1027,10 @@ function CaseContent({
                             : "warning"
                         }
                       >
-                        {formatEvidenceKind(item.kind)}
+                        {source === "api" &&
+                        item.kind === "RAZORPAY_TEST_VERIFIED"
+                          ? "Razorpay verified"
+                          : "Workflow record"}
                       </Badge>
                     </div>
                     <p className="mt-1 break-words text-sm leading-5 text-muted-foreground">
@@ -1114,7 +1142,9 @@ function CaseContent({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="flex flex-col gap-2">
-              <p className="text-base font-medium">Why it was selected</p>
+              <p className="font-heading text-xl font-normal">
+                Why it was selected
+              </p>
               <ul className="flex flex-col gap-2">
                 {fixture.policy.reasons.map((reason, index) => (
                   <li
@@ -1146,7 +1176,7 @@ function CaseContent({
             </div>
 
             <div className="flex flex-col gap-2">
-              <p className="text-base font-medium">Not selected</p>
+              <p className="font-heading text-xl font-normal">Not selected</p>
               {fixture.recommendation.rejected_alternatives.length === 0 ? (
                 <p className="text-base leading-6 text-muted-foreground">
                   No alternative actions were returned.
@@ -1156,7 +1186,7 @@ function CaseContent({
                   {fixture.recommendation.rejected_alternatives.map(
                     (alternative) => (
                       <li
-                        className="rounded-lg border border-border px-3 py-2"
+                        className="border border-l-2 border-l-muted-foreground/40 px-3 py-2"
                         key={`${alternative.action}-${alternative.reason_code}`}
                       >
                         <div className="flex items-center justify-between gap-3">
@@ -1269,19 +1299,10 @@ export function CaseWorkspace({ caseId }: { caseId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {resource.warning && (
-        <Alert variant="info">
-          <CircleAlert />
-          <AlertTitle>Demo data active</AlertTitle>
-          <AlertDescription>{resource.warning}</AlertDescription>
-        </Alert>
-      )}
-      <CaseContent
-        fixture={resource.data}
-        onRefresh={resource.reload}
-        source={resource.source}
-      />
-    </div>
+    <CaseContent
+      fixture={resource.data}
+      onRefresh={resource.reload}
+      source={resource.source}
+    />
   );
 }

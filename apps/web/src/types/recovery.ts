@@ -1,7 +1,5 @@
 export type EvidenceKind =
-  | "SIMULATED"
-  | "SYSTEM_DERIVED"
-  | "RAZORPAY_TEST_VERIFIED";
+  "SIMULATED" | "SYSTEM_DERIVED" | "RAZORPAY_TEST_VERIFIED";
 
 export type CaseOutcome =
   | "OPEN"

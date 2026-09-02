@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceConsole } from "./VoiceConsole";
 
-const liveCases = [{ id: "case-1", label: "Live Customer · Live Plan", eligible: true }];
+const liveCases = [
+  { id: "case-1", label: "Live Customer · Live Plan", eligible: true },
+];
 
 afterEach(() => {
   cleanup();

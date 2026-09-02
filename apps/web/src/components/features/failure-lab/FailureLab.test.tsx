@@ -50,23 +50,23 @@ describe("FailureLab", () => {
     ).toBeChecked();
     expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(
-      screen.getByText(/Provider verification is unavailable here/i),
+      screen.getByText(/Provider-confirmed payment state/i),
     ).toBeInTheDocument();
   });
 
-  it("submits integer paise with synthetic test data and renders convergence", async () => {
+  it("submits integer paise for a rehearsal and renders convergence", async () => {
     const simulate = vi.fn().mockResolvedValue(result);
     render(<FailureLab simulate={simulate} />);
 
     fireEvent.click(
       screen.getByRole("radio", { name: /Out-of-order webhook/i }),
     );
-    fireEvent.change(screen.getByLabelText(/Deterministic seed/), {
+    fireEvent.change(screen.getByLabelText(/Reproducibility key/), {
       target: { value: "42" },
     });
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Run out-of-order webhook simulation",
+        name: "Rehearse out-of-order webhook",
       }),
     );
 
@@ -83,9 +83,7 @@ describe("FailureLab", () => {
       expect.any(AbortSignal),
     );
     expect(screen.getByText("Provider fetch wins")).toBeInTheDocument();
-    expect(screen.getAllByText("Synthetic test data").length).toBeGreaterThan(
-      0,
-    );
+    expect(screen.getAllByText("Rehearsal event").length).toBeGreaterThan(0);
     expect(screen.getByText("evt_failure")).toBeInTheDocument();
   });
 
@@ -96,7 +94,7 @@ describe("FailureLab", () => {
       />,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Run duplicate webhook simulation" }),
+      screen.getByRole("button", { name: "Rehearse duplicate webhook" }),
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("API offline");
@@ -119,7 +117,7 @@ describe("FailureLab", () => {
       /positive whole number of paise/i,
     );
     expect(
-      screen.getByRole("button", { name: /Run duplicate webhook/i }),
+      screen.getByRole("button", { name: /Rehearse duplicate webhook/i }),
     ).toBeDisabled();
     expect(simulate).not.toHaveBeenCalled();
   });

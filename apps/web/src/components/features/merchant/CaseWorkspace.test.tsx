@@ -1,11 +1,19 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CaseDetailFixture } from "@/types/recovery";
 
 import { CaseWorkspace, customerAgentApprovalHref } from "./CaseWorkspace";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "demo");
+  vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "");
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("CaseWorkspace", () => {
   it("shows evidence, policy reasoning, and a safe optimistic command result", async () => {
@@ -17,7 +25,7 @@ describe("CaseWorkspace", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Recommended recovery action" }),
+      screen.getByRole("heading", { name: "Recommended next step" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -31,7 +39,7 @@ describe("CaseWorkspace", () => {
     ).toBeDisabled();
     expect(
       await screen.findAllByText(
-        "The command was accepted by the mock provider. No external action was taken.",
+        "The recovery command was recorded in this workspace. Provider execution remains disabled.",
       ),
     ).toHaveLength(2);
   });
@@ -53,7 +61,9 @@ describe("CaseWorkspace", () => {
     );
 
     expect(
-      await screen.findAllByText(/MARK OPT OUT recorded in local demo mode/i),
+      await screen.findAllByText(
+        /MARK OPT OUT recorded in this workspace\. Provider execution remains disabled\./i,
+      ),
     ).toHaveLength(2);
     expect(screen.getByText("Stopped")).toBeInTheDocument();
   });
@@ -78,7 +88,7 @@ describe("CaseWorkspace", () => {
     expect(screen.getByText("Stopped")).toBeInTheDocument();
   });
 
-  it("uses the audited approval capability and preserves the mock task fallback", () => {
+  it("uses the audited approval capability and preserves the local task fallback", () => {
     const event = {
       id: "audit-a2a",
       event_type: "A2A_AUTHORIZATION_STARTED",

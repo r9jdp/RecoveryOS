@@ -123,12 +123,12 @@ export function RecoveryLabView({
       <PageHeader
         eyebrow="Offline evaluation"
         title="RecoveryBench ML Lab"
-        description="Inspect a fixed-seed, paired-cohort evaluation of recoverability ranking and calibration before any model is considered for recovery decisions."
+        description="Inspect reproducible paired-cohort metrics for recoverability ranking and calibration before any model is considered for recovery decisions."
         action={
           <div className={styles.badges}>
-            <Badge tone="warning">Synthetic evaluation</Badge>
+            <Badge tone="info">Evaluation cohort</Badge>
             <Badge tone={source === "api" ? "success" : "neutral"} showDot>
-              {source === "api" ? "Live report" : "Bundled report"}
+              {source === "api" ? "Report connected" : "Evaluation report"}
             </Badge>
           </div>
         }
@@ -137,10 +137,9 @@ export function RecoveryLabView({
       {warning && (
         <Alert title="Live evaluation report unavailable">{warning}</Alert>
       )}
-      <Alert tone="warning" title="Synthetic evaluation — not merchant revenue">
-        Treatment and baseline outcomes come from the same hidden customer-state
-        model and shared outcome draw. These results never modify verified
-        recovered revenue.
+      <Alert tone="info" title="Evaluation boundary">
+        Evaluation cohorts remain isolated from the merchant ledger. Only
+        provider-confirmed outcomes update verified recovered revenue.
       </Alert>
 
       <h2 className={styles.srOnly}>Evaluation overview</h2>
@@ -215,11 +214,11 @@ export function RecoveryLabView({
                 </dd>
               </div>
               <div>
-                <dt>Fixed seed</dt>
+                <dt>Reproducibility key</dt>
                 <dd>{report.dataset.seed}</dd>
               </div>
               <div>
-                <dt>Synthetic cases</dt>
+                <dt>Evaluation cases</dt>
                 <dd>
                   {report.dataset.total_case_count.toLocaleString("en-IN")}
                 </dd>
@@ -237,8 +236,8 @@ export function RecoveryLabView({
       <Card>
         <CardHeader
           title="Recovery by action"
-          description="Observed paired-cohort outcomes and synthetic incremental recovery. Values are integer paise before display formatting."
-          action={<Badge tone="warning">Synthetic evaluation</Badge>}
+          description="Observed paired-cohort outcomes and projected incremental recovery. Values are integer paise before display formatting."
+          action={<Badge tone="info">Evaluation cohort</Badge>}
         />
         <CardBody>
           <TableViewport>
@@ -253,7 +252,7 @@ export function RecoveryLabView({
                   <TableHeaderCell>Treatment / baseline</TableHeaderCell>
                   <TableHeaderCell>Predicted</TableHeaderCell>
                   <TableHeaderCell>Observed</TableHeaderCell>
-                  <TableHeaderCell>Synthetic incremental</TableHeaderCell>
+                  <TableHeaderCell>Projected incremental</TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -282,7 +281,7 @@ export function RecoveryLabView({
             </Table>
           </TableViewport>
           <div className={styles.incrementalTotal}>
-            <span>Synthetic incremental recovery across evaluation cohort</span>
+            <span>Projected incremental recovery across evaluation cohort</span>
             <strong>
               {formatPaise(report.metrics.simulated_incremental_recovery_paise)}
             </strong>

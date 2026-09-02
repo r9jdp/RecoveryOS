@@ -55,7 +55,7 @@ export function CardUpdateCheckout({
       subscription_card_change: true,
       name: "RecoveryOS merchant checkout",
       description: "Update the card used for this subscription",
-      theme: { color: "#305EFF" },
+      theme: { color: "#1748FF" },
       handler: () => {
         // The browser response is deliberately not used to close the case.
         // RecoveryOS waits for a verified webhook and authoritative fetch.
@@ -79,15 +79,25 @@ export function CardUpdateCheckout({
       />
       <section className={styles.shell} aria-labelledby="card-update-title">
         <header className={styles.header}>
-          <Link href="/login" aria-label="RecoveryOS demo login">
-            <Brand />
+          <Link
+            className={styles.brandLink}
+            href="/login"
+            aria-label="RecoveryOS operator login"
+          >
+            <Brand variant="ledger" aria-hidden="true" />
           </Link>
-          <TestModeBadge />
+          <TestModeBadge className={styles.statusTag} />
         </header>
 
         <div className={styles.content}>
-          <p className={styles.eyebrow}>Secure subscription recovery</p>
-          <h1 id="card-update-title">Update the card for this subscription</h1>
+          <div className={styles.documentMeta}>
+            <span>Surface / Card update</span>
+            <span>Provider / Razorpay</span>
+          </div>
+          <p className={styles.eyebrow}>Secure subscription recovery / 02</p>
+          <h1 id="card-update-title">
+            Update the card for this <em>subscription.</em>
+          </h1>
           <p className={styles.description}>
             Razorpay Checkout collects the new card details. RecoveryOS never
             receives or stores the card number.
@@ -105,22 +115,35 @@ export function CardUpdateCheckout({
           </dl>
 
           {invalidRequest ? (
-            <Alert tone="danger" title="This card-update link is incomplete">
+            <Alert
+              className={styles.notice}
+              tone="danger"
+              title="This card-update link is incomplete"
+            >
               Return to the merchant and request a new recovery link.
             </Alert>
           ) : status === "submitted" ? (
-            <Alert tone="success" title="Card update submitted">
+            <Alert
+              className={styles.notice}
+              tone="success"
+              title="Card update submitted"
+            >
               RecoveryOS is waiting for Razorpay&apos;s signed webhook and an
               authoritative provider check before it changes the case status.
             </Alert>
           ) : status === "failed" ? (
-            <Alert tone="danger" title="Checkout could not be completed">
+            <Alert
+              className={styles.notice}
+              tone="danger"
+              title="Checkout could not be completed"
+            >
               No recovery status was changed. You can safely try opening
               Checkout again.
             </Alert>
           ) : null}
 
           <Button
+            className={styles.checkoutButton}
             fullWidth
             size="lg"
             onClick={openCheckout}
@@ -131,8 +154,8 @@ export function CardUpdateCheckout({
           </Button>
 
           <p className={styles.disclaimer}>
-            Independent test-mode demonstration. RecoveryOS is not affiliated
-            with Razorpay. A browser success message is not proof of payment.
+            Razorpay test mode. RecoveryOS is not affiliated with Razorpay. A
+            browser success message is not proof of payment.
           </p>
         </div>
       </section>

@@ -33,6 +33,6 @@ export function requireRecoveryApiOrigin(resource: string): string {
   const origin = recoveryApiOrigin();
   if (origin) return origin;
   throw new Error(
-    `${resource} requires NEXT_PUBLIC_API_BASE_URL. Demo fixtures are available only when NEXT_PUBLIC_DATA_MODE=demo.`,
+    `${resource} requires NEXT_PUBLIC_API_BASE_URL in connected mode. A preview workspace is available only when NEXT_PUBLIC_DATA_MODE=demo.`,
   );
 }

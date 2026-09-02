@@ -1,11 +1,9 @@
+import styles from "@/components/features/a2a/a2a.module.css";
+
 export default function CustomerApprovalRouteLoading() {
   return (
-    <main
-      aria-busy="true"
-      aria-live="polite"
-      style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}
-    >
-      Loading secure authorization…
+    <main className={styles.routeLoading} aria-busy="true" aria-live="polite">
+      Loading secure authorization / verifying scope…
     </main>
   );
 }

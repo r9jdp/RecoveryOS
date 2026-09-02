@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 
+import { Brand } from "@/components/layout";
 import { Alert, Badge, Button } from "@/components/ui";
 import {
   interpretCustomerLanguage,
@@ -204,12 +205,9 @@ export function CustomerApproval({
     <main className={styles.canvas}>
       <header className={styles.header}>
         <Link className={styles.brand} href="/" aria-label="RecoveryOS home">
-          <span className={styles.brandMark} aria-hidden="true">
-            R
-          </span>
-          <span>RecoveryOS</span>
+          <Brand variant="ledger" aria-hidden="true" />
         </Link>
-        <Badge tone="info" showDot>
+        <Badge className={styles.statusTag} tone="info" showDot>
           Secure A2A approval
         </Badge>
       </header>
@@ -245,154 +243,174 @@ export function CustomerApproval({
               </Alert>
             )}
 
-            <section
-              className={styles.summaryCard}
-              aria-labelledby="request-details"
-            >
-              <div className={styles.sectionHeading}>
-                <h2 id="request-details">Payment request</h2>
-                <p>Confirm the exact amount, merchant, and payment surface.</p>
-              </div>
-              <dl className={styles.summary}>
-                <div className={styles.amountRow}>
-                  <dt>Exact amount</dt>
-                  <dd>
-                    {formatPaise(summary.exact_amount_paise, summary.currency)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Merchant</dt>
-                  <dd>{summary.merchant_display_name}</dd>
-                </div>
-                <div>
-                  <dt>Plan</dt>
-                  <dd>{summary.plan_name}</dd>
-                </div>
-                <div>
-                  <dt>What happened</dt>
-                  <dd>{summary.failure_explanation}</dd>
-                </div>
-                <div>
-                  <dt>Payment surface</dt>
-                  <dd>{surfaceLabel(summary.payment_surface_type)}</dd>
-                </div>
-                <div>
-                  <dt>Reference</dt>
-                  <dd className={styles.mono}>
-                    {summary.payment_surface_reference}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Authorization expires</dt>
-                  <dd>{formatExpiry(summary.expires_at)}</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section className={styles.safetyPanel}>
-              <h2>What this approval means</h2>
-              <ul>
-                <li>
-                  It is valid only for the amount and surface shown above.
-                </li>
-                <li>
-                  The authorization is signed and can be consumed only once.
-                </li>
-                <li>
-                  This customer agent never executes a payment. RecoveryOS
-                  verifies the mandate before a provider activity may open the
-                  exact surface.
-                </li>
-                <li>
-                  A browser callback is never accepted as proof of payment.
-                </li>
-              </ul>
-            </section>
-
-            <section
-              className={styles.agentPanel}
-              aria-labelledby="customer-agent-heading"
-            >
-              <div className={styles.sectionHeading}>
-                <h2 id="customer-agent-heading">Talk to the customer agent</h2>
-                <p>
-                  Describe what you want in your own words. The model explains
-                  its interpretation, but it cannot approve or reject for you.
-                </p>
-              </div>
-              <textarea
-                aria-label="Message for the customer agent"
-                value={customerMessage}
-                onChange={(event) => setCustomerMessage(event.target.value)}
-                placeholder="For example: I understand this request and want to continue."
-                rows={3}
-              />
-              <Button
-                variant="secondary"
-                disabled={!customerMessage.trim()}
-                loading={interpreting}
-                onClick={() => void interpret()}
+            <div className={styles.reviewGrid}>
+              <section
+                className={styles.summaryCard}
+                aria-labelledby="request-details"
               >
-                Ask customer agent
-              </Button>
-              {interpretation && (
-                <Alert
-                  tone={
-                    interpretation.intent === "APPROVE"
-                      ? "success"
-                      : interpretation.intent === "REJECT"
-                        ? "warning"
-                        : "info"
-                  }
-                  title={`Understood as ${interpretation.intent.replaceAll("_", " ").toLowerCase()}`}
-                >
-                  {interpretation.explanation} Confidence:{" "}
-                  {(interpretation.confidence_basis_points / 100).toFixed(0)}%.
-                  You must still use the explicit controls below.
-                </Alert>
-              )}
-            </section>
+                <div className={styles.sectionHeading}>
+                  <h2 id="request-details">Payment request</h2>
+                  <p>
+                    Confirm the exact amount, merchant, and payment surface.
+                  </p>
+                </div>
+                <dl className={styles.summary}>
+                  <div className={styles.amountRow}>
+                    <dt>Exact amount</dt>
+                    <dd>
+                      {formatPaise(
+                        summary.exact_amount_paise,
+                        summary.currency,
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Merchant</dt>
+                    <dd>{summary.merchant_display_name}</dd>
+                  </div>
+                  <div>
+                    <dt>Plan</dt>
+                    <dd>{summary.plan_name}</dd>
+                  </div>
+                  <div>
+                    <dt>What happened</dt>
+                    <dd>{summary.failure_explanation}</dd>
+                  </div>
+                  <div>
+                    <dt>Payment surface</dt>
+                    <dd>{surfaceLabel(summary.payment_surface_type)}</dd>
+                  </div>
+                  <div>
+                    <dt>Reference</dt>
+                    <dd className={styles.mono}>
+                      {summary.payment_surface_reference}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Authorization expires</dt>
+                    <dd>{formatExpiry(summary.expires_at)}</dd>
+                  </div>
+                </dl>
+              </section>
 
-            <section
-              className={styles.decisionPanel}
-              aria-labelledby="decision-heading"
-            >
-              <div className={styles.sectionHeading}>
-                <h2 id="decision-heading">Your decision</h2>
-                <p>No charge happens on this page.</p>
-              </div>
-              <label className={styles.confirmation} htmlFor={confirmationId}>
-                <input
-                  id={confirmationId}
-                  type="checkbox"
-                  checked={confirmed}
-                  onChange={(event) => setConfirmed(event.target.checked)}
-                />
-                <span>
-                  I approve this exact{" "}
-                  {formatPaise(summary.exact_amount_paise, summary.currency)}
-                  {" payment surface."}
-                </span>
-              </label>
+              <div className={styles.reviewControls}>
+                <section className={styles.safetyPanel}>
+                  <h2>What this approval means</h2>
+                  <ul>
+                    <li>
+                      It is valid only for the amount and surface shown above.
+                    </li>
+                    <li>
+                      The authorization is signed and can be consumed only once.
+                    </li>
+                    <li>
+                      This customer agent never executes a payment. RecoveryOS
+                      verifies the mandate before a provider activity may open
+                      the exact surface.
+                    </li>
+                    <li>
+                      A browser callback is never accepted as proof of payment.
+                    </li>
+                  </ul>
+                </section>
 
-              <div className={styles.actions}>
-                <Button
-                  variant="secondary"
-                  disabled={submitting !== null}
-                  loading={submitting === "REJECT"}
-                  onClick={() => void decide("REJECT")}
+                <section
+                  className={styles.agentPanel}
+                  aria-labelledby="customer-agent-heading"
                 >
-                  Decline
-                </Button>
-                <Button
-                  disabled={!confirmed || submitting !== null}
-                  loading={submitting === "APPROVE"}
-                  onClick={() => void decide("APPROVE")}
+                  <div className={styles.sectionHeading}>
+                    <h2 id="customer-agent-heading">
+                      Talk to the customer agent
+                    </h2>
+                    <p>
+                      Describe what you want in your own words. The model
+                      explains its interpretation, but it cannot approve or
+                      reject for you.
+                    </p>
+                  </div>
+                  <textarea
+                    aria-label="Message for the customer agent"
+                    value={customerMessage}
+                    onChange={(event) => setCustomerMessage(event.target.value)}
+                    placeholder="For example: I understand this request and want to continue."
+                    rows={3}
+                  />
+                  <Button
+                    variant="secondary"
+                    disabled={!customerMessage.trim()}
+                    loading={interpreting}
+                    onClick={() => void interpret()}
+                  >
+                    Ask customer agent
+                  </Button>
+                  {interpretation && (
+                    <Alert
+                      tone={
+                        interpretation.intent === "APPROVE"
+                          ? "success"
+                          : interpretation.intent === "REJECT"
+                            ? "warning"
+                            : "info"
+                      }
+                      title={`Understood as ${interpretation.intent.replaceAll("_", " ").toLowerCase()}`}
+                    >
+                      {interpretation.explanation} Confidence:{" "}
+                      {(interpretation.confidence_basis_points / 100).toFixed(
+                        0,
+                      )}
+                      %. You must still use the explicit controls below.
+                    </Alert>
+                  )}
+                </section>
+
+                <section
+                  className={styles.decisionPanel}
+                  aria-labelledby="decision-heading"
                 >
-                  Approve exact surface
-                </Button>
+                  <div className={styles.sectionHeading}>
+                    <h2 id="decision-heading">Your decision</h2>
+                    <p>No charge happens on this page.</p>
+                  </div>
+                  <label
+                    className={styles.confirmation}
+                    htmlFor={confirmationId}
+                  >
+                    <input
+                      id={confirmationId}
+                      type="checkbox"
+                      checked={confirmed}
+                      onChange={(event) => setConfirmed(event.target.checked)}
+                    />
+                    <span>
+                      I approve this exact{" "}
+                      {formatPaise(
+                        summary.exact_amount_paise,
+                        summary.currency,
+                      )}
+                      {" payment surface."}
+                    </span>
+                  </label>
+
+                  <div className={styles.actions}>
+                    <Button
+                      variant="secondary"
+                      disabled={submitting !== null}
+                      loading={submitting === "REJECT"}
+                      onClick={() => void decide("REJECT")}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      disabled={!confirmed || submitting !== null}
+                      loading={submitting === "APPROVE"}
+                      onClick={() => void decide("APPROVE")}
+                    >
+                      Approve exact surface
+                    </Button>
+                  </div>
+                </section>
               </div>
-            </section>
+            </div>
           </article>
         )}
         {viewState === "approved" && (
@@ -410,7 +428,7 @@ export function CustomerApproval({
       </section>
 
       <footer className={styles.footer}>
-        Independent RecoveryOS demo · No Razorpay affiliation implied
+        Independent RecoveryOS project · No Razorpay affiliation implied
       </footer>
     </main>
   );
@@ -433,7 +451,7 @@ function DecisionState({ title, message }: { title: string; message: string }) {
       </span>
       <h1 id="approval-title">{title}</h1>
       <p>{message}</p>
-      <Badge tone="success" showDot>
+      <Badge className={styles.statusTag} tone="success" showDot>
         Decision saved
       </Badge>
     </div>

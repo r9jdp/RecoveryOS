@@ -103,17 +103,17 @@ const timelineItems = [
 ];
 
 const swatches = [
-  ["Brand blue", "#305EFF", "white"],
-  ["Link blue", "#2950DA", "white"],
-  ["Primary ink", "#192839", "white"],
-  ["Secondary ink", "#132644", "white"],
-  ["Muted text", "#40566D", "white"],
-  ["Soft surface", "#F1F5FA", "#192839"],
-  ["Border", "#DFE3E9", "#192839"],
-  ["Success", "#009E5C", "white"],
-  ["Danger", "#D52B1E", "white"],
-  ["Dark section", "#032A3E", "white"],
-  ["Pale blue", "#D0E0FF", "#192839"],
+  ["Cobalt action", "#1748FF", "white"],
+  ["Cobalt link", "#143FD9", "white"],
+  ["Ledger ink", "#111318", "white"],
+  ["Secondary ink", "#252A35", "white"],
+  ["Muted text", "#596174", "white"],
+  ["Warm paper", "#FAFAF7", "#111318"],
+  ["Soft surface", "#F1F3F7", "#111318"],
+  ["Ledger rule", "#D8DEEA", "#111318"],
+  ["Verified", "#167052", "white"],
+  ["Attention", "#8A5A00", "white"],
+  ["Destructive", "#BD302D", "white"],
 ];
 
 export default function DesignSystemPage() {
@@ -128,7 +128,7 @@ export default function DesignSystemPage() {
       <PageHeader
         eyebrow="Phase 0 · Visual foundation"
         title="RecoveryOS design system"
-        description="An original revenue-recovery interface with the clarity, density, blue-led palette, and restrained motion of Razorpay’s public product experience."
+        description="A ruled audit-ledger interface: warm paper, exact cobalt actions, editorial headings, technical metadata, and restrained motion."
         action={
           <Button onClick={() => setDrawerOpen(true)}>
             Open policy drawer
@@ -203,7 +203,7 @@ export default function DesignSystemPage() {
           <div className={styles.previewRow}>
             <TestModeBadge />
             <Badge tone="neutral" showDot>
-              Seeded demo data
+              Recovery evaluation
             </Badge>
             <Badge tone="info" showDot>
               Waiting

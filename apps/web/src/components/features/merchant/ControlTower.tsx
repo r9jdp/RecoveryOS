@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ArrowUpRight,
-  Info,
-  RefreshCw,
-  Search,
-  TriangleAlert,
-} from "lucide-react";
+import { ArrowUpRight, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 
@@ -49,7 +43,6 @@ import { cn } from "@/lib/utils";
 import {
   formatBasisPoints,
   formatDateTime,
-  formatEvidenceKind,
   formatPaise,
   humanize,
 } from "@/lib/recovery-format";
@@ -167,7 +160,7 @@ function MetricCard({
   tone?: SemanticTone;
 }) {
   return (
-    <Card size="sm" aria-label={label}>
+    <Card className="border-0" size="sm" aria-label={label}>
       <CardHeader>
         <CardDescription>{label}</CardDescription>
       </CardHeader>
@@ -206,9 +199,9 @@ export function DashboardLoading() {
           <Skeleton className="h-6 w-32" />
           <Skeleton className="h-4 w-72 max-w-full" />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }, (_, index) => (
-            <Card size="sm" key={index}>
+            <Card className="border-0" size="sm" key={index}>
               <CardHeader>
                 <Skeleton className="h-4 w-24" />
               </CardHeader>
@@ -221,11 +214,14 @@ export function DashboardLoading() {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-px border border-border bg-border lg:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 3 }, (_, index) => (
           <Card
             key={index}
-            className={cn(index === 2 && "lg:col-span-2 xl:col-span-1")}
+            className={cn(
+              "border-0",
+              index === 2 && "lg:col-span-2 xl:col-span-1",
+            )}
           >
             <CardHeader>
               <Skeleton className="h-5 w-40" />
@@ -299,10 +295,10 @@ function ControlTowerContent({
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-medium text-muted-foreground">
+          <p className="font-mono text-xs font-medium tracking-[0.1em] text-muted-foreground uppercase">
             Live recovery operations
           </p>
-          <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
+          <h1 className="font-heading text-3xl leading-tight font-normal tracking-[-0.025em] sm:text-4xl">
             Control Tower
           </h1>
           <p className="max-w-2xl text-base leading-6 text-muted-foreground">
@@ -311,14 +307,17 @@ function ControlTowerContent({
           </p>
         </div>
         <Badge variant={source === "api" ? "success" : "info"}>
-          {source === "api" ? "API connected" : "Local demo"}
+          {source === "api" ? "Provider data connected" : "Recovery workspace"}
         </Badge>
       </header>
 
       <section className="flex flex-col gap-3" aria-labelledby="overview-title">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="overview-title" className="text-lg font-medium">
+            <h2
+              id="overview-title"
+              className="font-heading text-xl font-normal"
+            >
               At a glance
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -333,12 +332,15 @@ function ControlTowerContent({
                   : "info"
               }
             >
-              {formatEvidenceKind(fixture.evidence_kind)}
+              {source === "api" &&
+              fixture.evidence_kind === "RAZORPAY_TEST_VERIFIED"
+                ? "Razorpay verified"
+                : "Workflow evidence"}
             </Badge>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Revenue at risk"
             value={formatPaise(fixture.metrics.revenue_at_risk_paise)}
@@ -358,7 +360,7 @@ function ControlTowerContent({
             value={formatBasisPoints(
               fixture.metrics.recovery_rate_basis_points,
             )}
-            detail={`Synthetic estimate ${formatPaise(fixture.metrics.simulated_incremental_recovery_paise)}`}
+            detail={`Projected recovery value ${formatPaise(fixture.metrics.simulated_incremental_recovery_paise)}`}
             tone="info"
           />
           <MetricCard
@@ -370,8 +372,8 @@ function ControlTowerContent({
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <Card aria-labelledby="diagnosis-heading">
+      <div className="grid gap-px border border-border bg-border lg:grid-cols-2 xl:grid-cols-3">
+        <Card className="border-0" aria-labelledby="diagnosis-heading">
           <CardHeader className="border-b">
             <CardTitle id="diagnosis-heading">Diagnosis distribution</CardTitle>
             <CardDescription>
@@ -400,7 +402,7 @@ function ControlTowerContent({
                         </span>
                       </div>
                       <div
-                        className="h-1.5 overflow-hidden rounded-full bg-muted"
+                        className="h-1.5 overflow-hidden bg-muted"
                         role="progressbar"
                         aria-label={`${humanize(item.diagnosis)} cases`}
                         aria-valuemin={0}
@@ -408,7 +410,7 @@ function ControlTowerContent({
                         aria-valuenow={item.case_count}
                       >
                         <div
-                          className="h-full rounded-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
+                          className="h-full bg-primary transition-[width] duration-200 motion-reduce:transition-none"
                           style={{ width: `${progress}%` }}
                         />
                       </div>
@@ -424,7 +426,7 @@ function ControlTowerContent({
           </CardContent>
         </Card>
 
-        <Card aria-labelledby="channels-heading">
+        <Card className="border-0" aria-labelledby="channels-heading">
           <CardHeader className="border-b">
             <CardTitle id="channels-heading">Recovery channels</CardTitle>
             <CardDescription>
@@ -469,7 +471,7 @@ function ControlTowerContent({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2 xl:col-span-1" id="audit">
+        <Card className="border-0 lg:col-span-2 xl:col-span-1" id="audit">
           <CardHeader className="border-b">
             <CardTitle>Recent audit events</CardTitle>
             <CardDescription>
@@ -499,7 +501,7 @@ function ControlTowerContent({
                             {humanize(event.event_type)}
                           </p>
                         </div>
-                        <time className="shrink-0 text-sm text-muted-foreground">
+                        <time className="shrink-0 font-mono text-xs text-muted-foreground">
                           {formatDateTime(event.occurred_at)}
                         </time>
                       </div>
@@ -695,7 +697,10 @@ function ControlTowerContent({
             Showing {filteredCases.length} of {fixture.cases.length} cases
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatEvidenceKind(fixture.evidence_kind)}
+            {source === "api" &&
+            fixture.evidence_kind === "RAZORPAY_TEST_VERIFIED"
+              ? "Razorpay verified"
+              : "Workflow evidence"}
           </p>
         </CardFooter>
       </Card>
@@ -741,15 +746,6 @@ export function ControlTower() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {resource.warning ? (
-        <Alert variant="info">
-          <Info />
-          <AlertTitle>Demo data active</AlertTitle>
-          <AlertDescription>{resource.warning}</AlertDescription>
-        </Alert>
-      ) : null}
-      <ControlTowerContent fixture={resource.data} source={resource.source} />
-    </div>
+    <ControlTowerContent fixture={resource.data} source={resource.source} />
   );
 }

@@ -316,7 +316,9 @@ describe("Recovery API live composition", () => {
                     recovery_probability: 0.61,
                     expected_recovered_paise: 152500,
                     expected_utility_paise: 151000,
-                    explanation: ["Calibrated CatBoost recoverability estimate."],
+                    explanation: [
+                      "Calibrated CatBoost recoverability estimate.",
+                    ],
                     model: {
                       name: "recoverybench-catboost",
                       version: "recoverybench.v1",
@@ -360,8 +362,12 @@ describe("Recovery API live composition", () => {
 
     expect(result.source).toBe("api");
     expect(result.data.customer.display_name).toBe("Live Customer");
-    expect(result.data.recommendation.predicted_recovery_probability).toBe(0.61);
-    expect(result.data.recommendation.model_name).toBe("recoverybench-catboost");
+    expect(result.data.recommendation.predicted_recovery_probability).toBe(
+      0.61,
+    );
+    expect(result.data.recommendation.model_name).toBe(
+      "recoverybench-catboost",
+    );
     expect(result.data.recommendation.scoring_mode).toBe(
       "CHECKSUM_VERIFIED_MODEL",
     );

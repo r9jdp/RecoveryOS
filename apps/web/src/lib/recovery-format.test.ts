@@ -19,7 +19,7 @@ describe("recovery formatting", () => {
     expect(humanize("SUBSCRIPTION_CARD_UPDATE")).toBe(
       "Subscription Card Update",
     );
-    expect(formatEvidenceKind("SIMULATED")).toBe("Seeded demo data");
+    expect(formatEvidenceKind("SIMULATED")).toBe("Recovery evaluation");
     expect(formatEvidenceKind("SYSTEM_DERIVED")).toBe(
       "RecoveryOS system decision",
     );

@@ -128,10 +128,10 @@ export function RazorpaySetupPanel({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
       <header className="flex flex-col gap-2 border-b border-border pb-5">
-        <p className="text-sm font-medium tracking-wide text-info uppercase">
+        <p className="font-mono text-xs font-medium tracking-[0.1em] text-info uppercase">
           Provider setup
         </p>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
+        <h1 className="font-heading text-3xl font-normal tracking-[-0.025em] sm:text-4xl">
           Connect a Razorpay Test subscription
         </h1>
         <p className="max-w-3xl text-base leading-6 text-muted-foreground">
@@ -154,8 +154,8 @@ export function RazorpaySetupPanel({
         <CardHeader>
           <CardTitle>Subscription identity</CardTitle>
           <CardDescription>
-            Add the customer reference used by your product so the real
-            Razorpay subscription can be correlated with RecoveryOS records.
+            Add the customer reference used by your product so the real Razorpay
+            subscription can be correlated with RecoveryOS records.
           </CardDescription>
           <CardAction>
             <Badge variant="info">Razorpay Test</Badge>
@@ -255,7 +255,6 @@ export function RazorpaySetupPanel({
                     required
                   />
                 </Field>
-
               </FieldGroup>
             </FieldSet>
 
@@ -288,17 +287,17 @@ export function RazorpaySetupPanel({
           <Alert variant="success">
             <CheckCircle2 />
             <AlertTitle id="razorpay-sync-result">
-              Real Razorpay Test data connected
+              Razorpay subscription connected
             </AlertTitle>
             <AlertDescription>
               RecoveryOS persisted the provider identifiers returned by the
-              hosted API. No fixture IDs or browser-generated payment links are
-              shown below.
+              hosted API. Plan, subscription, and customer records are ready for
+              recovery operations.
             </AlertDescription>
           </Alert>
 
-          <div className="grid items-stretch gap-4 lg:grid-cols-3">
-            <Card size="sm">
+          <div className="grid items-stretch gap-px border border-border bg-border lg:grid-cols-3">
+            <Card className="border-0" size="sm">
               <CardHeader>
                 <CardTitle>Plan</CardTitle>
                 <CardDescription>
@@ -311,13 +310,15 @@ export function RazorpaySetupPanel({
               <CardContent>
                 <dl className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">Name</dt>
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
+                      Name
+                    </dt>
                     <dd className="font-medium">
                       {result.subscription.plan_name}
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       Razorpay plan ID
                     </dt>
                     <dd className="break-all font-mono text-sm">
@@ -325,7 +326,9 @@ export function RazorpaySetupPanel({
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">Amount</dt>
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
+                      Amount
+                    </dt>
                     <dd className="font-medium tabular-nums">
                       {formatPaise(result.subscription.amount_paise)} ·{" "}
                       {result.subscription.currency}
@@ -335,7 +338,7 @@ export function RazorpaySetupPanel({
               </CardContent>
             </Card>
 
-            <Card size="sm">
+            <Card className="border-0" size="sm">
               <CardHeader>
                 <CardTitle>Subscription</CardTitle>
                 <CardDescription>
@@ -350,7 +353,7 @@ export function RazorpaySetupPanel({
               <CardContent>
                 <dl className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       Razorpay subscription ID
                     </dt>
                     <dd className="break-all font-mono text-sm">
@@ -358,7 +361,7 @@ export function RazorpaySetupPanel({
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       RecoveryOS record ID
                     </dt>
                     <dd className="break-all font-mono text-sm">
@@ -375,7 +378,7 @@ export function RazorpaySetupPanel({
               </CardFooter>
             </Card>
 
-            <Card size="sm">
+            <Card className="border-0" size="sm">
               <CardHeader>
                 <CardTitle>Local correlation</CardTitle>
                 <CardDescription>
@@ -392,7 +395,7 @@ export function RazorpaySetupPanel({
               <CardContent>
                 <dl className="flex flex-col gap-3">
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       Merchant ID
                     </dt>
                     <dd className="break-all font-mono text-sm">
@@ -400,7 +403,7 @@ export function RazorpaySetupPanel({
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       Customer reference
                     </dt>
                     <dd className="break-all font-mono text-sm">
@@ -408,7 +411,7 @@ export function RazorpaySetupPanel({
                     </dd>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <dt className="text-sm text-muted-foreground">
+                    <dt className="font-mono text-xs tracking-[0.06em] text-muted-foreground uppercase">
                       Customer record ID
                     </dt>
                     <dd className="break-all font-mono text-sm">

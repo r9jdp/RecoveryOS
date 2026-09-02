@@ -52,15 +52,15 @@ const demoSteps = [
   {
     id: "voice",
     href: "/voice",
-    label: "Rehearse safe outreach",
-    detail: "Use browser rehearsal to show opt-out and intent precedence.",
+    label: "Review safe outreach",
+    detail: "Inspect how opt-out and intent precedence govern every contact.",
     matches: (pathname: string) => pathname === "/voice",
   },
   {
     id: "lab",
     href: "/lab",
     label: "Close with evidence",
-    detail: "Explain the fixed-seed evaluation and its metric safeguards.",
+    detail: "Review the recovery evaluation and its metric safeguards.",
     matches: (pathname: string) => pathname === "/lab",
   },
 ] as const;
@@ -119,13 +119,13 @@ export function DemoGuide() {
           <Button
             variant="outline"
             size="sm"
-            aria-label="Open the RecoveryOS product tour"
+            aria-label={`Open the RecoveryOS product tour, ${visited.length} of ${demoSteps.length} pages visited`}
           />
         }
       >
         <MapIcon data-icon="inline-start" />
-        Product tour
-        <Badge variant="info">
+        <span className="hidden sm:inline">Product tour</span>
+        <Badge className="hidden sm:inline-flex" variant="info">
           {visited.length}/{demoSteps.length} pages
         </Badge>
       </SheetTrigger>
@@ -215,7 +215,7 @@ export function DemoGuide() {
             <span className="text-xs text-muted-foreground">
               {nextStep
                 ? `Next: ${nextStep.label}`
-                : "Ready to reset and replay."}
+                : "Ready to start the tour again."}
             </span>
           </div>
           <Button variant="outline" onClick={resetGuide}>

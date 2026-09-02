@@ -1,6 +1,35 @@
 .page {
+  --ledger-heading: var(--font-newsreader, Georgia), "Times New Roman", serif;
+  --ledger-mono: var(--font-plex-mono, "IBM Plex Mono"), Consolas, monospace;
+
   display: grid;
   gap: var(--ros-space-5);
+}
+
+.page h1,
+.page h2,
+.page h3 {
+  font-family: var(--ledger-heading);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.page > header > div > p:first-child,
+.badges,
+.legend,
+.binLabel,
+.binCount,
+.detailList dt,
+.mono {
+  font-family: var(--ledger-mono);
+}
+
+.page > header > div > p:first-child,
+.badges,
+.legend,
+.detailList dt {
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .srOnly {
@@ -28,10 +57,23 @@
   justify-content: flex-end;
 }
 
+.badges > span {
+  border-radius: 0;
+}
+
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--ros-space-4);
+  gap: 0;
+  border-top: 1px solid var(--ros-border);
+  border-left: 1px solid var(--ros-border);
+}
+
+.metricGrid > section {
+  border-top: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .metricCard {
@@ -46,7 +88,18 @@
 .twoColumn {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.85fr);
-  gap: var(--ros-space-5);
+  gap: 0;
+  border: 1px solid var(--ros-border);
+}
+
+.twoColumn > section {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.twoColumn > section + section {
+  border-left: 1px solid var(--ros-border);
 }
 
 .calibration {
@@ -64,7 +117,7 @@
 .observedKey {
   width: 0.75rem;
   height: 0.25rem;
-  border-radius: var(--ros-radius-pill);
+  border-radius: 0;
 }
 
 .predictedKey,
@@ -106,7 +159,7 @@
   display: block;
   overflow: hidden;
   border: 1px solid var(--ros-border);
-  border-radius: var(--ros-radius-xs);
+  border-radius: 0;
   background: var(--ros-surface-subtle);
 }
 
@@ -166,7 +219,8 @@
   align-items: center;
   gap: var(--ros-space-4);
   border: 1px solid var(--ros-border);
-  border-radius: var(--ros-radius-sm);
+  border-left: 3px solid var(--ros-brand);
+  border-radius: 0;
   color: var(--ros-link);
   background: var(--ros-info-soft);
   font-size: var(--ros-text-md);
@@ -184,6 +238,11 @@
   }
   .twoColumn {
     grid-template-columns: 1fr;
+  }
+
+  .twoColumn > section + section {
+    border-top: 1px solid var(--ros-border);
+    border-left: 0;
   }
 }
 

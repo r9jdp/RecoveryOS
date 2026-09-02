@@ -6,19 +6,60 @@
 }
 
 .page {
+  --ledger-heading: var(--font-newsreader, Georgia), "Times New Roman", serif;
+  --ledger-mono: var(--font-plex-mono, "IBM Plex Mono"), Consolas, monospace;
+
   gap: var(--ros-space-5);
+}
+
+.page h1,
+.page h2,
+.page h3 {
+  font-family: var(--ledger-heading);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.page > header > div > p:first-child,
+.eyebrow,
+.scenarioContent small,
+.selectedContract > span,
+.deliveryHeader p,
+.deliveryDetails dt,
+.deliveryDetails dd,
+.stateNote {
+  font-family: var(--ledger-mono);
+}
+
+.page > header > div > p:first-child,
+.eyebrow,
+.selectedContract > span,
+.deliveryDetails dt,
+.stateNote {
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .workspace {
   display: grid;
   grid-template-columns: minmax(20rem, 0.72fr) minmax(0, 1.28fr);
   align-items: start;
-  gap: var(--ros-space-5);
+  gap: 0;
+  border: 1px solid var(--ros-border);
 }
 
 .controlsCard {
   position: sticky;
   top: calc(var(--ros-header-height) + var(--ros-space-3));
+  border: 0;
+  border-right: 1px solid var(--ros-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.output {
+  min-width: 0;
+  padding: var(--ros-space-5);
 }
 
 .form,
@@ -55,8 +96,10 @@
 
 .scenarioGrid {
   display: grid;
-  gap: var(--ros-space-2);
+  gap: 0;
   margin-top: var(--ros-space-3);
+  border-top: 1px solid var(--ros-border);
+  border-left: 1px solid var(--ros-border);
 }
 
 .scenarioOption {
@@ -79,7 +122,9 @@
   gap: var(--ros-space-1);
   padding: var(--ros-space-3);
   border: 1px solid var(--ros-border);
-  border-radius: var(--ros-radius-sm);
+  border-top: 0;
+  border-left: 0;
+  border-radius: 0;
   color: var(--ros-text-muted);
   background: var(--ros-surface-subtle);
   transition:
@@ -120,8 +165,8 @@
 }
 
 .scenarioOption input:focus-visible + .scenarioContent {
-  outline: none;
-  box-shadow: var(--ros-shadow-focus);
+  outline: 2px solid var(--ros-brand);
+  outline-offset: -2px;
 }
 
 .inputGrid,
@@ -133,6 +178,16 @@
 
 .metricGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--ros-border);
+  border-left: 1px solid var(--ros-border);
+}
+
+.metricGrid > section {
+  border-top: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .metricCard {
@@ -149,6 +204,9 @@
   gap: var(--ros-space-1);
   padding: var(--ros-space-3);
   border-left: 3px solid var(--ros-brand);
+  border-top: 1px solid var(--ros-border);
+  border-right: 1px solid var(--ros-border);
+  border-bottom: 1px solid var(--ros-border);
   color: var(--ros-text-muted);
   background: var(--ros-brand-soft);
   font-size: var(--ros-text-sm);
@@ -224,7 +282,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--ros-brand);
-  border-radius: 50%;
+  border-radius: 0;
   color: var(--ros-bg-primary);
   background: var(--ros-brand);
   font: 800 var(--ros-text-xs) / 1 var(--ros-font-mono);
@@ -234,7 +292,7 @@
   min-width: 0;
   padding: var(--ros-space-4);
   border: 1px solid var(--ros-border);
-  border-radius: var(--ros-radius-sm);
+  border-radius: 0;
   background: var(--ros-surface-subtle);
 }
 
@@ -274,11 +332,11 @@
   display: block;
   width: fit-content;
   margin-top: var(--ros-space-1);
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--ros-radius-pill);
+  padding: 0.15rem 0 0.15rem 0.5rem;
+  border-left: 2px solid currentColor;
+  border-radius: 0;
   color: var(--ros-success);
-  background: var(--ros-success-soft);
-  font-family: var(--ros-font-body);
+  background: transparent;
   font-weight: 750;
 }
 
@@ -289,6 +347,8 @@
 
   .controlsCard {
     position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--ros-border);
   }
 
   .scenarioGrid {

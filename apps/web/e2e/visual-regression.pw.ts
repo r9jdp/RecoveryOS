@@ -15,7 +15,7 @@ test("public demo entry visual baseline", async ({ page }, testInfo) => {
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "From failed invoice to an auditable next action.",
+      name: "Recover the payment. Preserve the evidence.",
     }),
   ).toBeVisible();
   await prepareVisualPage(page);

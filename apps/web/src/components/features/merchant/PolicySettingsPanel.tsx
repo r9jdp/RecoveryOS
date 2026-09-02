@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   CircleAlert,
   CircleCheck,
-  Info,
   Pause,
   Play,
   Save,
@@ -149,10 +148,10 @@ export function PolicySettingsPanel({
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium tracking-wide text-info uppercase">
+          <p className="font-mono text-xs font-medium tracking-[0.1em] text-info uppercase">
             Platform safety
           </p>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="font-heading text-3xl font-normal tracking-[-0.025em] text-foreground sm:text-4xl">
             Recovery policy
           </h1>
           <p className="max-w-2xl text-base leading-6 text-muted-foreground">
@@ -182,13 +181,6 @@ export function PolicySettingsPanel({
             <AlertDescription>{notice}</AlertDescription>
           </Alert>
         )}
-        {readWarning && (
-          <Alert variant="warning">
-            <Info />
-            <AlertTitle>Fallback policy data</AlertTitle>
-            <AlertDescription>{readWarning}</AlertDescription>
-          </Alert>
-        )}
         {error && (
           <Alert variant="destructive">
             <CircleAlert />
@@ -211,8 +203,8 @@ export function PolicySettingsPanel({
       </div>
 
       <h2 className="sr-only">Policy controls</h2>
-      <div className="grid items-start gap-4 xl:grid-cols-2">
-        <Card>
+      <div className="grid items-stretch gap-px border border-border bg-border xl:grid-cols-2">
+        <Card className="border-0">
           <CardHeader className="border-b border-border">
             <CardTitle>Contact window and limits</CardTitle>
             <CardDescription>
@@ -314,7 +306,7 @@ export function PolicySettingsPanel({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0">
           <CardHeader className="border-b border-border">
             <CardTitle>Approval rules</CardTitle>
             <CardDescription>
@@ -403,7 +395,7 @@ export function PolicySettingsPanel({
                   settings,
                   source === "api"
                     ? "Contact and approval safeguards were saved."
-                    : "Contact and approval safeguards were saved in local demo mode.",
+                    : "Contact and approval safeguards were saved for this workspace.",
                 )
               }
             >

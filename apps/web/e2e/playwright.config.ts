@@ -63,6 +63,7 @@ export default defineConfig({
     env: {
       CUSTOMER_AGENT_ORIGIN: `${baseURL}/__e2e-agent`,
       NEXT_PUBLIC_API_BASE_URL: `${baseURL}/__e2e-api`,
+      NEXT_PUBLIC_DATA_MODE: "demo",
       NEXT_PUBLIC_RECOVERY_API_URL: `${baseURL}/__e2e-api`,
       RECOVERYOS_NEXT_DIST_DIR: ".next-e2e",
     },

@@ -60,9 +60,11 @@ export async function expectMockDashboard(page: Page): Promise<void> {
   await expect(
     page.getByRole("heading", { level: 1, name: "Control Tower" }),
   ).toBeVisible();
-  await expect(page.getByText("Demo data active")).toBeVisible();
   await expect(
-    page.getByText("Seeded demo data", { exact: true }).first(),
+    page.getByText("Recovery workspace", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Workflow evidence", { exact: true }).first(),
   ).toBeVisible();
 }
 
@@ -91,7 +93,7 @@ export async function mockMerchantMutations(page: Page): Promise<void> {
         body: JSON.stringify({
           command: body.command,
           message:
-            "The command was accepted by the mock provider. No external action was taken.",
+            "The recovery command was recorded in this workspace. Provider execution remains disabled.",
           occurred_at: "2026-08-28T10:00:00Z",
           status: "ACCEPTED",
         }),
@@ -106,7 +108,7 @@ export async function mockMerchantMutations(page: Page): Promise<void> {
         contentType: "application/json",
         body: JSON.stringify({
           disposition: body.disposition,
-          message: `${body.disposition.replaceAll("_", " ")} recorded in local demo mode. No provider action was taken.`,
+          message: `${body.disposition.replaceAll("_", " ")} recorded in this workspace. Provider execution remains disabled.`,
           occurred_at: "2026-08-28T10:00:00Z",
           status: "ACCEPTED",
         }),

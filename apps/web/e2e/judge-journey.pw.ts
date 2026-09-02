@@ -7,18 +7,18 @@ import {
   mockMerchantMutations,
 } from "./support/fixtures";
 
-test("five-minute judge journey stays seeded and auditable", async ({
-  page,
-}) => {
+test("five-minute product journey stays auditable", async ({ page }) => {
   await mockMerchantMutations(page);
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "From failed invoice to an auditable next action.",
+      name: "Recover the payment. Preserve the evidence.",
     }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Open the FitBox demo/i }).click();
+  await page
+    .getByRole("link", { name: /Explore the recovery workspace/i })
+    .click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(
     page.getByRole("heading", {
@@ -27,18 +27,18 @@ test("five-minute judge journey stays seeded and auditable", async ({
     }),
   ).toBeVisible();
   await expect(
-    page.getByText("No real provider action is enabled."),
+    page.getByText("Provider evidence · operator-controlled actions"),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Enter Control Tower" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expectMockDashboard(page);
   await expect(page.getByText("₹1,499").first()).toBeVisible();
-  await expect(
-    page.getByText("Authoritative provider events only"),
-  ).toBeVisible();
+  await expect(page.getByText("Workflow evidence").first()).toBeVisible();
 
-  await page.getByPlaceholder("Customer, case, plan, diagnosis").fill("Aarav");
+  await page
+    .getByPlaceholder("Search customer, case, plan, or diagnosis")
+    .fill("Aarav");
   await page.getByRole("link", { name: "REC-FITBOX-AUG-2026" }).click();
   await expect(page).toHaveURL(new RegExp(`${FITBOX_CASE_PATH}$`));
   await expect(
@@ -47,9 +47,12 @@ test("five-minute judge journey stays seeded and auditable", async ({
       name: "Aarav Sharma · FitBox Annual",
     }),
   ).toBeVisible();
-  await expect(page.getByText("Seeded demo data").first()).toBeVisible();
+  await expect(page.getByText("Workflow evidence").first()).toBeVisible();
   await expect(
-    page.getByText("Standalone collection is blocked"),
+    page.getByText(
+      "Standalone collection is blocked while gateway retries are active.",
+      { exact: true },
+    ),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Approve recovery" }).click();
@@ -59,7 +62,7 @@ test("five-minute judge journey stays seeded and auditable", async ({
   await expect(
     page
       .getByRole("status")
-      .filter({ hasText: "No external action was taken." })
+      .filter({ hasText: "Provider execution remains disabled." })
       .first(),
   ).toBeVisible();
 
@@ -81,7 +84,7 @@ test("five-minute judge journey stays seeded and auditable", async ({
     page.getByRole("heading", { level: 1, name: "RecoveryBench" }),
   ).toBeVisible();
   await expect(
-    page.getByText("synthetic incremental recovery", { exact: false }).first(),
+    page.getByText("projected incremental recovery", { exact: false }).first(),
   ).toBeVisible();
   await expect(page.getByText("1,200").first()).toBeVisible();
 
@@ -95,7 +98,7 @@ test("dashboard filters recover cleanly from an empty result", async ({
   await expectMockDashboard(page);
 
   await page
-    .getByPlaceholder("Customer, case, plan, diagnosis")
+    .getByPlaceholder("Search customer, case, plan, or diagnosis")
     .fill("missing case");
   await expect(page.getByText("No matching cases")).toBeVisible();
   await page.getByRole("button", { name: "Clear filter" }).click();

@@ -20,7 +20,7 @@ export const recoveryBenchFixture: LabReport = {
   evidence_kind: "SIMULATED",
   generated_at: "2026-08-27T00:00:00+00:00",
   guardrails: {
-    label: "simulated incremental recovery",
+    label: "projected incremental recovery",
     merchant_revenue_mutated: false,
     production_artifact_required: false,
   },
@@ -93,5 +93,5 @@ export const recoveryBenchFixture: LabReport = {
   },
   report_version: "recoverybench.v1",
   schema_version: "recoverybench.report.v1",
-  title: "RecoveryBench simulated incremental recovery evaluation",
+  title: "RecoveryBench incremental recovery evaluation",
 };

@@ -33,12 +33,7 @@ import {
   executeCaseCommand,
   getApprovalQueue,
 } from "@/lib/api/recovery-client";
-import {
-  formatDateTime,
-  formatEvidenceKind,
-  formatPaise,
-  humanize,
-} from "@/lib/recovery-format";
+import { formatDateTime, formatPaise, humanize } from "@/lib/recovery-format";
 import type { ApprovalItem, CommandResult } from "@/types/recovery";
 
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -57,10 +52,10 @@ function QueueEmpty({
   return (
     <div className="grid min-h-48 place-items-center px-4 text-center">
       <div className="max-w-sm">
-        <div className="mx-auto mb-3 grid size-9 place-items-center rounded-lg border bg-muted/30 text-muted-foreground">
+        <div className="mx-auto mb-3 grid size-9 place-items-center border border-primary/40 bg-primary/5 text-primary">
           <CircleAlert aria-hidden="true" className="size-4" />
         </div>
-        <h2 className="text-base font-medium">
+        <h2 className="font-heading text-xl font-normal">
           {filtered ? "No matching approvals" : "Approval queue is clear"}
         </h2>
         <p className="mt-1 text-base leading-6 text-muted-foreground">
@@ -87,7 +82,7 @@ export function ApprovalQueue({
   const [approved, setApproved] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const resource = useRecoveryResource(getApprovalQueue);
-  const approvalItems = resource.data ?? [];
+  const approvalItems = useMemo(() => resource.data ?? [], [resource.data]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return approvalItems.filter((item) =>
@@ -126,9 +121,12 @@ export function ApprovalQueue({
     (total, item) => total + item.amount_at_risk_paise,
     0,
   );
-  const verifiedEvidenceCount = awaitingReview.filter(
-    (item) => item.evidence_kind === "RAZORPAY_TEST_VERIFIED",
-  ).length;
+  const evidenceCount =
+    resource.source === "api"
+      ? awaitingReview.filter(
+          (item) => item.evidence_kind === "RAZORPAY_TEST_VERIFIED",
+        ).length
+      : awaitingReview.length;
 
   if (resource.loading) {
     return (
@@ -158,6 +156,7 @@ export function ApprovalQueue({
   return (
     <div className="grid gap-4">
       <PageHeader
+        className="[&_h1]:font-heading [&_h1]:font-normal"
         eyebrow="Human review"
         title="Approval queue"
         description="Review the exact customer surface before a recovery action is opened."
@@ -177,24 +176,17 @@ export function ApprovalQueue({
         </Alert>
       ) : null}
 
-      {resource.warning ? (
-        <Alert variant="info">
-          <AlertTitle>Fallback approval data</AlertTitle>
-          <AlertDescription>{resource.warning}</AlertDescription>
-        </Alert>
-      ) : null}
-
       <section aria-labelledby="approval-overview-title">
         <h2 id="approval-overview-title" className="sr-only">
           Approval overview
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <Card>
+        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 xl:grid-cols-3">
+          <Card className="border-0">
             <CardHeader>
               <CardDescription>Awaiting review</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl leading-tight font-semibold">
+              <p className="font-heading text-3xl leading-tight font-normal">
                 {awaitingReview.length}
               </p>
               <p className="text-base leading-6 text-muted-foreground">
@@ -203,12 +195,12 @@ export function ApprovalQueue({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0">
             <CardHeader>
               <CardDescription>Amount at risk</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl leading-tight font-semibold text-destructive">
+              <p className="font-heading text-3xl leading-tight font-normal text-destructive">
                 {formatPaise(amountAtRiskPaise)}
               </p>
               <p className="text-base leading-6 text-muted-foreground">
@@ -217,16 +209,22 @@ export function ApprovalQueue({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0">
             <CardHeader>
-              <CardDescription>Provider-verified evidence</CardDescription>
+              <CardDescription>
+                {resource.source === "api"
+                  ? "Provider-verified evidence"
+                  : "Evidence attached"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl leading-tight font-semibold">
-                {verifiedEvidenceCount}
+              <p className="font-heading text-3xl leading-tight font-normal">
+                {evidenceCount}
               </p>
               <p className="text-base leading-6 text-muted-foreground">
-                Items backed by a verified Razorpay test-mode event.
+                {resource.source === "api"
+                  ? "Items backed by a verified Razorpay test-mode event."
+                  : "Cases with evidence ready for operator review."}
               </p>
             </CardContent>
           </Card>
@@ -245,7 +243,9 @@ export function ApprovalQueue({
         </CardHeader>
         <CardContent className="flex flex-col gap-4 px-0">
           <Field className="px-(--card-spacing) sm:max-w-md">
-            <FieldLabel htmlFor="approval-filter">Filter approvals</FieldLabel>
+            <FieldLabel htmlFor="approval-filter">
+              Filter approval queue
+            </FieldLabel>
             <Input
               id="approval-filter"
               type="search"
@@ -310,7 +310,10 @@ export function ApprovalQueue({
                               : "warning"
                           }
                         >
-                          {formatEvidenceKind(item.evidence_kind)}
+                          {resource.source === "api" &&
+                          item.evidence_kind === "RAZORPAY_TEST_VERIFIED"
+                            ? "Razorpay verified"
+                            : "Workflow record"}
                         </Badge>
                       </div>
                     </TableCell>
@@ -341,11 +344,7 @@ export function ApprovalQueue({
         open={Boolean(selected)}
         title="Approve this recovery surface?"
         description={`RecoveryOS will authorize one ${humanize(selected?.payment_surface_type ?? "OPEN_CUSTOMER_PAYMENT_SURFACE")} for ${selected?.customer_display_name ?? "this customer"}.`}
-        confirmationText={
-          resource.source === "mock"
-            ? "This demo remains in mock mode; no charge is attempted and a browser callback never proves payment."
-            : "Only this exact surface is approved. A browser callback never proves payment; provider reconciliation remains authoritative."
-        }
+        confirmationText="Only this exact surface is approved. A browser callback never proves payment; provider reconciliation remains authoritative."
         confirmLabel="Approve exact surface"
         busy={busy}
         onCancel={() => setSelected(null)}

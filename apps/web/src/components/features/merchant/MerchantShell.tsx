@@ -38,7 +38,9 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/shadcn/sidebar";
+import { cn } from "@/lib/utils";
 
+import { DemoGuide } from "./DemoGuide";
 import styles from "./merchant-shell.module.css";
 
 interface MerchantShellProps {
@@ -107,6 +109,7 @@ function NavigationMenu({
         return (
           <SidebarMenuItem key={item.href}>
             <SidebarMenuButton
+              className={styles.navigationItem}
               render={
                 <Link
                   href={item.href}
@@ -139,14 +142,14 @@ function SidebarBrand() {
       aria-label="RecoveryOS Control Tower"
       onClick={() => setOpenMobile(false)}
     >
-      <Brand className={styles.shellBrand} />
+      <Brand className={styles.shellBrand} variant="ledger" />
     </Link>
   );
 }
 
 function TestEnvironmentBadge() {
   return (
-    <Badge variant="info" className="w-fit uppercase tracking-wide">
+    <Badge variant="info" className="w-fit">
       <CircleDot data-icon="inline-start" aria-hidden="true" />
       Razorpay Test Mode
     </Badge>
@@ -194,7 +197,9 @@ function MerchantWorkspace({ children }: MerchantShellProps) {
 
         <SidebarContent>
           <SidebarGroup className="px-2 py-3">
-            <SidebarGroupLabel>Recovery workspace</SidebarGroupLabel>
+            <SidebarGroupLabel className={styles.navigationLabel}>
+              Recovery workspace
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <NavigationMenu
                 items={primaryItems}
@@ -214,7 +219,7 @@ function MerchantWorkspace({ children }: MerchantShellProps) {
           />
           <SidebarSeparator className="mx-0" />
           <TestEnvironmentBadge />
-          <p className="m-0 text-xs leading-5 text-muted-foreground">
+          <p className={styles.sidebarNote}>
             Provider actions remain operator-gated and fully auditable.
           </p>
         </SidebarFooter>
@@ -225,25 +230,31 @@ function MerchantWorkspace({ children }: MerchantShellProps) {
         className="min-w-0 bg-background text-foreground"
         tabIndex={-1}
       >
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 md:px-6">
+        <header
+          className={cn(
+            "sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 md:px-6",
+            styles.workspaceHeader,
+          )}
+        >
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger aria-label="Toggle navigation" />
             <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Revenue recovery
-              </span>
-              <p className="m-0 truncate text-sm font-medium text-foreground">
+              <span className={styles.topbarEyebrow}>Revenue recovery</span>
+              <p className={cn("m-0 truncate", styles.topbarTitle)}>
                 {pageLabel}
               </p>
             </div>
           </div>
 
           <div className="flex min-w-0 items-center gap-2">
+            <div className={styles.demoGuideSlot}>
+              <DemoGuide />
+            </div>
             <span className="hidden sm:inline-flex">
               <TestEnvironmentBadge />
             </span>
-            <Avatar aria-label="Signed in as Demo Operator">
-              <AvatarFallback>DO</AvatarFallback>
+            <Avatar aria-label="Signed in operator">
+              <AvatarFallback>OP</AvatarFallback>
             </Avatar>
           </div>
         </header>

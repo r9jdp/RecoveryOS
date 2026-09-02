@@ -20,6 +20,20 @@ const merchantRoutes = [
   ["/voice", "Rehearse every intent before a real call"],
 ] as const;
 
+test("public entry passes the native semantic and overflow scan", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Recover the payment. Preserve the evidence.",
+    }),
+  ).toBeVisible();
+  await expect.poll(() => scanSemanticAccessibility(page)).toEqual([]);
+  await assertNoHorizontalOverflow(page);
+});
+
 test("all merchant routes pass the native semantic and overflow scan", async ({
   page,
 }) => {
@@ -53,12 +67,11 @@ test("operator can reach the approval decision using only the keyboard", async (
   await expect(page.locator("#main-content")).toBeFocused();
 
   if ((page.viewportSize()?.width ?? 0) < 700) {
-    await tabTo(page, "Open navigation");
+    await tabTo(page, "Toggle navigation");
     await page.keyboard.press("Enter");
-    await expect(page.getByLabel("Mobile navigation")).toHaveAttribute(
-      "aria-hidden",
-      "false",
-    );
+    await expect(
+      page.getByRole("dialog", { name: "Mobile navigation" }),
+    ).toBeVisible();
   }
 
   await tabTo(page, "Approval queue");

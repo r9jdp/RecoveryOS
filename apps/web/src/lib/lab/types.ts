@@ -39,7 +39,7 @@ export interface LabReport {
   evidence_kind: "SIMULATED";
   generated_at: string;
   guardrails: {
-    label: "simulated incremental recovery";
+    label: "projected incremental recovery";
     merchant_revenue_mutated: false;
     production_artifact_required: false;
   };

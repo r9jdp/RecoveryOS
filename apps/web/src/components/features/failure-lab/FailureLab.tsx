@@ -71,11 +71,11 @@ function Result({ result }: { result: FailureSimulationResponse }) {
     <section className={styles.results} aria-labelledby="simulation-result">
       <div className={styles.resultHeading}>
         <div>
-          <p className={styles.eyebrow}>Deterministic projection</p>
+          <p className={styles.eyebrow}>Contract rehearsal</p>
           <h2 id="simulation-result">Expected convergence</h2>
         </div>
         <Badge tone="warning" showDot>
-          Synthetic test data
+          Projected result
         </Badge>
       </div>
 
@@ -113,12 +113,12 @@ function Result({ result }: { result: FailureSimulationResponse }) {
         <CardHeader
           title="Delivery evidence"
           description={`${result.deliveries.length} delivery${result.deliveries.length === 1 ? "" : "ies"} for ${result.case_id}. Provider and delivery identifiers remain visible for the deduplication audit.`}
-          action={<Badge tone="neutral">Seed {result.seed}</Badge>}
+          action={<Badge tone="neutral">Replay key {result.seed}</Badge>}
         />
         <CardBody>
           <ol
             className={styles.deliveryList}
-            aria-label="Synthetic test delivery sequence"
+            aria-label="Rehearsal delivery sequence"
           >
             {result.deliveries.map((delivery, index) => {
               const diverged =
@@ -141,7 +141,7 @@ function Result({ result }: { result: FailureSimulationResponse }) {
                           )}
                         </p>
                       </div>
-                      <Badge tone="warning">Synthetic test data</Badge>
+                      <Badge tone="warning">Rehearsal event</Badge>
                     </div>
                     <dl className={styles.deliveryDetails}>
                       <div>
@@ -205,7 +205,7 @@ export function FailureLab({
   const parsedAmount = Number(amountPaise);
   const seedError =
     seed.length > 0 && !Number.isSafeInteger(parsedSeed)
-      ? "Seed must be a whole number."
+      ? "Reproducibility key must be a whole number."
       : undefined;
   const amountError =
     amountPaise.length > 0 &&
@@ -243,7 +243,7 @@ export function FailureLab({
       setError(
         caught instanceof Error
           ? caught.message
-          : "The failure simulation could not be generated.",
+          : "The failure rehearsal could not be generated.",
       );
     } finally {
       if (!controller.signal.aborted) setLoading(false);
@@ -255,14 +255,14 @@ export function FailureLab({
       <PageHeader
         eyebrow="Safety verification"
         title="Failure Injection Lab"
-        description="Exercise the fixed backend failure contracts without sending a payment, changing merchant revenue, or contacting a customer. Every run is reproducible from its seed."
-        action={<Badge tone="warning">Test scenarios only</Badge>}
+        description="Replay edge-case delivery patterns against fixed backend safety contracts. Each run shows how RecoveryOS deduplicates events and converges to provider-authoritative state."
+        action={<Badge tone="warning">Controlled rehearsal</Badge>}
       />
 
-      <Alert tone="info" title="Evidence boundary">
-        Results on this page are always labelled synthetic test data. Provider
-        verification is unavailable here and can only originate from validated
-        Razorpay test-mode webhooks.
+      <Alert tone="info" title="Rehearsal boundary">
+        This lab validates processing behavior in isolation. Provider-confirmed
+        payment state still comes only from validated Razorpay test-mode
+        webhooks and an authoritative fetch.
       </Alert>
 
       <div className={styles.workspace}>
@@ -303,8 +303,8 @@ export function FailureLab({
 
               <div className={styles.inputGrid}>
                 <Input
-                  label="Deterministic seed"
-                  hint="Same scenario + seed produces the same IDs and timing."
+                  label="Reproducibility key"
+                  hint="Repeating the same scenario with this key preserves IDs and timing."
                   error={seedError}
                   inputMode="numeric"
                   required
@@ -336,7 +336,7 @@ export function FailureLab({
                 disabled={invalid}
                 fullWidth
               >
-                Run {selected.label.toLowerCase()} simulation
+                Rehearse {selected.label.toLowerCase()}
               </Button>
             </form>
           </CardBody>
@@ -347,7 +347,7 @@ export function FailureLab({
             <div
               className={styles.loading}
               aria-busy="true"
-              aria-label="Generating failure simulation"
+              aria-label="Generating failure rehearsal"
             >
               <Skeleton width="12rem" />
               <Skeleton height="8rem" />
@@ -355,15 +355,15 @@ export function FailureLab({
             </div>
           )}
           {error && (
-            <Alert tone="danger" title="Simulation unavailable">
+            <Alert tone="danger" title="Rehearsal unavailable">
               {error} No fallback result is invented, so the evidence boundary
               remains explicit.
             </Alert>
           )}
           {!loading && !error && !result && (
             <EmptyState
-              title="Ready for a deterministic run"
-              description="Choose a contract and run it to inspect provider event IDs, delivery order, observed state, and authoritative convergence."
+              title="Ready for a controlled rehearsal"
+              description="Choose a contract and rehearse it to inspect provider event IDs, delivery order, observed state, and authoritative convergence."
             />
           )}
           {result && <Result result={result} />}

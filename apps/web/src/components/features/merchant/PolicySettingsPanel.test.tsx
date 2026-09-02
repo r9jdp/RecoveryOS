@@ -55,9 +55,7 @@ describe("PolicySettingsPanel", () => {
         saveSettings={vi.fn().mockRejectedValue(new Error("Version conflict"))}
       />,
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Save policy" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Save policy" }));
     expect(await screen.findByText(/Version conflict/)).toBeInTheDocument();
     expect(screen.getByText("Recovery active")).toBeInTheDocument();
   });

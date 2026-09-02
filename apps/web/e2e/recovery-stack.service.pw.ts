@@ -206,9 +206,9 @@ test("real services recover FitBox without fixture or network mocks", async ({
   const authenticatedApi = page.context().request;
 
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
-  await expect(page.getByText(/deterministic FitBox demo data/i)).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByText("Recovery workspace", { exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByText(/could not be loaded/i)).toHaveCount(0);
   await expect(page.getByText("Aarav Sharma", { exact: true })).toBeVisible();
   expect(

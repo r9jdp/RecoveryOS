@@ -94,11 +94,17 @@ export function VoiceConsole({
       .then((items) => {
         if (!active) return;
         setCases(items);
-        setSelectedCaseId((current) => current || items.find((item) => item.eligible)?.id || "");
+        setSelectedCaseId(
+          (current) => current || items.find((item) => item.eligible)?.id || "",
+        );
       })
       .catch((reason) => {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : "Recovery cases could not be loaded.");
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Recovery cases could not be loaded.",
+        );
       })
       .finally(() => {
         if (active) setLoadingCases(false);
@@ -117,7 +123,11 @@ export function VoiceConsole({
       })
       .catch((reason) => {
         if (active)
-          setError(reason instanceof Error ? reason.message : "Voice history could not be loaded.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Voice history could not be loaded.",
+          );
       });
     return () => {
       active = false;
@@ -268,6 +278,7 @@ export function VoiceConsole({
                 Enter only the words you want RecoveryOS to analyze.
               </small>
               <textarea
+                aria-label="Transcript fallback"
                 value={transcript}
                 onChange={(event) => setTranscript(event.target.value)}
                 placeholder="Example: Please stop calling, I will pay tomorrow."
@@ -326,8 +337,13 @@ export function VoiceConsole({
                   {loadingCases ? "Loading cases…" : "Select a recovery case"}
                 </option>
                 {cases.map((item) => (
-                  <option key={item.id} value={item.id} disabled={!item.eligible}>
-                    {item.label}{item.eligible ? "" : " · not eligible"}
+                  <option
+                    key={item.id}
+                    value={item.id}
+                    disabled={!item.eligible}
+                  >
+                    {item.label}
+                    {item.eligible ? "" : " · not eligible"}
                   </option>
                 ))}
               </select>

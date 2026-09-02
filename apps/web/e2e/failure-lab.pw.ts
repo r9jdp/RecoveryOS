@@ -57,7 +57,7 @@ test("failure lab runs a synthetic test contract with keyboard and responsive sa
     page.getByRole("heading", { level: 1, name: "Failure Injection Lab" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Provider verification is unavailable here/),
+    page.getByText(/Provider-confirmed payment state/),
   ).toBeVisible();
 
   const duplicate = page.getByRole("radio", { name: /Duplicate webhook/i });
@@ -66,9 +66,9 @@ test("failure lab runs a synthetic test contract with keyboard and responsive sa
   await expect(
     page.getByRole("radio", { name: /Out-of-order webhook/i }),
   ).toBeChecked();
-  await page.getByLabel(/Deterministic seed/).fill("42");
+  await page.getByLabel(/Reproducibility key/).fill("42");
   const run = page.getByRole("button", {
-    name: "Run out-of-order webhook simulation",
+    name: "Rehearse out-of-order webhook",
   });
   await run.focus();
   await page.keyboard.press("Enter");

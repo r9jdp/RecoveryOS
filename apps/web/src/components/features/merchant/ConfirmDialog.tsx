@@ -59,12 +59,14 @@ export function ConfirmDialog({
           >
             {danger ? <TriangleAlert /> : <Check />}
           </AlertDialogMedia>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle className="font-heading text-2xl font-normal">
+            {title}
+          </AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
 
         {confirmationText ? (
-          <p className="rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <p className="border border-l-2 border-l-primary bg-muted/20 px-3 py-2 font-mono text-xs leading-5 text-muted-foreground">
             {confirmationText}
           </p>
         ) : null}
