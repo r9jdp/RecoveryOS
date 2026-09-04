@@ -50,6 +50,7 @@ from services.api.app.models import (
     WebhookInboxEntry,
 )
 from services.api.app.providers.interfaces import (
+    InvoiceCorrelationProvider,
     PaymentProvider,
     RecoveryScorer,
     StandardPaymentLinkLifecycleProvider,
@@ -289,9 +290,7 @@ class RazorpayOutboxProcessor:
                         RecoveryActionRecord.idempotency_key == idempotency_key,
                         # Compatibility with decisions written before the
                         # purpose-scoped v1 key was introduced.
-                        (
-                            RecoveryActionRecord.case_id == recovery_case.id
-                        )
+                        (RecoveryActionRecord.case_id == recovery_case.id)
                         & RecoveryActionRecord.id.startswith("action_rzp_", autoescape=True)
                         & RecoveryActionRecord.idempotency_key.startswith(
                             f"case:{recovery_case.id}:action:", autoescape=True
@@ -362,9 +361,7 @@ class RazorpayOutboxProcessor:
                 else None
             ),
             quiet_hours_end=(
-                time.fromisoformat(settings.quiet_hours_end)
-                if settings.quiet_hours_end
-                else None
+                time.fromisoformat(settings.quiet_hours_end) if settings.quiet_hours_end else None
             ),
             max_contacts_per_window=settings.max_contacts_per_7_days,
             manual_approval_actions=frozenset(
@@ -695,9 +692,8 @@ class RazorpayOutboxProcessor:
                 ),
             )
             if invoice is None:
-                raise RazorpayContractError(
-                    "RAZORPAY_INVOICE_NOT_CORRELATED",
-                    "Webhook invoice does not belong to this merchant.",
+                invoice, subscription = await self._hydrate_webhook_invoice(
+                    payload=payload,
                 )
         elif recovery_case and recovery_case.failed_invoice_id:
             invoice = cast(
@@ -797,6 +793,111 @@ class RazorpayOutboxProcessor:
                 ),
             )
         return _Correlation(subscription, invoice, recovery_case)
+
+    @staticmethod
+    def _invoice_id(*, merchant_id: str, provider_invoice_id: str) -> str:
+        digest = hashlib.sha256(f"{merchant_id}:{provider_invoice_id}".encode()).hexdigest()[:40]
+        return f"invoice_rzp_{digest}"
+
+    @staticmethod
+    def _invoice_billing_cycle_key(provider_invoice_id: str) -> str:
+        value = f"razorpay:{provider_invoice_id}"
+        if len(value) <= 64:
+            return value
+        digest = hashlib.sha256(provider_invoice_id.encode()).hexdigest()[:40]
+        return f"razorpay:{digest}"
+
+    async def _hydrate_webhook_invoice(
+        self, *, payload: RazorpayOutboxPayload
+    ) -> tuple[Invoice, Subscription]:
+        """Persist a newly issued invoice only for an already connected subscription."""
+
+        event = payload.event
+        if event.invoice_id is None or not isinstance(
+            self.payment_provider, InvoiceCorrelationProvider
+        ):
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_NOT_CORRELATED",
+                "Webhook invoice does not belong to this merchant.",
+            )
+        snapshot = await self.payment_provider.fetch_invoice_snapshot(
+            merchant_id=payload.merchant_id,
+            invoice_id=event.invoice_id,
+        )
+        if (
+            not snapshot.authoritative
+            or snapshot.provider != "razorpay"
+            or snapshot.invoice_id != event.invoice_id
+        ):
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_FETCH_UNTRUSTED",
+                "Provider lookup did not authoritatively confirm the webhook invoice.",
+            )
+        if event.subscription_id and event.subscription_id != snapshot.subscription_id:
+            raise RazorpayContractError(
+                "RAZORPAY_CORRELATION_MISMATCH",
+                "Webhook subscription does not match the authoritative invoice.",
+            )
+        subscription = cast(
+            Subscription | None,
+            await self.session.scalar(
+                select(Subscription)
+                .where(
+                    Subscription.merchant_id == payload.merchant_id,
+                    Subscription.provider_subscription_id == snapshot.subscription_id,
+                )
+                .with_for_update()
+            ),
+        )
+        if subscription is None:
+            raise RazorpayContractError(
+                "RAZORPAY_SUBSCRIPTION_NOT_CORRELATED",
+                "Webhook invoice belongs to a subscription that has not been connected.",
+            )
+        if subscription.currency != snapshot.currency:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_CURRENCY_MISMATCH",
+                "Authoritative invoice currency does not match the connected subscription.",
+            )
+        existing_invoice = cast(
+            Invoice | None,
+            await self.session.scalar(
+                select(Invoice)
+                .where(
+                    Invoice.merchant_id == payload.merchant_id,
+                    Invoice.provider_invoice_id == snapshot.invoice_id,
+                )
+                .with_for_update()
+            ),
+        )
+        if existing_invoice is not None:
+            if existing_invoice.subscription_id != subscription.id:
+                raise RazorpayContractError(
+                    "RAZORPAY_INVOICE_SUBSCRIPTION_CONFLICT",
+                    "Razorpay invoice is already bound to another subscription.",
+                )
+            return existing_invoice, subscription
+        billing_cycle_key = self._invoice_billing_cycle_key(snapshot.invoice_id)
+        invoice = Invoice(
+            id=self._invoice_id(
+                merchant_id=payload.merchant_id,
+                provider_invoice_id=snapshot.invoice_id,
+            ),
+            merchant_id=payload.merchant_id,
+            subscription_id=subscription.id,
+            provider_invoice_id=snapshot.invoice_id,
+            billing_cycle_key=billing_cycle_key,
+            amount_paise=snapshot.amount_paise,
+            amount_paid_paise=snapshot.amount_paid_paise,
+            currency=snapshot.currency,
+            invoice_state=snapshot.invoice_state,
+            due_at=snapshot.due_at,
+        )
+        self.session.add(invoice)
+        if subscription.current_billing_cycle_key is None:
+            subscription.current_billing_cycle_key = billing_cycle_key
+        await self.session.flush()
+        return invoice, subscription
 
     async def _apply_event(
         self, payload: RazorpayOutboxPayload, correlation: _Correlation

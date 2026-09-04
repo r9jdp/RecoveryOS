@@ -12,6 +12,7 @@ import httpx
 
 from services.api.app.domain.enums import PaymentState, PaymentSurfaceType, SubscriptionState
 from services.api.app.providers.contracts import (
+    InvoiceSnapshot,
     OpenPaymentSurfaceRequest,
     PaymentSnapshot,
     PaymentSurfaceResult,
@@ -211,6 +212,87 @@ class RazorpayClient:
             invoices=invoices,
         )
 
+    async def fetch_invoice_snapshot(self, *, merchant_id: str, invoice_id: str) -> InvoiceSnapshot:
+        """Fetch one invoice so a webhook can join an already connected subscription."""
+
+        del merchant_id  # Credentials are selected by the merchant-scoped factory.
+        if not invoice_id.startswith("inv_") or len(invoice_id) > 128:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_ID_INVALID",
+                "A valid Razorpay invoice id is required for correlation.",
+            )
+        invoice = await self._request_json("GET", f"/v1/invoices/{invoice_id}")
+        if invoice.get("id") != invoice_id:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_RESPONSE_MISMATCH",
+                "Razorpay returned a different invoice than requested.",
+                requested_invoice_id=invoice_id,
+            )
+        subscription_id = _text(invoice.get("subscription_id"))
+        if (
+            subscription_id is None
+            or not subscription_id.startswith("sub_")
+            or len(subscription_id) > 128
+        ):
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_SUBSCRIPTION_MISSING",
+                "Razorpay invoice has no valid subscription id.",
+                invoice_id=invoice_id,
+            )
+        amount_paise = _integer(invoice.get("amount"))
+        amount_paid_paise = _integer(invoice.get("amount_paid"))
+        if amount_paise is None or amount_paise < 0:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_AMOUNT_INVALID",
+                "Razorpay invoice has no valid integer amount.",
+                invoice_id=invoice_id,
+            )
+        if amount_paid_paise is None or amount_paid_paise < 0 or amount_paid_paise > amount_paise:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_AMOUNT_INVALID",
+                "Razorpay invoice has an invalid amount_paid.",
+                invoice_id=invoice_id,
+            )
+        currency = _text(invoice.get("currency"))
+        if currency is None or len(currency) != 3:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_CURRENCY_INVALID",
+                "Razorpay invoice has no valid currency.",
+                invoice_id=invoice_id,
+            )
+        invoice_state = _text(invoice.get("status"))
+        if invoice_state is None or len(invoice_state) > 32:
+            raise RazorpayContractError(
+                "RAZORPAY_INVOICE_STATE_INVALID",
+                "Razorpay invoice has no valid status.",
+                invoice_id=invoice_id,
+            )
+        due_at: datetime | None = None
+        for field in ("expire_by", "billing_end"):
+            timestamp = _integer(invoice.get(field))
+            if timestamp is not None and timestamp >= 0:
+                try:
+                    due_at = datetime.fromtimestamp(timestamp, UTC)
+                except (OSError, OverflowError, ValueError) as error:
+                    raise RazorpayContractError(
+                        "RAZORPAY_INVOICE_TIMESTAMP_INVALID",
+                        "Razorpay invoice has an invalid due timestamp.",
+                        invoice_id=invoice_id,
+                    ) from error
+                break
+        return InvoiceSnapshot(
+            provider="razorpay",
+            invoice_id=invoice_id,
+            subscription_id=subscription_id,
+            amount_paise=amount_paise,
+            amount_paid_paise=amount_paid_paise,
+            currency=currency.upper(),
+            invoice_state=invoice_state.lower(),
+            due_at=due_at,
+            observed_at=datetime.now(UTC),
+            authoritative=True,
+        )
+
     @property
     def _auth(self) -> httpx.BasicAuth:
         return httpx.BasicAuth(self.config.key_id, self.config.key_secret)
@@ -350,8 +432,7 @@ class RazorpayClient:
             }
         )
         customer_url = (
-            f"{_checkout_origin(self.config.checkout_origin)}"
-            f"/payments/razorpay/card-update?{query}"
+            f"{_checkout_origin(self.config.checkout_origin)}/payments/razorpay/card-update?{query}"
         )
         return PaymentSurfaceResult(
             provider="razorpay",
@@ -374,9 +455,7 @@ class RazorpayClient:
                 invoice_id=request.failed_invoice_id,
                 subscription_id=request.subscription_id,
             )
-        if invoice.get("status") in {"paid", "cancelled"} or not _text(
-            invoice.get("short_url")
-        ):
+        if invoice.get("status") in {"paid", "cancelled"} or not _text(invoice.get("short_url")):
             raise RazorpayContractError(
                 "RAZORPAY_UNPAID_INVOICE_LINK_NOT_FOUND",
                 "The exact failed invoice has no payable short_url.",
@@ -412,8 +491,7 @@ class RazorpayClient:
                 "A standalone Payment Link requires expiry and reference_id.",
             )
         if len(request.notes) > 15 or any(
-            not key or len(key) > 256 or len(value) > 256
-            for key, value in request.notes.items()
+            not key or len(key) > 256 or len(value) > 256 for key, value in request.notes.items()
         ):
             raise RazorpayContractError(
                 "RAZORPAY_PAYMENT_LINK_NOTES_INVALID",
@@ -476,9 +554,7 @@ class RazorpayClient:
                 reference_id=request.reference_id,
             )
         try:
-            customer_url = _provider_https_url(
-                short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID"
-            )
+            customer_url = _provider_https_url(short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID")
         except RazorpayContractError as error:
             self._payment_link_breaker.record_failure(FailureKind.UNCERTAIN_SUBMISSION)
             raise RazorpayUncertainSubmissionError(
@@ -629,9 +705,7 @@ class RazorpayClient:
             provider="razorpay",
             provider_reference=link_id,
             surface_type=PaymentSurfaceType.STANDARD_PAYMENT_LINK,
-            customer_url=_provider_https_url(
-                short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID"
-            ),
+            customer_url=_provider_https_url(short_url, code="RAZORPAY_PAYMENT_LINK_URL_INVALID"),
             expires_at=expires_at,
             authoritative=True,
         )

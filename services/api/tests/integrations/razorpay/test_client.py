@@ -96,6 +96,41 @@ async def test_exact_unpaid_invoice_short_url_is_selected() -> None:
     await client._client.aclose()  # noqa: SLF001
 
 
+async def test_invoice_snapshot_returns_authoritative_correlation_data() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/invoices/inv_new_cycle"
+        return httpx.Response(
+            200,
+            json={
+                "id": "inv_new_cycle",
+                "subscription_id": "sub_fitbox_annual_001",
+                "amount": 149_900,
+                "amount_paid": 0,
+                "currency": "INR",
+                "status": "issued",
+                "expire_by": 1_788_086_400,
+            },
+        )
+
+    client = _client(handler)
+    snapshot = await client.fetch_invoice_snapshot(
+        merchant_id="merchant_fitbox",
+        invoice_id="inv_new_cycle",
+    )
+
+    assert snapshot.provider == "razorpay"
+    assert snapshot.invoice_id == "inv_new_cycle"
+    assert snapshot.subscription_id == "sub_fitbox_annual_001"
+    assert snapshot.amount_paise == 149_900
+    assert snapshot.amount_paid_paise == 0
+    assert snapshot.currency == "INR"
+    assert snapshot.invoice_state == "issued"
+    assert snapshot.authoritative is True
+    assert snapshot.due_at == datetime.fromtimestamp(1_788_086_400, UTC)
+    await client._client.aclose()  # noqa: SLF001
+
+
 async def test_pending_subscription_blocks_standalone_payment_link() -> None:
     calls: list[str] = []
 

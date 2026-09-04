@@ -36,6 +36,7 @@ from services.api.app.models import (
     WebhookInboxEntry,
 )
 from services.api.app.providers.contracts import (
+    InvoiceSnapshot,
     OpenPaymentSurfaceRequest,
     PaymentSnapshot,
     PaymentSurfaceResult,
@@ -76,6 +77,19 @@ class FakePaymentProvider:
         return self.snapshots.pop(0)
 
 
+class HydratingPaymentProvider(FakePaymentProvider):
+    def __init__(self, *invoice_snapshots: InvoiceSnapshot) -> None:
+        super().__init__()
+        self.invoice_snapshots = list(invoice_snapshots)
+        self.invoice_fetch_calls: list[tuple[str, str]] = []
+
+    async def fetch_invoice_snapshot(self, *, merchant_id: str, invoice_id: str) -> InvoiceSnapshot:
+        self.invoice_fetch_calls.append((merchant_id, invoice_id))
+        if not self.invoice_snapshots:
+            raise AssertionError("unexpected invoice correlation fetch")
+        return self.invoice_snapshots.pop(0)
+
+
 def _snapshot(
     *,
     payment_state: PaymentState = PaymentState.CAPTURED,
@@ -90,6 +104,21 @@ def _snapshot(
         subscription_state=subscription_state,
         amount_paise=149_900,
         currency="INR",
+        observed_at=NOW,
+        authoritative=True,
+    )
+
+
+def _invoice_snapshot(*, subscription_id: str = "sub_fitbox_annual_001") -> InvoiceSnapshot:
+    return InvoiceSnapshot(
+        provider="razorpay",
+        invoice_id="inv_fitbox_aug_2026",
+        subscription_id=subscription_id,
+        amount_paise=149_900,
+        amount_paid_paise=0,
+        currency="INR",
+        invoice_state="issued",
+        due_at=None,
         observed_at=NOW,
         authoritative=True,
     )
@@ -116,19 +145,14 @@ async def _ingest(
     raw_body: bytes | None = None,
 ) -> OutboxMessage:
     raw = raw_body or _raw_fixture(fixture)
-    await RazorpayWebhookIngestionService(InboxOutboxStore(session)).ingest(
+    receipt = await RazorpayWebhookIngestionService(InboxOutboxStore(session)).ingest(
         merchant_id=merchant_id,
         raw_body=raw,
         signature=webhook_signature(raw, SECRET),
         provider_event_id=provider_event_id,
         webhook_secret=SECRET,
     )
-    outbox = await session.scalar(
-        select(OutboxMessage)
-        .where(OutboxMessage.published_at.is_(None))
-        .order_by(OutboxMessage.created_at.desc())
-        .limit(1)
-    )
+    outbox = await session.get(OutboxMessage, receipt.outbox_id)
     assert outbox is not None
     assert outbox.payload["merchant_id"] == merchant_id
     assert outbox.payload["event"]["provider_event_id"] == provider_event_id
@@ -200,11 +224,14 @@ async def test_captured_events_recognize_one_payment_once_and_signal_before_publ
         fixture="payment.captured.json",
         provider_event_id="evt_capture_primary",
     )
-    await _ingest(
+    second_outbox = await _ingest(
         session,
         fixture="subscription.charged.json",
         provider_event_id="evt_charge_duplicate_payment",
     )
+    first_outbox.available_at = NOW - timedelta(seconds=2)
+    second_outbox.available_at = NOW - timedelta(seconds=1)
+    await session.commit()
     signals: list[RazorpayDownstreamSignal] = []
 
     async def signal_callback(signal: RazorpayDownstreamSignal) -> None:
@@ -410,6 +437,7 @@ async def test_payment_failure_is_idempotent_and_never_regresses_capture(
         provider_event_id="evt_new_failure",
         raw_body=raw,
     )
+
     signals: list[RazorpayDownstreamSignal] = []
 
     async def callback(signal: RazorpayDownstreamSignal) -> None:
@@ -547,6 +575,198 @@ async def test_payment_failure_creates_one_deterministic_invoice_scoped_case(
     assert signals[0].case_id == created_case.id
     assert signals[0].effects["case_created"] is True
     assert await processor.process_next() is None
+
+
+async def test_payment_failure_hydrates_new_invoice_for_connected_subscription(
+    processor_session: AsyncSession,
+) -> None:
+    session = processor_session
+    merchant = Merchant(
+        id="merchant_hydration",
+        external_id="acc_hydration",
+        display_name="Hydration Merchant",
+    )
+    policy_settings = MerchantPolicySetting(merchant_id=merchant.id)
+    customer = Customer(
+        id="customer_hydration",
+        merchant_id=merchant.id,
+        external_id="customer-connected",
+        display_name="Connected Customer",
+    )
+    subscription = Subscription(
+        id="subscription_hydration",
+        merchant_id=merchant.id,
+        customer_id=customer.id,
+        provider_subscription_id="sub_fitbox_annual_001",
+        plan_name="Annual",
+        amount_paise=149_900,
+        currency="INR",
+        subscription_state=SubscriptionState.PENDING,
+    )
+    session.add_all([merchant, policy_settings, customer, subscription])
+    await session.commit()
+
+    # Dashboard-created subscriptions do not necessarily copy RecoveryOS's
+    # subscription id into payment notes. The authenticated invoice lookup is
+    # therefore responsible for recovering that correlation.
+    raw = _raw_fixture("payment.failed.json", changes={"notes": {}})
+    await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id="evt_new_invoice_hydration",
+        merchant_id=merchant.id,
+        raw_body=raw,
+    )
+    signals: list[RazorpayDownstreamSignal] = []
+
+    async def callback(signal: RazorpayDownstreamSignal) -> None:
+        signals.append(signal)
+
+    provider = HydratingPaymentProvider(_invoice_snapshot())
+    result = await RazorpayOutboxProcessor(
+        session,
+        provider,
+        callback,
+        clock=lambda: NOW,
+    ).process_next()
+
+    invoice = await session.scalar(
+        select(Invoice).where(
+            Invoice.merchant_id == merchant.id,
+            Invoice.provider_invoice_id == "inv_fitbox_aug_2026",
+        )
+    )
+    payment = await session.scalar(
+        select(PaymentAttempt).where(PaymentAttempt.merchant_id == merchant.id)
+    )
+    recovery_case = await session.scalar(
+        select(RecoveryCase).where(RecoveryCase.merchant_id == merchant.id)
+    )
+    assert result is not None and result.status == "PUBLISHED"
+    assert provider.invoice_fetch_calls == [(merchant.id, "inv_fitbox_aug_2026")]
+    assert invoice is not None
+    assert invoice.subscription_id == subscription.id
+    assert invoice.amount_paise == 149_900
+    assert invoice.amount_paid_paise == 0
+    assert invoice.billing_cycle_key == "razorpay:inv_fitbox_aug_2026"
+    assert payment is not None and payment.invoice_id == invoice.id
+    assert recovery_case is not None
+    assert recovery_case.failed_invoice_id == invoice.id
+    assert recovery_case.subscription_id == subscription.id
+    assert recovery_case.amount_at_risk_paise == 149_900
+    assert subscription.current_billing_cycle_key == invoice.billing_cycle_key
+    assert [signal.case_id for signal in signals] == [recovery_case.id]
+
+
+async def test_previously_failed_outbox_self_heals_when_invoice_lookup_becomes_available(
+    processor_session: AsyncSession,
+) -> None:
+    session = processor_session
+    merchant = Merchant(
+        id="merchant_retry_hydration",
+        external_id="acc_retry_hydration",
+        display_name="Retry Hydration Merchant",
+    )
+    policy_settings = MerchantPolicySetting(merchant_id=merchant.id)
+    customer = Customer(
+        id="customer_retry_hydration",
+        merchant_id=merchant.id,
+        external_id="customer-retry-connected",
+        display_name="Retry Connected Customer",
+    )
+    subscription = Subscription(
+        id="subscription_retry_hydration",
+        merchant_id=merchant.id,
+        customer_id=customer.id,
+        provider_subscription_id="sub_fitbox_annual_001",
+        plan_name="Annual",
+        amount_paise=149_900,
+        currency="INR",
+        subscription_state=SubscriptionState.PENDING,
+    )
+    session.add_all([merchant, policy_settings, customer, subscription])
+    await session.commit()
+    merchant_id = merchant.id
+    outbox = await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id="evt_retry_new_invoice_hydration",
+        merchant_id=merchant_id,
+        raw_body=_raw_fixture("payment.failed.json", changes={"notes": {}}),
+    )
+    signals: list[RazorpayDownstreamSignal] = []
+
+    async def callback(signal: RazorpayDownstreamSignal) -> None:
+        signals.append(signal)
+
+    first = await RazorpayOutboxProcessor(
+        session,
+        FakePaymentProvider(),
+        callback,
+        clock=lambda: NOW,
+    ).process_next()
+    assert first is not None and first.status == "FAILED"
+    assert first.error_code == "RAZORPAY_INVOICE_NOT_CORRELATED"
+    await session.refresh(outbox)
+    assert outbox.published_at is None
+
+    provider = HydratingPaymentProvider(_invoice_snapshot())
+    second = await RazorpayOutboxProcessor(
+        session,
+        provider,
+        callback,
+        clock=lambda: NOW + timedelta(seconds=5),
+    ).process_next()
+
+    await session.refresh(outbox)
+    assert second is not None and second.status == "PUBLISHED"
+    assert second.outbox_id == first.outbox_id == outbox.id
+    assert second.attempt_count == 2
+    assert outbox.published_at is not None
+    assert provider.invoice_fetch_calls == [(merchant_id, "inv_fitbox_aug_2026")]
+    assert await session.scalar(select(func.count(Invoice.id))) == 1
+    assert await session.scalar(select(func.count(PaymentAttempt.id))) == 1
+    assert await session.scalar(select(func.count(RecoveryCase.id))) == 1
+    assert len(signals) == 1
+
+
+async def test_payment_failure_does_not_hydrate_unconnected_subscription(
+    processor_session: AsyncSession,
+) -> None:
+    session = processor_session
+    merchant = Merchant(
+        id="merchant_unconnected",
+        external_id="acc_unconnected",
+        display_name="Unconnected Merchant",
+    )
+    session.add(merchant)
+    await session.commit()
+    merchant_id = merchant.id
+    await _ingest(
+        session,
+        fixture="payment.failed.json",
+        provider_event_id="evt_unconnected_invoice",
+        merchant_id=merchant_id,
+        raw_body=_raw_fixture("payment.failed.json", changes={"notes": {}}),
+    )
+    provider = HydratingPaymentProvider(_invoice_snapshot(subscription_id="sub_not_connected"))
+
+    async def callback(signal: RazorpayDownstreamSignal) -> None:
+        raise AssertionError(f"unexpected downstream signal: {signal.provider_event_id}")
+
+    result = await RazorpayOutboxProcessor(
+        session,
+        provider,
+        callback,
+        clock=lambda: NOW,
+        retry_base_delay=timedelta(0),
+    ).process_next()
+
+    assert result is not None and result.status == "FAILED"
+    assert result.error_code == "RAZORPAY_SUBSCRIPTION_NOT_CORRELATED"
+    assert provider.invoice_fetch_calls == [(merchant_id, "inv_fitbox_aug_2026")]
+    assert await session.scalar(select(func.count(Invoice.id))) == 0
+    assert await session.scalar(select(func.count(RecoveryCase.id))) == 0
 
 
 @pytest.mark.parametrize(
@@ -714,9 +934,7 @@ async def test_payment_failure_commits_one_authoritative_policy_before_dispatch(
     assert decision_event.payload["selected_payment_surface_type"] == (
         expected_surface.value if expected_surface else None
     )
-    assert decision_event.payload["selected_model"]["scoring_mode"] == (
-        "DETERMINISTIC_FALLBACK"
-    )
+    assert decision_event.payload["selected_model"]["scoring_mode"] == ("DETERMINISTIC_FALLBACK")
     assert decision_event.payload["feature_snapshot"]["failed_attempt_count"] == 1
     assert isinstance(decision_event.payload["selected_expected_recovered_paise"], int)
     assert isinstance(decision_event.payload["selected_expected_utility_paise"], int)
@@ -829,12 +1047,15 @@ async def test_capture_delivered_before_failure_retries_after_case_creation(
         merchant_id=out_of_order_merchant_id,
         raw_body=captured_raw,
     )
-    await _ingest(
+    failure_outbox = await _ingest(
         session,
         fixture="payment.failed.json",
         provider_event_id="evt_failure_arrived_second",
         merchant_id=out_of_order_merchant_id,
     )
+    captured_outbox.available_at = NOW - timedelta(seconds=2)
+    failure_outbox.available_at = NOW - timedelta(seconds=1)
+    await session.commit()
     current_time = NOW
     signals: list[RazorpayDownstreamSignal] = []
 

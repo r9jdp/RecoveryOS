@@ -81,6 +81,27 @@ class PaymentSnapshot(ProviderContract):
     authoritative: bool
 
 
+class InvoiceSnapshot(ProviderContract):
+    """Authoritative provider invoice data used for webhook correlation."""
+
+    provider: str
+    invoice_id: str
+    subscription_id: str
+    amount_paise: int = Field(ge=0)
+    amount_paid_paise: int = Field(ge=0)
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    invoice_state: str = Field(min_length=1, max_length=32)
+    due_at: datetime | None = None
+    observed_at: datetime
+    authoritative: bool
+
+    @model_validator(mode="after")
+    def guard_paid_amount(self) -> "InvoiceSnapshot":
+        if self.amount_paid_paise > self.amount_paise:
+            raise ValueError("amount_paid_paise cannot exceed amount_paise")
+        return self
+
+
 class VoiceContactRequest(ProviderContract):
     idempotency_key: str
     case_id: str

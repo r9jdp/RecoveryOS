@@ -6,6 +6,7 @@ from typing import Literal, Protocol, runtime_checkable
 from .contracts import (
     CustomerAgentRecoveryRequest,
     CustomerAgentTask,
+    InvoiceSnapshot,
     OpenPaymentSurfaceRequest,
     PaymentSnapshot,
     PaymentSurfaceResult,
@@ -33,6 +34,15 @@ class PaymentProvider(Protocol):
     async def fetch_payment_snapshot(
         self, *, merchant_id: str, payment_id: str | None, invoice_id: str
     ) -> PaymentSnapshot: ...
+
+
+@runtime_checkable
+class InvoiceCorrelationProvider(Protocol):
+    """Optional read-only lookup for invoices first observed by webhook."""
+
+    async def fetch_invoice_snapshot(
+        self, *, merchant_id: str, invoice_id: str
+    ) -> InvoiceSnapshot: ...
 
 
 @runtime_checkable
