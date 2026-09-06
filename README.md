@@ -34,11 +34,22 @@ The design separates four concerns that are often collapsed into one unsafe auto
 
 ## Live hackathon deployment
 
-The backend is deployed as two independently healthy Render services. The Next.js frontend is not
-publicly hosted yet and is currently run locally against these services.
+**[Open RecoveryOS](https://recovery-os-web-five.vercel.app/)** or go directly to
+the [demo login](https://recovery-os-web-five.vercel.app/login).
+
+Public demo login:
+
+- **Email:** `rajdeepvp273@gmail.com`
+- **Password / Access code:** `rajdeep`
+
+Enter the email in **Work email** and the password in **Access code** on the login page.
+
+The Next.js frontend is hosted on Vercel and connects to two independently deployed Render
+backend services.
 
 | Service             | URL                                                                                                        | Verified state                                                                        |
 | ------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| RecoveryOS frontend | [recovery-os-web-five.vercel.app](https://recovery-os-web-five.vercel.app/)                                | Next.js application hosted on Vercel                                                   |
 | RecoveryOS API      | [recoveryos-api-1p1c.onrender.com](https://recoveryos-api-1p1c.onrender.com)                               | Live and ready                                                                        |
 | API readiness       | [/health/ready](https://recoveryos-api-1p1c.onrender.com/health/ready)                                     | Merchant scope, PostgreSQL, Temporal, deterministic scorer, and embedded worker ready |
 | API documentation   | [/docs](https://recoveryos-api-1p1c.onrender.com/docs)                                                     | FastAPI OpenAPI interface                                                             |
@@ -46,7 +57,7 @@ publicly hosted yet and is currently run locally against these services.
 | Customer Agent      | [recoveryos-customer-agent.onrender.com](https://recoveryos-customer-agent.onrender.com)                   | Live; SQL task store and configured signing mode ready                                |
 | Customer Agent Card | [/.well-known/agent-card.json](https://recoveryos-customer-agent.onrender.com/.well-known/agent-card.json) | A2A 1.0 contract                                                                      |
 
-These endpoints were verified on **3 September 2026**. Render free services may need a cold-start
+The backend endpoints were verified on **3 September 2026**. Render free services may need a cold-start
 request before they respond at normal latency.
 
 ### Current hosted runtime boundary
@@ -277,7 +288,7 @@ API process.
 | Agent protocol          | A2A 1.0 JSON-RPC, Agent Cards, Ed25519 mandates and receipts                       |
 | Advisory language layer | Structured, fail-closed LLM interpretation behind an adapter                       |
 | Testing                 | Pytest, Vitest, Testing Library, Playwright desktop and mobile projects            |
-| Deployment              | Render blueprint for both Python services; Vercel-ready Next.js application        |
+| Deployment              | Render for both Python services; Next.js frontend hosted on Vercel                |
 
 ## Run locally
 
@@ -443,9 +454,11 @@ before Uvicorn starts; the customer agent starts independently and shares the co
 PostgreSQL service in SQL mode. An invalid Temporal, provider, activity, or A2A configuration can
 still prevent embedded-worker startup, which is intentionally visible through readiness.
 
-The Next.js application includes [Vercel configuration](apps/web/vercel.json). Once it is hosted,
-set its public API and customer-agent origins, then replace the three localhost browser origins in
-the backend services with the exact HTTPS frontend origin.
+The Next.js application is hosted at [recovery-os-web-five.vercel.app](https://recovery-os-web-five.vercel.app/)
+using the repository's [Vercel configuration](apps/web/vercel.json). Configure its public API and
+customer-agent origins for the hosted backends. Set `WEB_ORIGIN` and `RAZORPAY_CHECKOUT_ORIGIN` on
+the API service, and `CUSTOMER_AGENT_WEB_ORIGIN` on the customer-agent service, to
+`https://recovery-os-web-five.vercel.app`.
 
 ## Validation
 
